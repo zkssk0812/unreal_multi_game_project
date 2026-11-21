@@ -1,0 +1,37 @@
+# ===== 줄바꿈 정리 (텍스트 파일은 Git이 알아서 처리) =====
+* text=auto
+
+# ===== 언리얼 에셋 (잠금 가능) =====
+*.uasset filter=lfs diff=lfs merge=lfs -text lockable
+*.umap   filter=lfs diff=lfs merge=lfs -text lockable
+
+# ===== 이미지 =====
+*.png  filter=lfs diff=lfs merge=lfs -text
+*.jpg  filter=lfs diff=lfs merge=lfs -text
+*.jpeg filter=lfs diff=lfs merge=lfs -text
+*.tga  filter=lfs diff=lfs merge=lfs -text
+*.psd  filter=lfs diff=lfs merge=lfs -text
+*.exr  filter=lfs diff=lfs merge=lfs -text
+*.hdr  filter=lfs diff=lfs merge=lfs -text
+
+# ===== 3D / 애니메이션 =====
+*.fbx   filter=lfs diff=lfs merge=lfs -text
+*.obj   filter=lfs diff=lfs merge=lfs -text
+*.blend filter=lfs diff=lfs merge=lfs -text
+
+# ===== 사운드 / 영상 =====
+*.wav filter=lfs diff=lfs merge=lfs -text
+*.mp3 filter=lfs diff=lfs merge=lfs -text
+*.ogg filter=lfs diff=lfs merge=lfs -text
+*.mp4 filter=lfs diff=lfs merge=lfs -text
+
+# ===== 개발 문서 (바이너리 문서) =====
+*.pdf  filter=lfs diff=lfs merge=lfs -text
+*.docx filter=lfs diff=lfs merge=lfs -text
+*.pptx filter=lfs diff=lfs merge=lfs -text
+*.xlsx filter=lfs diff=lfs merge=lfs -text
+*.hwp  filter=lfs diff=lfs merge=lfs -text
+
+# ===== 서버 외부 라이브러리 (protobuf 등 미리 빌드된 lib/dll) =====
+*.lib filter=lfs diff=lfs merge=lfs -text
+*.dll filter=lfs diff=lfs merge=lfs -text

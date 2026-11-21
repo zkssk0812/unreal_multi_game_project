@@ -1,0 +1,47 @@
+# =========================================
+#  Client (언리얼)
+# =========================================
+Client/Binaries/
+Client/Intermediate/
+Client/Saved/
+Client/DerivedDataCache/
+Client/Build/
+Client/Plugins/*/Binaries/
+Client/Plugins/*/Intermediate/
+
+# 언리얼이 자동 생성하는 솔루션/프로젝트 파일 (uproject 우클릭으로 재생성 가능)
+Client/*.sln
+Client/*.vsconfig
+Client/.vs/
+Client/.idea/
+
+# =========================================
+#  Server (Visual Studio C++)
+#  ※ 서버 .sln / .vcxproj 는 직접 만든 거라 커밋해야 함 (무시 X)
+# =========================================
+Server/**/x64/
+Server/**/Win32/
+Server/**/Debug/
+Server/**/Release/
+Server/**/Binary/
+Server/**/Intermediate/
+Server/.vs/
+*.vcxproj.user
+*.obj
+*.pdb
+*.ilk
+*.idb
+*.ipch
+*.tlog
+*.log
+
+# =========================================
+#  공통 / OS / 에디터
+# =========================================
+.vs/
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+.DS_Store
+~$*
