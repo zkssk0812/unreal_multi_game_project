@@ -1,0 +1,145 @@
+#include "ServerCore/CorePch.h"
+
+#include "TestFramework.h"
+#include "WorldTestUtil.h"
+
+// 스킬·퍽 (psd.md M6): 캐릭터 고유 스킬, 쿨타임 시작 시점, 끈끈이 지연·설치자 감속, 은신 해제 조건
+
+using namespace WorldTest;
+
+namespace {
+
+// A = 도적1(테이저), B = 도적2(끈끈이), C = 도적3(은신)
+GameWorld Arena()
+{
+	GameWorld world = MakeWorld(3);
+	ClearArena(world);
+	Teleport(world, A, HallW, 0.0f);
+	Teleport(world, B, Offset(HallW, 200, 0), 180.0f);
+	Teleport(world, C, Offset(HallW, 0, 600), 0.0f);
+	world.TakeEvents();
+	return world;
+}
+
+} // namespace
+
+TEST_CASE(Skill_Taser_Stuns2s_CooldownFromUse)
+{
+	GameWorld world = Arena();
+	CHECK(!Act(world, A, ActionType::UseSkill).has_value());
+	CHECK((world.ThiefOf(B)->state & StateBit::Stunned) != 0);		// 3m 단일, 2초 경직 (S-01)
+	CHECK_EQ(world.ThiefOf(B)->hp, 100);
+	const auto again = Act(world, A, ActionType::UseSkill);
+	CHECK(again && *again == RejectReason::Cooldown);
+	Run(world, 30000);
+	CHECK(!Act(world, A, ActionType::UseSkill).has_value());			// 쓴 직후부터 30초
+}
+
+TEST_CASE(Skill_Taser_OutOfRange_Misses)
+{
+	GameWorld world = Arena();
+	Teleport(world, B, Offset(HallW, 400, 0));
+	Act(world, A, ActionType::UseSkill);
+	CHECK((world.ThiefOf(B)->state & StateBit::Stunned) == 0);
+}
+
+TEST_CASE(Skill_Sticky_AfterOneSecond_BehindMovement_SlowsOwner)
+{
+	GameWorld world = Arena();
+	Teleport(world, B, Offset(HallW, 300, 0), 0.0f, MoveFlag::Moving);	// +X로 1m 움직임
+	CHECK(!Act(world, B, ActionType::UseSkill).has_value());
+	Run(world, 900);
+	CHECK_EQ(CountKind(world, EntityKind::StickyTrap), size_t{ 0 });		// 1초 동안 던지는 동작
+	Run(world, 150);
+	const uint16_t trap = Nth(world, EntityKind::StickyTrap);
+	CHECK(trap != 0);
+	if (trap)
+		CHECK(std::fabs(world.Find(trap)->pos.x - Offset(HallW, 200, 0).x) < 1.0f);	// 움직인 방향 반대쪽 1m 뒤
+	Run(world, 50);
+	CHECK((world.ThiefOf(B)->state & StateBit::Slowed) != 0);		// 설치자도 느려짐 (Q-36)
+	CHECK((world.ThiefOf(A)->state & StateBit::Slowed) != 0);		// A는 3m 안
+	Run(world, 10000);
+	CHECK_EQ(CountKind(world, EntityKind::StickyTrap), size_t{ 0 });	// 10초
+}
+
+TEST_CASE(Skill_Sticky_SlowsGuard)
+{
+	GameWorld world = Arena();
+	const uint16_t guard = PlaceGuard(world, Offset(HallW, 200, 0), 0.0f);
+	Act(world, B, ActionType::UseSkill);
+	Run(world, 1100);
+	CHECK((world.Find(guard)->state & StateBit::Slowed) != 0);
+}
+
+TEST_CASE(Skill_Cloak_ToggleOff_CooldownStartsAtEnd)
+{
+	GameWorld world = Arena();
+	CHECK(!Act(world, C, ActionType::UseSkill).has_value());
+	CHECK((world.ThiefOf(C)->state & StateBit::Cloaked) != 0);
+	const auto dodge = Act(world, C, ActionType::Dodge);
+	CHECK(dodge && *dodge == RejectReason::InvalidState);			// 은신 중 특수 동작 불가
+	Run(world, 5000);
+	CHECK(!Act(world, C, ActionType::UseSkill).has_value());		// 다시 누르면 해제
+	CHECK((world.ThiefOf(C)->state & StateBit::Cloaked) == 0);
+	Run(world, 29000);
+	const auto cooling = Act(world, C, ActionType::UseSkill);
+	CHECK(cooling && *cooling == RejectReason::Cooldown);			// 해제한 때부터 30초 (S-03)
+	Run(world, 1100);
+	CHECK(!Act(world, C, ActionType::UseSkill).has_value());
+}
+
+TEST_CASE(Skill_Cloak_EndsAfter20s)
+{
+	GameWorld world = Arena();
+	Act(world, C, ActionType::UseSkill);
+	Run(world, 19900);
+	CHECK((world.ThiefOf(C)->state & StateBit::Cloaked) != 0);
+	Run(world, 150);
+	CHECK((world.ThiefOf(C)->state & StateBit::Cloaked) == 0);
+}
+
+TEST_CASE(Skill_Cloak_BrokenByAttackingOrBeingHit)
+{
+	GameWorld world = Arena();
+	Act(world, C, ActionType::UseSkill);
+	Act(world, C, ActionType::AttackStart, 0, 0.0f);
+	CHECK((world.ThiefOf(C)->state & StateBit::Cloaked) == 0);		// 내가 공격하면 풀림 (Q-30)
+	Act(world, C, ActionType::AttackStop);
+
+	Run(world, 30000);
+	Teleport(world, C, Offset(HallW, 150, 0));
+	Act(world, C, ActionType::UseSkill);
+	CHECK((world.ThiefOf(C)->state & StateBit::Cloaked) != 0);
+	Teleport(world, B, FarAway);
+	Attack(world, A, 0.0f);
+	CHECK((world.ThiefOf(C)->state & StateBit::Cloaked) == 0);		// 공격받으면 풀림
+}
+
+TEST_CASE(Skill_Cloak_BrokenByInteracting)
+{
+	GameWorld world = Arena();
+	const uint16_t box = world.AddNow(EntityKind::Box, Offset(world.ThiefOf(C)->pos, 100, 0));
+	Act(world, C, ActionType::UseSkill);
+	CHECK(!Act(world, C, ActionType::InteractBegin, box).has_value());
+	CHECK((world.ThiefOf(C)->state & StateBit::Cloaked) == 0);		// 상호작용하면 풀림
+}
+
+TEST_CASE(Skill_CharacterWithoutSkill_NotAvailable)
+{
+	GameWorld world = MakeWorld(5);		// 도적4·5는 스킬 없음 (A-06)
+	const auto reject = Act(world, A + 3, ActionType::UseSkill);
+	CHECK(reject && *reject == RejectReason::NotAvailable);
+}
+
+TEST_CASE(Skill_RespawnResetsCooldown)
+{
+	GameWorld world = Arena();
+	Act(world, A, ActionType::UseSkill);
+	world.ThiefOf(A)->hp = 5;
+	Teleport(world, B, Offset(HallW, 150, 0), 180.0f);
+	Run(world, 2000);										// B 경직이 풀리길 기다림
+	Attack(world, B, 180.0f);
+	CHECK((world.ThiefOf(A)->state & StateBit::Downed) != 0);
+	Run(world, 5100);
+	CHECK(!Act(world, A, ActionType::UseSkill).has_value());	// 리스폰하면 쿨타임 초기화 (D-07)
+}

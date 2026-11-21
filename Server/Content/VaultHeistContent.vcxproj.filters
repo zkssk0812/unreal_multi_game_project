@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Interface">
+      <UniqueIdentifier>{f07a0a00-2a4b-510b-9719-ebb8b10905fc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Messages">
+      <UniqueIdentifier>{51e333b6-83ff-5cc7-b482-9d57ab019eb2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Lobby">
+      <UniqueIdentifier>{2f576f64-a258-5c30-b834-c74b31639c09}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Room">
+      <UniqueIdentifier>{c58ba658-a67c-5023-acb3-e6ee8e2f1a5c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Game">
+      <UniqueIdentifier>{abfff494-7b19-5a84-8795-dae077670a28}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="ContentGlobal.h" />
+    <ClInclude Include="GameData.h" />
+    <ClInclude Include="Perf.h" />
+    <ClInclude Include="Interface\ClientChannel.h">
+      <Filter>Interface</Filter>
+    </ClInclude>
+    <ClInclude Include="Interface\MessageEncoder.h">
+      <Filter>Interface</Filter>
+    </ClInclude>
+    <ClInclude Include="Interface\RoomEndpoint.h">
+      <Filter>Interface</Filter>
+    </ClInclude>
+    <ClInclude Include="Interface\LobbyApi.h">
+      <Filter>Interface</Filter>
+    </ClInclude>
+    <ClInclude Include="Interface\RecordStore.h">
+      <Filter>Interface</Filter>
+    </ClInclude>
+    <ClInclude Include="Messages\Types.h">
+      <Filter>Messages</Filter>
+    </ClInclude>
+    <ClInclude Include="Messages\Commands.h">
+      <Filter>Messages</Filter>
+    </ClInclude>
+    <ClInclude Include="Messages\Messages.h">
+      <Filter>Messages</Filter>
+    </ClInclude>
+    <ClInclude Include="Lobby\GameLobby.h">
+      <Filter>Lobby</Filter>
+    </ClInclude>
+    <ClInclude Include="Lobby\NameRule.h">
+      <Filter>Lobby</Filter>
+    </ClInclude>
+    <ClInclude Include="Room\GameRoom.h">
+      <Filter>Room</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\MapData.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\GameWorld.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\WorldMath.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\PathFinder.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+    <ClInclude Include="Game\Sight.h">
+      <Filter>Game</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="ContentGlobal.cpp" />
+    <ClCompile Include="Perf.cpp" />
+    <ClCompile Include="Lobby\GameLobby.cpp">
+      <Filter>Lobby</Filter>
+    </ClCompile>
+    <ClCompile Include="Lobby\NameRule.cpp">
+      <Filter>Lobby</Filter>
+    </ClCompile>
+    <ClCompile Include="Room\GameRoom.cpp">
+      <Filter>Room</Filter>
+    </ClCompile>
+    <ClCompile Include="Room\GameRoomPlay.cpp">
+      <Filter>Room</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\MapData.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\MapLoader.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\GameWorld.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\WorldCombat.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\WorldExplosives.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\WorldItems.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\WorldSkills.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\GuardAI.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\PathFinder.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+    <ClCompile Include="Game\Sight.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>

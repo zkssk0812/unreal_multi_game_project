@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 모든 프로젝트가 공유하는 빌드 설정. 각 .vcxproj가 Import한다. -->
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <!-- 솔루션 없이 프로젝트 하나만 빌드해도 경로가 맞도록 $(SolutionDir) 대신 이 파일 기준 경로를 쓴다 -->
+    <RepoRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</RepoRoot>
+    <OutDir>$(RepoRoot)Binaries\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(RepoRoot)Intermediate\$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ConformanceMode>true</ConformanceMode>
+      <WarningLevel>Level4</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <!-- #include "ServerCore/..." , #include "Protocol/..." 형태로 쓴다 -->
+      <AdditionalIncludeDirectories>$(RepoRoot);$(RepoRoot)Shared;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;_WIN32_WINNT=0x0A00;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <!-- 소스는 UTF-8(BOM 없음)로 저장한다 -->
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+</Project>

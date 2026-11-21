@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Net">
+      <UniqueIdentifier>{069b32fc-0804-591e-aed6-a5a56d9702ca}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Net\Handlers">
+      <UniqueIdentifier>{2490b70e-4646-51ea-9181-a0763662c5ed}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Protocol">
+      <UniqueIdentifier>{d5659745-f1a0-5035-a29b-a7815f31fdec}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Db">
+      <UniqueIdentifier>{9d2d0941-1b3a-587a-903c-7fb14fb98408}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Shared">
+      <UniqueIdentifier>{1c94582d-9575-56f0-8b48-56c362ba284b}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Net\GameSession.h">
+      <Filter>Net</Filter>
+    </ClInclude>
+    <ClInclude Include="Net\PacketHandler.h">
+      <Filter>Net</Filter>
+    </ClInclude>
+    <ClInclude Include="Net\Heartbeat.h">
+      <Filter>Net</Filter>
+    </ClInclude>
+    <ClInclude Include="Net\Handlers\HandlerUtil.h">
+      <Filter>Net\Handlers</Filter>
+    </ClInclude>
+    <ClInclude Include="Protocol\MessageEncoder.h">
+      <Filter>Protocol</Filter>
+    </ClInclude>
+    <ClInclude Include="Protocol\CommandDecoder.h">
+      <Filter>Protocol</Filter>
+    </ClInclude>
+    <ClInclude Include="Db\DbConnection.h">
+      <Filter>Db</Filter>
+    </ClInclude>
+    <ClInclude Include="Db\SqlRecordStore.h">
+      <Filter>Db</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Shared\Protocol\protocol.h">
+      <Filter>Shared</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Shared\Protocol\ProtocolUtil.h">
+      <Filter>Shared</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Shared\Protocol\PacketBuilder.h">
+      <Filter>Shared</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="Net\GameSession.cpp">
+      <Filter>Net</Filter>
+    </ClCompile>
+    <ClCompile Include="Net\PacketHandler.cpp">
+      <Filter>Net</Filter>
+    </ClCompile>
+    <ClCompile Include="Net\Heartbeat.cpp">
+      <Filter>Net</Filter>
+    </ClCompile>
+    <ClCompile Include="Net\Handlers\SystemPackets.cpp">
+      <Filter>Net\Handlers</Filter>
+    </ClCompile>
+    <ClCompile Include="Net\Handlers\LoginPackets.cpp">
+      <Filter>Net\Handlers</Filter>
+    </ClCompile>
+    <ClCompile Include="Net\Handlers\RoomPackets.cpp">
+      <Filter>Net\Handlers</Filter>
+    </ClCompile>
+    <ClCompile Include="Net\Handlers\GamePackets.cpp">
+      <Filter>Net\Handlers</Filter>
+    </ClCompile>
+    <ClCompile Include="Protocol\MessageEncoder.cpp">
+      <Filter>Protocol</Filter>
+    </ClCompile>
+    <ClCompile Include="Protocol\CommandDecoder.cpp">
+      <Filter>Protocol</Filter>
+    </ClCompile>
+    <ClCompile Include="Db\DbConnection.cpp">
+      <Filter>Db</Filter>
+    </ClCompile>
+    <ClCompile Include="Db\SqlRecordStore.cpp">
+      <Filter>Db</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>

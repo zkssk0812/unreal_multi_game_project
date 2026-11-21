@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Fakes">
+      <UniqueIdentifier>{a96b5d8d-4cdf-550e-9361-3d1236fe9fc7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Tests">
+      <UniqueIdentifier>{6a169756-4661-5aa5-a3bf-e60d3883b98f}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="TestFramework.h" />
+    <ClInclude Include="FakeEncoder.h">
+      <Filter>Fakes</Filter>
+    </ClInclude>
+    <ClInclude Include="FakeChannel.h">
+      <Filter>Fakes</Filter>
+    </ClInclude>
+    <ClInclude Include="ContentFixture.h">
+      <Filter>Fakes</Filter>
+    </ClInclude>
+    <ClInclude Include="WorldTestUtil.h">
+      <Filter>Fakes</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="TestFramework.cpp" />
+    <ClCompile Include="FakeEncoder.cpp">
+      <Filter>Fakes</Filter>
+    </ClCompile>
+    <ClCompile Include="FakeChannel.cpp">
+      <Filter>Fakes</Filter>
+    </ClCompile>
+    <ClCompile Include="FakeTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="NameRuleTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="LobbyTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="RoomTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MapDataTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GameWorldTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GamePlayTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GuardAITests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="CombatTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="WeaponTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MoneyTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ItemTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="SkillTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ResultTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+  </ItemGroup>
+</Project>

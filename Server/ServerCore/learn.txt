@@ -1,0 +1,224 @@
+- std::enable_shared_from_this라는 템플릿(공장)에 "IocpObject 
+전용 맞춤복을 하나 만들어서 나한테 입혀줘!"라고 주문 제작을 하는 
+C++의 특수한 기법(CRTP라고 부름)
+
+- IocpObject : 아무런 기능도 없는 '빈 껍데기' = 인터페이스(Interface)
+기능은 없고 "규칙(계약서)"만 적혀 있습니다.
+ex) 대한민국에서 식당(Session)을 차리려면 무조건 이 사업자 등록증(IocpObject) 규격을 맞춰서 서류를 내라!"라고 강제하는 법률
+
+class IocpObject : public std::enable_shared_from_this<IocpObject>
+ex) 이 계약서에 서명할 거면, 너는 반드시 네 스스로 스마트 포인터(생명줄)를 안전하게 만들어낼 수 있는 능력(shared_from_this)을 갖춰야 해
+
+virtual ~IocpObject() = default;
+ex) 나중에 가게(Session)를 폐업할 때, 껍데기(IocpObject)만 부수지 말고 실제 알맹이(Session)까지 깨끗하게 부숴줄게
+: 상속 구조에서 부모 클래스의 소멸자에 virtual이 없으면, 
+나중에 자식 객체를 메모리에서 지울 때 자식 부분의 메모리가 안 지워지고 남는 '메모리 누수'가 발생
+
+virtual HANDLE GetHandle() = 0;
+ex) 너의 소켓(전화기) 번호를 나(코어 엔진)한테 무조건 알려줘야 해!
+뒤에 붙은 = 0(순수 가상 함수)이 진짜 중요합니다. 
+이건 "나는 이 함수를 구현 안 할 거니까, 나를 상속받는 너(Session)가 무조건 네 손으로 직접 코드를 짜서 제출해!"라는 강제 명령입니다. 
+만약 자식 클래스가 이 함수를 안 만들면 아예 컴파일(빌드)이 안 됩니다.
+
+virtual void Dispatch(IocpEvent* event, DWORD bytes, DWORD error) = 0;
+ex)우체국(IOCP)에서 네 소포가 도착하면 내가 이 Dispatch 버튼을 눌러줄 거야. 
+근데 소포를 뜯어서 패킷을 읽을지(Session), 접속을 받을지(Listener)는 네가 알아서 안에다가 구현해!
+
+IocpObject는 그 자체로는 절대 만들어질 수 없는 유령 같은 존재입니다.
+오직 class Session : public IocpObject 처럼 다른 클래스가 상속받아서, 
+그 안에 있는 = 0 짜리 빈칸들을 채워 넣게 만들기 위해 존재하는 "서버 엔진의 헌법"
+
+
+typedef struct _OVERLAPPED_ENTRY {
+    ULONG_PTR    lpCompletionKey;            // 예전 코드의 long_key
+    LPOVERLAPPED lpOverlapped;               // 예전 코드의 over
+    ULONG_PTR    Internal;                   // 윈도우 내부 상태 코드 (에러 판별용)
+    DWORD        dwNumberOfBytesTransferred; // 예전 코드의 num_bytes
+} OVERLAPPED_ENTRY;
+
+
+move로 꺼내는 
+이유 1: 핸들러가 해제를 잊을 수 없습니다. 이벤트의 owner는 이미 비었고, 지역 변수가 핸들러 동안 대상을 살려 둔 뒤 함수 끝에서 자동으로 풉니다.
+
+이유 2: 핸들러 안에서 같은 이벤트를 곧바로 다시 걸며 새 owner를 넣을 수 있습니다(RegisterRecv). 꺼내 두지 않았다면 덮어쓰기와 해제가 뒤엉킵니다.
+성능이 중요한 서버에서는 소포 상자(IocpEvent)를 매번 새로 만들지 않고(new/delete 안 함), 유저(Session)의 몸에 딱 1개만 멤버 변수로 달아두고 계속 재활용
+
+GQCSEx의 함정. 기본 GQCS는 실패한 I/O면 FALSE를 반환해 알려 주지만, 
+GQCSEx는 묶음 전체에 대해서만 TRUE/FALSE를 줍니다. 개별 I/O의 성공 여부는 OVERLAPPED::Internal(커널의 NTSTATUS)에 있습니다.
+ 0이 아니면 실패이고, WSAGetOverlappedResult가 그것을 우리가 아는 WSA 오류 코드(예: 10054 WSAECONNRESET)로 바꿔 줍니다.
+
+ explicit은 C++에서 컴파일러가 멋대로 데이터 타입을 변환하는 '암시적 형변환(Implicit Conversion)'을 엄격하게 금지하는 안전장치입니다.
+ 컴파일러의 과도한 친절(암시적 형변환)을 막기 위해 생성자 앞에 explicit을 붙입니다.
+
+ 지금까지의 서버
+
+ main()에서 서버를 실행
+ -> WSAStartup
+
+ -> listen 소켓을 bind
+ -> listen
+
+ -> IOCP핸들과 큐를 만들고 최초로 AcceptEx
+
+ -> 스레드 생성(worker and timer)
+
+ worker thread
+
+ -> switch로 GetQueuedCompletionStatus에서 완료된 io를 꺼내 처리
+ -> accept 성공하명 session을 생성 전역 concurrent_unordered_map으로 session을 관리
+
+
+ recv 패킷 제조립
+===============================================================================
+ 현재 작업하는 서버
+
+ SOLID 원칙
+ 분리의 기준: 
+ 1. S: 단일 책임 원칙 (Single Responsibility Principle) (하나의 클래스는 하나의 일만 한다)
+ 2. O: 개방-폐쇄 원칙 (Open/Closed Principle) "기능 확장에는 열려(Open) 있어야 하고, 코드 수정에는 닫혀(Closed) 있어야 한다."
+ 3. L: 리스코프 치환 원칙 (Liskov Substitution Principle) "부모 클래스가 들어갈 자리에 자식 클래스를 대신 넣어도 코드가 완벽하게 작동해야 한다."
+ 4. I: 인터페이스 분리 원칙 (Interface Segregation Principle) "자신이 사용하지 않는 기능(함수)에 억지로 의존하게 만들지 마라."
+ 5. D: 의존성 역전 원칙 (Dependency Inversion Principle)"구체적인 알맹이(자식)가 아니라, 추상적인 껍데기(부모/인터페이스)에 의존해야 한다."
+
+CorePch.h -> 기반 인프라
+
+ Type.h-> 데이터 크기의 파편화를 막아라 & C++ 최악의 지옥, 순환 참조(#include 꼬임) 방지
+ #하나의 명확한 기준이나 코드가 여러 곳으로 쪼개져서 개발자의 통제를 벗어난 끔찍한 상태
+
+ SocketUtils-> '단일 책임 원칙(SRP)'과 '코드의 은닉화(캡슐화)'
+ 지저분한 윈도우 OS 코드를 눈앞에서 치워라!(가독성과 은닉화)
+
+ CoreGlobal -> 서버의 시작 & 종료 기능 분리 
+
+ IocpCore -> 서버의 심장 박동(스레드)과 윈도우 커널의 알림(진동벨) 시스템을 순수한 통신 로직으로부터 완벽하게 격리하기 위해서
+ IocpCore의 정체: "스위치문이 사라진 순수 대기실"
+ 이전에는 switch문으로 accept인지 recv인지 등을 구분하고 각각 io에 맞게 워커스레드가 처리해줬어야함
+ but 지금은 iocpcore로 분리해서 오직 iocp큐로부터 GetQueuedCompletionStatusEx(..., events);로 대기만하고 완료된 io가 오면
+ event->owner가 알아서 처리 
+ 그럼 IocpObject는 왜 IocpCore에 작성했는가?
+ 인터페이스의 진짜 주인은 그것을 '구현하는 자(Session)'가 아니라, 그것을 '가져다 쓰는 자(IocpCore)
+
+IocpObject는 IocpCore의 접근하기위한 규칙(인터페이스)이기 때문에 IocpCore에 작성
+
+ 비유
+ IocpCore (컴퓨터 본체)
+ IocpObject (USB 규격)
+ Session, Listener (마우스, 키보드)
+
+ IocpEvent : EXP_OVER -> 확장 overlapped
+ #SendEvent의 buffer비동기 송신(WSASend)이 완전히 끝날 때까지 데이터가 메모리에서 지워지지 않게 멱살을 잡고 버티는 '수명 연장(생명줄)'
+ vector<SendBuffer>인 이유 -> send패킷을 큐에 모아서 한번에 보내기위해 
+ 
+ 
+ SendBuffer
+ 1. SendBuffer는 왜 만들었을까?
+ 메모리 청크(Chunk) 재활용: 매번 새로 만들지 않고, 
+ 미리 커다란 메모리 공간(예: 64KB)을 통째로 할당해 둔 뒤(SendBufferChunk), 
+ 패킷을 보낼 때마다 그 공간의 일부 조각(Offset)을 잘라서 사용하기 위해
+
+ 안전한 수명 보장 (SendBufferRef): 앞서 보셨듯, 윈도우가 비동기로 데이터를 다 보낼 때까지 이 메모리가 절대 사라지면 안 됩니다. 
+ SendBuffer를 스마트 포인터로 감싸두면, 전송이 끝날 때까지 메모리가 안전하게 유지되다가 일이 끝나면 알아서 회수됩니다
+
+ 2. 모아 쏜 것(WSASend의 WSABUF 배열)은 어떻게 관리되나
+
+보낼 때 (Send / 모아 쏘기):
+게임 로직에서 A 패킷, B 패킷, C 패킷을 보내려고 합니다. 이때 각각을 따로 보내지 않고, 
+SendBuffer에 차곡차곡 연달아 적은 뒤(또는 각각의 SendBufferRef를 모아서), 
+WSABUF 배열에 그 주소들을 꽂아 넣고 WSASend로 한 번에 던집
+
+받을 때 (Recv / 패킷 프레이밍):
+이렇게 모아 쏘거나 TCP 스트림을 통해 데이터가 상대방에게 도착하면, 
+상대방은 그냥 줄줄이 이어진 거대한 바이트 덩어리(Stream)로 받게 됩니다.
+상대방의 RecvBuffer는 이 덩어리를 받아서, 패킷 맨 앞에 붙어있는 '크기(Size) 정보'를 보고 
+"아, 여기서부터 여기까지가 A 패킷이구나, 그다음부터는 B 패킷이구나!" 하고 칼로 무 베듯 잘라내는 작업(패킷 프레이밍)을 거칩니다.
+
+
+ Session - 서버 메모리 상에 존재하는 유저(클라이언트)의 대리인(아바타)
+ 1. 1:1 통신 파이프의 관리자 
+ 2. 개인용 수신/송신 우편함 (Buffer Management)
+ 3. 비동기 작업의 생명줄 (Lifecycle Protection)
+ 4. 날것의 바이트(Bytes)를 게임 논리(Logic)로 번역
+
+
+ Send는 "일단 택배 상자에 담아서 큐에 집어넣는 접수처"이고, 
+ HandleSendBytes는 "택배 배송이 완료되었을 때, 
+ 상자에 묶어둔 생명줄(메모리)을 풀고, 제대로 다 갔는지 검수한 뒤, 큐에 남은 게 있으면 계속 이어서 쏘게 만들어주는 필수 청소·검문소
+
+
+using SessionFactory = std::function<SessionRef()>;
+이 코드는 "Session을 만들어내는 함수(자판기 버튼)를 변수처럼 저장하겠다"는 뜻
+
+Util(유틸리티)은 공통으로 자주 쓰이는 독립적이고 반복적인 기능을 모아둔 클래스나 패키지
+
+
+timeoutMs는 Worker 스레드가 일감(네트워크 I/O 완료 알림)을 기다리며 최대 얼마 동안 대기(Block)할지 결정하는 시간
+
+1.서버의 안전한 종료 (Graceful Shutdown): 타임아웃을 무한대(INFINITE)로 설정하면, 
+처리할 패킷이 오지 않을 때 스레드가 운영체제 단에서 영원히 잠들어버려. 
+나중에 서버 프로세스를 끄려고 루프 종료 플래그(isRunning = false)를 세팅해도, 
+스레드가 깨어나질 않으니 프로그램이 깔끔하게 안 꺼지지. 
+적당한 시간을 주면 스레드가 주기적으로 깨어나서 종료 플래그를 확인하고 안전하게 퇴근할 수 있어.
+
+2.주기적인 백그라운드 작업 (Timer/Tick 처리): 네트워크 이벤트가 없어 타임아웃으로 인해 스레드가 깨어난 틈을 활용할 수 있어. 
+스레드가 잠에서 깬 김에 예약된 타이머 로직이나 
+Job Queue에 쌓인 다른 게임 로직 일감이 있는지 확인하고 처리하는 식으로 스레드 활용도를 높일 수 있지.
+
+3. CPU 점유율 방어: 타임아웃을 0으로 주면 큐에 일감이 있는지 쓱 보고 즉시 리턴하게 돼(Non-blocking). 
+이러면 스레드가 while 문을 쉴 새 없이 돌며(Busy Wait) CPU 코어 하나의 점유율을 100%까지 찍어버려. 
+타임아웃을 통해 운영체제에게 "일이 없으면 이 시간 동안은 CPU를 다른 곳에 양보하고 쉴게"라고 선언하는 거야.
+
+여기서 말하는 '풀(Pool)'은 서버 프로그래밍에서 
+성능을 극한으로 끌어올리기 위해 사용하는 메모리 풀(Memory Pool) 또는 오브젝트 풀(Object Pool)을 의미.
+
+쉽게 비유하자면, 다 쓴 64KB짜리 덩어리(도화지)를 버리지 않고 
+지우개로 깨끗이 지워서 다시 모아두는 '재활용 센터 겸 창고'라고 생각.
+
+
+make_shared의 배신 (매번 새 접시 사오기)
+잘라낸 10바이트짜리 공간을 관리하려면 결국 SendBuffer라는 C++ 객체로 감싸서(shared_ptr) 큐에 넣어야 해. 
+그런데 패킷을 만들 때마다 습관적으로 std::make_shared<SendBuffer>(...)를 호출하면 무슨 일이 생길까?
+make_shared는 힙(Heap) 메모리에 가서 "SendBuffer 클래스 껍데기"와 "참조 횟수를 세는 제어 블록", 
+이 두 가지를 담을 메모리를 새로 할당(new)해버려.
+결국 데이터를 담을 공간은 덩어리에서 공짜로 얻어왔으면서, 그걸 포장하는 껍데기를 매번 동적 할당하느라 
+또다시 수십 나노초의 지옥에 빠져버린 거지.
+
+3. "재사용 목록에서 꺼내게 해야" (접시 찬장 만들기)
+이 숨겨진 할당마저 완벽하게 없애버리려면 어떻게 해야 할까?
+데이터 덩어리(Chunk)를 풀(Pool)에 모아둔 것처럼, 빈 껍데기인 SendBuffer 
+객체들(접시)도 서버를 켤 때 미리 수천 개를 new로 만들어두고 '재사용 목록(Object Pool)'에 쌓아둬야 해.
+
+CoreTLS.h 와 CoreTLS.cpp 만든 이유
+헤더 파일에 직접 정의할 때의 문제점: 만약 CoreTLS.h에 변수를 그대로 선언하고 초기화하면, 
+이 헤더를 #include 하는 모든 .cpp 파일(Session.cpp, Logger.cpp 등)마다 독립적인 변수 정의가 중복 생성돼. 
+링커(Linker)가 이 파일들을 하나로 합칠 때 "동일한 이름의 변수가 여러 개 있다"며 다중 정의(Multiple Definition) 
+에러를 띄우고 빌드를 중단시켜 버려.
+
+extern과 분업: 이를 막기 위해 헤더 파일에는 extern 키워드를 붙여 
+"이 변수는 어딘가에 존재한다"라고 선언만 알려줘. 
+그리고 실제 변수를 0이나 빈 배열로 초기화하여 메모리에 만드는 작업(정의)은 
+CoreTLS.cpp 단 한 곳에서만 처리하여 프로그램 전체에 하나의 기준점만 두는 거야.
+
+thread_local의 특성: 이 변수들은 스레드가 실행될 때마다 하나씩 복제되는 것은 맞지만, 
+프로그램 전체의 코드 구조상으로는 오직 하나의 원본 정의를 가져야 해. 런타임에는 
+스레드마다 따로 존재하더라도 컴파일 타임에는 반드시 단 한 번만 정의되어야 하므로 .cpp 파일로 분리하는 것이 필수적이야.
+
+
+std::function<void()>는 C++ 표준 라이브러리에서 제공하는 '함수 객체 포장지(타입 래퍼)'
+
+
+코드 조각이 하는 일 (매개변수 해석):
+Ret (T::*memberFn)(Args...): "어떤 클래스 T의 멤버 함수 주소"야 (예: &GameRoom::Enter).   
+Params&&... params: 그 함수를 실행할 때 넘겨줄 인자들 (예: player).   
+안쪽의 Bind<T> 함수가 이 둘을 받아서 "아, 이 객체의 이 멤버 함수에 이 인자를 넣어서 실행하는 람다 포장지"를 내부적으로 뚝딱 만들어 준 뒤, 
+기본 버전인 Push로 넘겨주는 거지.
+
+// Actor 방식의 공유 상태 보호.
+//
+// 객체(Lobby, GameRoom …)가 JobQueue를 상속하면, 그 객체의 상태를 바꾸는 일은 모두 Job으로 넣는다.
+//   room->DoAsync(&GameRoom::Enter, player);
+// 한 JobQueue의 Job은 "한 번에 한 스레드만, 넣은 순서대로" 실행된다. 그래서 GameRoom 안의 멤버는
+// 락 없이 그냥 읽고 써도 된다. 여러 스레드가 동시에 DoAsync해도 실행은 줄을 선다.
+//
+// 누가 실행하나: 큐가 비어 있을 때(0 → 1) Job을 넣은 스레드가 "실행 담당"이 되어 큐가 빌 때까지 실행한다.
+// 이미 누가 실행 중이면 넣기만 하고 돌아간다. 실행 담당이 시간 예산을 넘기면 GlobalQueue에 넘기고
+// 다른 Worker가 이어서 실행한다.

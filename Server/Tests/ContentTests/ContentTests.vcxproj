@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <Keyword>Win32Proj</Keyword>
+    <ProjectGuid>{5C2B7A41-8E3D-4F6A-9B1C-2D7E4A6F8B90}</ProjectGuid>
+    <RootNamespace>ContentTests</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>$(DefaultPlatformToolset)</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>$(DefaultPlatformToolset)</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\..\Build\Common.props" />
+  </ImportGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
+    <PostBuildEvent>
+      <Command>xcopy /Y /I /Q "$(RepoRoot)Data\Maps\*.json" "$(OutDir)Data\Maps\"</Command>
+      <Message>맵 데이터 복사 (Data/Maps)</Message>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+    <PostBuildEvent>
+      <Command>xcopy /Y /I /Q "$(RepoRoot)Data\Maps\*.json" "$(OutDir)Data\Maps\"</Command>
+      <Message>맵 데이터 복사 (Data/Maps)</Message>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="TestFramework.cpp" />
+    <ClCompile Include="FakeEncoder.cpp" />
+    <ClCompile Include="FakeChannel.cpp" />
+    <ClCompile Include="FakeTests.cpp" />
+    <ClCompile Include="NameRuleTests.cpp" />
+    <ClCompile Include="LobbyTests.cpp" />
+    <ClCompile Include="RoomTests.cpp" />
+    <ClCompile Include="MapDataTests.cpp" />
+    <ClCompile Include="GameWorldTests.cpp" />
+    <ClCompile Include="GamePlayTests.cpp" />
+    <ClCompile Include="GuardAITests.cpp" />
+    <ClCompile Include="CombatTests.cpp" />
+    <ClCompile Include="WeaponTests.cpp" />
+    <ClCompile Include="MoneyTests.cpp" />
+    <ClCompile Include="ItemTests.cpp" />
+    <ClCompile Include="SkillTests.cpp" />
+    <ClCompile Include="ResultTests.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="TestFramework.h" />
+    <ClInclude Include="FakeEncoder.h" />
+    <ClInclude Include="FakeChannel.h" />
+    <ClInclude Include="ContentFixture.h" />
+    <ClInclude Include="WorldTestUtil.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\ServerCore\ServerCore.vcxproj">
+      <Project>{B170F6D9-7D6A-429E-AEC7-E172D339FE91}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\Content\VaultHeistContent.vcxproj">
+      <Project>{E16AE990-BBD7-4C0A-9605-0B277A9FF94E}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>
