@@ -1,0 +1,7 @@
+# 2026-11-21 (4) doors: Bob (char 2) stands in the corridor band right next to the camera-side wall, then walks through the GuestRoom4 door
+1.0 vh.CeilingGo -3620 -2250
+1.2 vh.Aim 0
+4.6 vh.CeilingGo -3480 -2050
+5.0 vh.Walk -1 0 1.6
+9.0 vh.DoorInfo
+9.2 vh.CeilingInfo

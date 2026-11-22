@@ -1,0 +1,26 @@
+# 2026-11-21 taser + return point warning: Ann (thief1, taser skill), Bob stands 2m to Ann's right (+Y)
+1.0 vh.CeilingGo -3450 -2050
+1.3 vh.Aim 90
+1.5 vh.Cam 900 -65 0 0
+3.0 vh.Press skill
+3.4 vh.Shot t1_ann_01_draw
+4.2 vh.Press skill
+4.6 vh.Shot t1_ann_02_putaway_nocool
+5.4 vh.Press wheel
+6.2 vh.Press skill
+6.6 vh.Shot t1_ann_03_draw_again
+7.5 vh.Press attack
+7.55 vh.Shot t1_ann_04_fire
+8.2 vh.Shot t1_ann_05_after_fire
+9.0 vh.Press skill
+9.3 vh.Shot t1_ann_06_cooldown
+10.0 vh.Cam off
+50.0 vh.CeilingInfo
+52.0 vh.Cam 3600 -65 0 0
+53.5 vh.Shot t1_ann_rp_53
+54.5 vh.Shot t1_ann_rp_54
+55.5 vh.Shot t1_ann_rp_55
+56.5 vh.Shot t1_ann_rp_56
+57.5 vh.Shot t1_ann_rp_57
+58.0 vh.CeilingInfo
+59.0 vh.Cam off

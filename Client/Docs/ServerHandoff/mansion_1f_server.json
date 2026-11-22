@@ -1,0 +1,3198 @@
+{
+ "meta": {
+  "map_id": "mansion_1f",
+  "version": 3,
+  "units": "cm",
+  "axes": {
+   "x": "+X (up on top view)",
+   "y": "+Y (right on top view)",
+   "z": "up"
+  },
+  "yaw": "degrees, 0=+X, 90=+Y, object front faces yaw",
+  "origin": "Unreal world, blockout at (0,0,0) rot 0 scale 1 — 클라 L_Mansion_1F와 같은 좌표(2026-10-27부터)",
+  "bounds": {
+   "xmin": -11,
+   "xmax": 9788,
+   "ymin": -6885,
+   "ymax": 11
+  },
+  "floor_z": 0,
+  "wall_height": 300,
+  "source": {
+   "fbx": "Mansion_1F_Blockout.fbx",
+   "walls": 93,
+   "floors": 5,
+   "note": "벽·바닥은 FBX, 게임 지점·소품은 layout에서. tools/fbx_to_map.py로 생성"
+  },
+  "display_name": "저택 1층",
+  "v3_note": "2026-11-13: box_slots 20곳 추가, guard_spawn_2를 방 21로 이동, 문 없는 방의 순찰 지점 3개 삭제(id 다시 매김), 레벨에 없는 충돌체 9개 삭제"
+ },
+ "rules": {
+  "note": "참고용 = 클라 설정값(DA_VHGameplayConfig·DA_VHInteractionConfig). 서버는 GameData.h를 쓴다",
+  "vault_total": 10,
+  "vault_active": 5,
+  "vault_open_sec": 30,
+  "vault_max_interactors": 1,
+  "treasure_per_vault": 1,
+  "escape_value_needed": 10000,
+  "exit_auto_open": true,
+  "max_carry_count": 10,
+  "max_carry_weight_kg": 20,
+  "return_point_count": 5,
+  "return_point_size_cm": 100,
+  "return_point_red_sec": 50,
+  "return_point_life_sec": 60,
+  "hide_enter_sec": 1.0,
+  "hide_exit_sec": 0.5,
+  "rescue_sec": 5,
+  "max_thieves": 3
+ },
+ "rooms": [
+  {
+   "id": "Room_01",
+   "no": 1,
+   "name": "방 1",
+   "xmin": 8830.0,
+   "xmax": 9768.0,
+   "ymin": -941.0,
+   "ymax": -10.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_02",
+   "no": 2,
+   "name": "방 2",
+   "xmin": 7084.0,
+   "xmax": 8810.0,
+   "ymin": -941.0,
+   "ymax": -10.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_03",
+   "no": 3,
+   "name": "현관",
+   "xmin": 4188.0,
+   "xmax": 5575.0,
+   "ymin": -941.0,
+   "ymax": -393.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_04",
+   "no": 4,
+   "name": "방 4",
+   "xmin": 968.0,
+   "xmax": 2672.0,
+   "ymin": -941.0,
+   "ymax": -10.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_05",
+   "no": 5,
+   "name": "방 5",
+   "xmin": 10.0,
+   "xmax": 948.0,
+   "ymin": -941.0,
+   "ymax": -10.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_06",
+   "no": 6,
+   "name": "방 6",
+   "xmin": 8491.0,
+   "xmax": 9768.0,
+   "ymin": -2061.0,
+   "ymax": -961.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_07",
+   "no": 7,
+   "name": "방 7",
+   "xmin": 8491.0,
+   "xmax": 9768.0,
+   "ymin": -3018.0,
+   "ymax": -2081.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_08",
+   "no": 8,
+   "name": "방 8",
+   "xmin": 8491.0,
+   "xmax": 9768.0,
+   "ymin": -3969.0,
+   "ymax": -3038.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_09",
+   "no": 9,
+   "name": "방 9",
+   "xmin": 8491.0,
+   "xmax": 9436.0,
+   "ymin": -4934.0,
+   "ymax": -3989.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_10",
+   "no": 10,
+   "name": "방 10",
+   "xmin": 8491.0,
+   "xmax": 9768.0,
+   "ymin": -5892.0,
+   "ymax": -4954.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_11",
+   "no": 11,
+   "name": "방 11 (문 없음)",
+   "xmin": 6833.0,
+   "xmax": 8044.0,
+   "ymin": -2038.0,
+   "ymax": -1381.0,
+   "return_point": false
+  },
+  {
+   "id": "Room_12",
+   "no": 12,
+   "name": "방 12",
+   "xmin": 6833.0,
+   "xmax": 8044.0,
+   "ymin": -2996.0,
+   "ymax": -2058.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_13",
+   "no": 13,
+   "name": "방 13 (문 없음)",
+   "xmin": 6833.0,
+   "xmax": 8044.0,
+   "ymin": -3969.0,
+   "ymax": -3016.0,
+   "return_point": false
+  },
+  {
+   "id": "Room_14",
+   "no": 14,
+   "name": "방 14",
+   "xmin": 6833.0,
+   "xmax": 8044.0,
+   "ymin": -5487.0,
+   "ymax": -3989.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_15",
+   "no": 15,
+   "name": "큰 홀",
+   "xmin": 3525.0,
+   "xmax": 6253.0,
+   "ymin": -4522.0,
+   "ymax": -1381.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_16",
+   "no": 16,
+   "name": "방 16",
+   "xmin": 5315.0,
+   "xmax": 6253.0,
+   "ymin": -5487.0,
+   "ymax": -4542.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_17",
+   "no": 17,
+   "name": "방 17",
+   "xmin": 3525.0,
+   "xmax": 5295.0,
+   "ymin": -5487.0,
+   "ymax": -4542.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_18",
+   "no": 18,
+   "name": "방 18",
+   "xmin": 1742.0,
+   "xmax": 2945.0,
+   "ymin": -2429.0,
+   "ymax": -1381.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_19",
+   "no": 19,
+   "name": "방 19",
+   "xmin": 1742.0,
+   "xmax": 2945.0,
+   "ymin": -3387.0,
+   "ymax": -2449.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_20",
+   "no": 20,
+   "name": "방 20 (문 없음)",
+   "xmin": 1742.0,
+   "xmax": 2945.0,
+   "ymin": -4345.0,
+   "ymax": -3407.0,
+   "return_point": false
+  },
+  {
+   "id": "Room_21",
+   "no": 21,
+   "name": "방 21",
+   "xmin": 1742.0,
+   "xmax": 2945.0,
+   "ymin": -5487.0,
+   "ymax": -4365.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_22",
+   "no": 22,
+   "name": "방 22",
+   "xmin": 607.0,
+   "xmax": 1287.0,
+   "ymin": -2061.0,
+   "ymax": -961.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_23",
+   "no": 23,
+   "name": "방 23",
+   "xmin": 10.0,
+   "xmax": 587.0,
+   "ymin": -1537.0,
+   "ymax": -961.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_24",
+   "no": 24,
+   "name": "방 24",
+   "xmin": 10.0,
+   "xmax": 1287.0,
+   "ymin": -3018.0,
+   "ymax": -2081.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_25",
+   "no": 25,
+   "name": "방 25",
+   "xmin": 10.0,
+   "xmax": 1287.0,
+   "ymin": -3976.0,
+   "ymax": -3038.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_26",
+   "no": 26,
+   "name": "방 26",
+   "xmin": 10.0,
+   "xmax": 1287.0,
+   "ymin": -4934.0,
+   "ymax": -3996.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_27",
+   "no": 27,
+   "name": "방 27",
+   "xmin": 10.0,
+   "xmax": 1287.0,
+   "ymin": -5892.0,
+   "ymax": -4954.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_28",
+   "no": 28,
+   "name": "방 28",
+   "xmin": 8108.0,
+   "xmax": 9363.0,
+   "ymin": -6865.0,
+   "ymax": -5912.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_29",
+   "no": 29,
+   "name": "방 29",
+   "xmin": 6376.0,
+   "xmax": 8088.0,
+   "ymin": -6865.0,
+   "ymax": -5912.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_30",
+   "no": 30,
+   "name": "방 30",
+   "xmin": 4306.0,
+   "xmax": 6356.0,
+   "ymin": -6865.0,
+   "ymax": -5912.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_31",
+   "no": 31,
+   "name": "방 31",
+   "xmin": 3016.0,
+   "xmax": 4286.0,
+   "ymin": -6865.0,
+   "ymax": -5912.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_32",
+   "no": 32,
+   "name": "방 32",
+   "xmin": 1727.0,
+   "xmax": 2996.0,
+   "ymin": -6865.0,
+   "ymax": -5912.0,
+   "return_point": true
+  },
+  {
+   "id": "Room_33",
+   "no": 33,
+   "name": "방 33",
+   "xmin": 415.0,
+   "xmax": 1707.0,
+   "ymin": -6865.0,
+   "ymax": -5912.0,
+   "return_point": true
+  }
+ ],
+ "spawns": {
+  "thief": [
+   {
+    "id": "thief_start_1",
+    "pos": [
+     4900.0,
+     -2950.0,
+     0.0
+    ],
+    "yaw": 90.0,
+    "client": "PlayerStart"
+   },
+   {
+    "id": "thief_start_2",
+    "pos": [
+     5100.0,
+     -2950.0,
+     0.0
+    ],
+    "yaw": 90.0,
+    "client": "PlayerStart_2"
+   },
+   {
+    "id": "thief_start_3",
+    "pos": [
+     4700.0,
+     -2950.0,
+     0.0
+    ],
+    "yaw": 90.0,
+    "client": "PlayerStart_3"
+   }
+  ],
+  "guard": [
+   {
+    "id": "guard_spawn_1",
+    "room": "U1",
+    "pos": [
+     7438.5,
+     -4738,
+     0
+    ],
+    "yaw": 0
+   },
+   {
+    "id": "guard_spawn_2",
+    "room": "L1",
+    "pos": [
+     2343.5,
+     -4926,
+     0
+    ],
+    "yaw": 0
+   },
+   {
+    "id": "guard_spawn_3",
+    "room": "W4",
+    "pos": [
+     5331,
+     -6152,
+     0
+    ],
+    "yaw": 0
+   }
+  ]
+ },
+ "vault_slots": [
+  {
+   "id": "vault_slot_01",
+   "client": "Safe_01",
+   "room": "Room_01",
+   "pos": [
+    9300.0,
+    -60.0,
+    0.0
+   ],
+   "yaw": 270.0,
+   "interact_pos": [
+    9300.0,
+    -175.0,
+    0.0
+   ],
+   "size": [
+    90.0,
+    90.0,
+    110.0
+   ]
+  },
+  {
+   "id": "vault_slot_02",
+   "client": "Safe_02",
+   "room": "Room_04",
+   "pos": [
+    1800.0,
+    -60.0,
+    0.0
+   ],
+   "yaw": 270.0,
+   "interact_pos": [
+    1800.0,
+    -175.0,
+    0.0
+   ],
+   "size": [
+    90.0,
+    90.0,
+    110.0
+   ]
+  },
+  {
+   "id": "vault_slot_03",
+   "client": "Safe_03",
+   "room": "Room_07",
+   "pos": [
+    9720.0,
+    -2550.0,
+    0.0
+   ],
+   "yaw": 180.0,
+   "interact_pos": [
+    9605.0,
+    -2550.0,
+    0.0
+   ],
+   "size": [
+    90.0,
+    90.0,
+    110.0
+   ]
+  },
+  {
+   "id": "vault_slot_04",
+   "client": "Safe_04",
+   "room": "Room_12",
+   "pos": [
+    7995.0,
+    -2530.0,
+    0.0
+   ],
+   "yaw": 180.0,
+   "interact_pos": [
+    7880.0,
+    -2530.0,
+    0.0
+   ],
+   "size": [
+    90.0,
+    90.0,
+    110.0
+   ]
+  },
+  {
+   "id": "vault_slot_05",
+   "client": "Safe_05",
+   "room": "Room_17",
+   "pos": [
+    4400.0,
+    -5440.0,
+    0.0
+   ],
+   "yaw": 90.0,
+   "interact_pos": [
+    4400.0,
+    -5325.0,
+    0.0
+   ],
+   "size": [
+    90.0,
+    90.0,
+    110.0
+   ]
+  },
+  {
+   "id": "vault_slot_06",
+   "client": "Safe_06",
+   "room": "Room_19",
+   "pos": [
+    2895.0,
+    -2920.0,
+    0.0
+   ],
+   "yaw": 180.0,
+   "interact_pos": [
+    2780.0,
+    -2920.0,
+    0.0
+   ],
+   "size": [
+    90.0,
+    90.0,
+    110.0
+   ]
+  },
+  {
+   "id": "vault_slot_07",
+   "client": "Safe_07",
+   "room": "Room_25",
+   "pos": [
+    60.0,
+    -3500.0,
+    0.0
+   ],
+   "yaw": 0.0,
+   "interact_pos": [
+    175.0,
+    -3500.0,
+    0.0
+   ],
+   "size": [
+    90.0,
+    90.0,
+    110.0
+   ]
+  },
+  {
+   "id": "vault_slot_08",
+   "client": "Safe_08",
+   "room": "Room_28",
+   "pos": [
+    8740.0,
+    -6815.0,
+    0.0
+   ],
+   "yaw": 90.0,
+   "interact_pos": [
+    8740.0,
+    -6700.0,
+    0.0
+   ],
+   "size": [
+    90.0,
+    90.0,
+    110.0
+   ]
+  },
+  {
+   "id": "vault_slot_09",
+   "client": "Safe_09",
+   "room": "Room_30",
+   "pos": [
+    5330.0,
+    -6815.0,
+    0.0
+   ],
+   "yaw": 90.0,
+   "interact_pos": [
+    5330.0,
+    -6700.0,
+    0.0
+   ],
+   "size": [
+    90.0,
+    90.0,
+    110.0
+   ]
+  },
+  {
+   "id": "vault_slot_10",
+   "client": "Safe_10",
+   "room": "Room_33",
+   "pos": [
+    1060.0,
+    -6815.0,
+    0.0
+   ],
+   "yaw": 90.0,
+   "interact_pos": [
+    1060.0,
+    -6700.0,
+    0.0
+   ],
+   "size": [
+    90.0,
+    90.0,
+    110.0
+   ]
+  }
+ ],
+ "box_slots": [
+  {
+   "id": "box_slot_01",
+   "client": "Box_01",
+   "room": "Room_02",
+   "pos": [
+    7164.0,
+    -90.0,
+    0.0
+   ],
+   "yaw": 0.0
+  },
+  {
+   "id": "box_slot_02",
+   "client": "Box_02",
+   "room": "Room_02",
+   "pos": [
+    8730.0,
+    -861.0,
+    0.0
+   ],
+   "yaw": 0.0
+  },
+  {
+   "id": "box_slot_03",
+   "client": "Box_03",
+   "room": "Room_05",
+   "pos": [
+    90.0,
+    -90.0,
+    0.0
+   ],
+   "yaw": 0.0
+  },
+  {
+   "id": "box_slot_04",
+   "client": "Box_04",
+   "room": "Room_06",
+   "pos": [
+    9688.0,
+    -1041.0,
+    0.0
+   ],
+   "yaw": 0.0
+  },
+  {
+   "id": "box_slot_05",
+   "client": "Box_05",
+   "room": "Room_08",
+   "pos": [
+    9688.0,
+    -3118.0,
+    0.0
+   ],
+   "yaw": 0.0
+  },
+  {
+   "id": "box_slot_06",
+   "client": "Box_06",
+   "room": "Room_10",
+   "pos": [
+    9688.0,
+    -5034.0,
+    0.0
+   ],
+   "yaw": 0.0
+  },
+  {
+   "id": "box_slot_07",
+   "client": "Box_07",
+   "room": "Room_14",
+   "pos": [
+    6913.0,
+    -4069.0,
+    0.0
+   ],
+   "yaw": 0.0
+  },
+  {
+   "id": "box_slot_08",
+   "client": "Box_08",
+   "room": "Room_14",
+   "pos": [
+    7964.0,
+    -5407.0,
+    0.0
+   ],
+   "yaw": 0.0
+  },
+  {
+   "id": "box_slot_09",
+   "client": "Box_09",
+   "room": "Room_16",
+   "pos": [
+    6173.0,
+    -4622.0,
+    0.0
+   ],
+   "yaw": 0.0
+  },
+  {
+   "id": "box_slot_10",
+   "client": "Box_10",
+   "room": "Room_18",
+   "pos": [
+    2865.0,
+    -1461.0,
+    0.0
+   ],
+   "yaw": 0.0
+  },
+  {
+   "id": "box_slot_11",
+   "client": "Box_11",
+   "room": "Room_21",
+   "pos": [
+    1822.0,
+    -4445.0,
+    0.0
+   ],
+   "yaw": 0.0
+  },
+  {
+   "id": "box_slot_12",
+   "client": "Box_12",
+   "room": "Room_21",
+   "pos": [
+    1822.0,
+    -5407.0,
+    0.0
+   ],
+   "yaw": 0.0
+  },
+  {
+   "id": "box_slot_13",
+   "client": "Box_13",
+   "room": "Room_23",
+   "pos": [
+    90.0,
+    -1041.0,
+    0.0
+   ],
+   "yaw": 0.0
+  },
+  {
+   "id": "box_slot_14",
+   "client": "Box_14",
+   "room": "Room_24",
+   "pos": [
+    90.0,
+    -2161.0,
+    0.0
+   ],
+   "yaw": 0.0
+  },
+  {
+   "id": "box_slot_15",
+   "client": "Box_15",
+   "room": "Room_26",
+   "pos": [
+    90.0,
+    -4076.0,
+    0.0
+   ],
+   "yaw": 0.0
+  },
+  {
+   "id": "box_slot_16",
+   "client": "Box_16",
+   "room": "Room_27",
+   "pos": [
+    90.0,
+    -5812.0,
+    0.0
+   ],
+   "yaw": 0.0
+  },
+  {
+   "id": "box_slot_17",
+   "client": "Box_17",
+   "room": "Room_29",
+   "pos": [
+    8008.0,
+    -6785.0,
+    0.0
+   ],
+   "yaw": 0.0
+  },
+  {
+   "id": "box_slot_18",
+   "client": "Box_18",
+   "room": "Room_29",
+   "pos": [
+    6456.0,
+    -5992.0,
+    0.0
+   ],
+   "yaw": 0.0
+  },
+  {
+   "id": "box_slot_19",
+   "client": "Box_19",
+   "room": "Room_31",
+   "pos": [
+    4206.0,
+    -6785.0,
+    0.0
+   ],
+   "yaw": 0.0
+  },
+  {
+   "id": "box_slot_20",
+   "client": "Box_20",
+   "room": "Room_32",
+   "pos": [
+    1807.0,
+    -6785.0,
+    0.0
+   ],
+   "yaw": 0.0
+  }
+ ],
+ "hiding_spots": [
+  {
+   "id": "hiding_spot_01",
+   "client": "HideSpot_1",
+   "room": "Room_10",
+   "pos": [
+    9710.0,
+    -5600.0,
+    0.0
+   ],
+   "yaw": 180.0,
+   "interact_pos": [
+    9605.0,
+    -5600.0,
+    0.0
+   ],
+   "size": [
+    70.0,
+    120.0,
+    210.0
+   ]
+  },
+  {
+   "id": "hiding_spot_02",
+   "client": "HideSpot_2",
+   "room": "Room_14",
+   "pos": [
+    7985.0,
+    -5200.0,
+    0.0
+   ],
+   "yaw": 180.0,
+   "interact_pos": [
+    7880.0,
+    -5200.0,
+    0.0
+   ],
+   "size": [
+    70.0,
+    120.0,
+    210.0
+   ]
+  },
+  {
+   "id": "hiding_spot_03",
+   "client": "HideSpot_3",
+   "room": "Room_24",
+   "pos": [
+    70.0,
+    -2550.0,
+    0.0
+   ],
+   "yaw": 0.0,
+   "interact_pos": [
+    175.0,
+    -2550.0,
+    0.0
+   ],
+   "size": [
+    70.0,
+    120.0,
+    210.0
+   ]
+  },
+  {
+   "id": "hiding_spot_04",
+   "client": "HideSpot_4",
+   "room": "Room_21",
+   "pos": [
+    2340.0,
+    -5430.0,
+    0.0
+   ],
+   "yaw": 90.0,
+   "interact_pos": [
+    2340.0,
+    -5325.0,
+    0.0
+   ],
+   "size": [
+    70.0,
+    120.0,
+    210.0
+   ]
+  }
+ ],
+ "exit": {
+  "id": "exit_gate",
+  "client": "ExitGate",
+  "pos": [
+   9778.0,
+   -4495.0,
+   0.0
+  ],
+  "yaw": 180.0,
+  "width": 300.0,
+  "interact_pos": [
+   9658.0,
+   -4495.0,
+   0.0
+  ],
+  "escape_zone": {
+   "xmin": 9828.0,
+   "xmax": 10048.0,
+   "ymin": -4635.0,
+   "ymax": -4355.0
+  },
+  "note": "서쪽 옆문 = 서버 문서 ②(x≈9778, y −4635~−4355). 앞면(yaw)은 건물 안쪽. 탈출 구역은 문 너머(건물 밖, Floor_Exit 위). interact_pos는 클라에서 쓰지 않음(서버 ValidateMap용 안쪽 지점)"
+ },
+ "jail": {
+  "room": "Room_31",
+  "client": "Jail",
+  "door": {
+   "pos": [
+    3650.0,
+    -6550.0,
+    0.0
+   ],
+   "yaw": 90.0,
+   "width": 300.0,
+   "interact_pos": [
+    3650.0,
+    -6430.0,
+    0.0
+   ]
+  },
+  "cells": [
+   [
+    3730.0,
+    -6700.0,
+    0.0
+   ],
+   [
+    3650.0,
+    -6700.0,
+    0.0
+   ],
+   [
+    3570.0,
+    -6700.0,
+    0.0
+   ]
+  ],
+  "zone": {
+   "xmin": 3510.0,
+   "xmax": 3790.0,
+   "ymin": -6840.0,
+   "ymax": -6560.0
+  },
+  "note": "창고 = 방 31 안에 놓은 3m×3m 감옥 칸(문 + 벽 3면). 앞면(yaw) = 문 바깥쪽. 구출은 문 앞 interact_pos에서 길게 5초"
+ },
+ "blockers": [
+  {
+   "id": "blocker_front_door",
+   "kind": "blocker",
+   "xmin": 4647.0,
+   "xmax": 5131.0,
+   "ymin": -393.0,
+   "ymax": -373.0,
+   "zmin": 0.0,
+   "zmax": 300.0,
+   "blocks_move": true,
+   "blocks_sight": false,
+   "ref": "front_door",
+   "client": "InvisibleWall_FrontDoor",
+   "note": "현관 정문(②가 아닌 ①)을 막음. 캐릭터만 막고 시야·손전등은 통과"
+  }
+ ],
+ "patrol": {
+  "nodes": [
+   {
+    "id": 0,
+    "room": "corridor",
+    "pos": [
+     1515,
+     -5700,
+     0
+    ]
+   },
+   {
+    "id": 1,
+    "room": "corridor",
+    "pos": [
+     1515,
+     -3400,
+     0
+    ]
+   },
+   {
+    "id": 2,
+    "room": "corridor",
+    "pos": [
+     1515,
+     -1161,
+     0
+    ]
+   },
+   {
+    "id": 3,
+    "room": "corridor",
+    "pos": [
+     3235,
+     -5700,
+     0
+    ]
+   },
+   {
+    "id": 4,
+    "room": "corridor",
+    "pos": [
+     3235,
+     -3400,
+     0
+    ]
+   },
+   {
+    "id": 5,
+    "room": "corridor",
+    "pos": [
+     3235,
+     -1161,
+     0
+    ]
+   },
+   {
+    "id": 6,
+    "room": "corridor",
+    "pos": [
+     6543,
+     -5700,
+     0
+    ]
+   },
+   {
+    "id": 7,
+    "room": "corridor",
+    "pos": [
+     6543,
+     -3400,
+     0
+    ]
+   },
+   {
+    "id": 8,
+    "room": "corridor",
+    "pos": [
+     6543,
+     -1161,
+     0
+    ]
+   },
+   {
+    "id": 9,
+    "room": "corridor",
+    "pos": [
+     8268,
+     -5700,
+     0
+    ]
+   },
+   {
+    "id": 10,
+    "room": "corridor",
+    "pos": [
+     8268,
+     -3400,
+     0
+    ]
+   },
+   {
+    "id": 11,
+    "room": "corridor",
+    "pos": [
+     8268,
+     -1161,
+     0
+    ]
+   },
+   {
+    "id": 12,
+    "room": "corridor",
+    "pos": [
+     4900,
+     -5700,
+     0
+    ]
+   },
+   {
+    "id": 13,
+    "room": "corridor",
+    "pos": [
+     4900,
+     -1161,
+     0
+    ]
+   },
+   {
+    "id": 14,
+    "room": "ENT",
+    "pos": [
+     4889,
+     -700,
+     0
+    ]
+   },
+   {
+    "id": 15,
+    "room": "W1",
+    "pos": [
+     1061,
+     -6388.5,
+     0
+    ]
+   },
+   {
+    "id": 16,
+    "room": "W2",
+    "pos": [
+     2361.5,
+     -6388.5,
+     0
+    ]
+   },
+   {
+    "id": 17,
+    "room": "W4",
+    "pos": [
+     5331,
+     -6388.5,
+     0
+    ]
+   },
+   {
+    "id": 18,
+    "room": "W5",
+    "pos": [
+     7232,
+     -6388.5,
+     0
+    ]
+   },
+   {
+    "id": 19,
+    "room": "W6",
+    "pos": [
+     8735.5,
+     -6388.5,
+     0
+    ]
+   },
+   {
+    "id": 20,
+    "room": "S1",
+    "pos": [
+     648.5,
+     -5423,
+     0
+    ]
+   },
+   {
+    "id": 21,
+    "room": "S2",
+    "pos": [
+     648.5,
+     -4465,
+     0
+    ]
+   },
+   {
+    "id": 22,
+    "room": "S3",
+    "pos": [
+     648.5,
+     -3507,
+     0
+    ]
+   },
+   {
+    "id": 23,
+    "room": "S4",
+    "pos": [
+     648.5,
+     -2549.5,
+     0
+    ]
+   },
+   {
+    "id": 24,
+    "room": "S5",
+    "pos": [
+     648.5,
+     -1511,
+     0
+    ]
+   },
+   {
+    "id": 25,
+    "room": "N1",
+    "pos": [
+     9129.5,
+     -5423,
+     0
+    ]
+   },
+   {
+    "id": 26,
+    "room": "N2",
+    "pos": [
+     9129.5,
+     -4461.5,
+     0
+    ]
+   },
+   {
+    "id": 27,
+    "room": "N3",
+    "pos": [
+     9129.5,
+     -3503.5,
+     0
+    ]
+   },
+   {
+    "id": 28,
+    "room": "N4",
+    "pos": [
+     9129.5,
+     -2549.5,
+     0
+    ]
+   },
+   {
+    "id": 29,
+    "room": "N5",
+    "pos": [
+     9129.5,
+     -1511,
+     0
+    ]
+   },
+   {
+    "id": 30,
+    "room": "E1",
+    "pos": [
+     479,
+     -475.5,
+     0
+    ]
+   },
+   {
+    "id": 31,
+    "room": "E2",
+    "pos": [
+     1820,
+     -475.5,
+     0
+    ]
+   },
+   {
+    "id": 32,
+    "room": "E3",
+    "pos": [
+     7947,
+     -475.5,
+     0
+    ]
+   },
+   {
+    "id": 33,
+    "room": "E4",
+    "pos": [
+     9299,
+     -475.5,
+     0
+    ]
+   },
+   {
+    "id": 34,
+    "room": "L1",
+    "pos": [
+     2343.5,
+     -4926,
+     0
+    ]
+   },
+   {
+    "id": 35,
+    "room": "L3",
+    "pos": [
+     2343.5,
+     -2918,
+     0
+    ]
+   },
+   {
+    "id": 36,
+    "room": "L4",
+    "pos": [
+     2343.5,
+     -1905,
+     0
+    ]
+   },
+   {
+    "id": 37,
+    "room": "U1",
+    "pos": [
+     7438.5,
+     -4738,
+     0
+    ]
+   },
+   {
+    "id": 38,
+    "room": "U3",
+    "pos": [
+     7438.5,
+     -2527,
+     0
+    ]
+   },
+   {
+    "id": 39,
+    "room": "C1",
+    "pos": [
+     4410,
+     -5014.5,
+     0
+    ]
+   },
+   {
+    "id": 40,
+    "room": "C2",
+    "pos": [
+     5784,
+     -5014.5,
+     0
+    ]
+   },
+   {
+    "id": 41,
+    "room": "HALL",
+    "pos": [
+     4889,
+     -2950,
+     0
+    ]
+   },
+   {
+    "id": 42,
+    "room": "HALL",
+    "pos": [
+     4400,
+     -2950,
+     0
+    ]
+   },
+   {
+    "id": 43,
+    "room": "HALL",
+    "pos": [
+     5400,
+     -2950,
+     0
+    ]
+   }
+  ],
+  "edges": [
+   [
+    0,
+    15,
+    1100
+   ],
+   [
+    0,
+    16,
+    1500
+   ],
+   [
+    0,
+    20,
+    1150
+   ],
+   [
+    0,
+    34,
+    1650
+   ],
+   [
+    1,
+    2,
+    2250
+   ],
+   [
+    1,
+    22,
+    950
+   ],
+   [
+    2,
+    23,
+    2250
+   ],
+   [
+    2,
+    24,
+    1200
+   ],
+   [
+    2,
+    31,
+    1000
+   ],
+   [
+    2,
+    36,
+    1600
+   ],
+   [
+    3,
+    4,
+    2300
+   ],
+   [
+    3,
+    12,
+    1700
+   ],
+   [
+    3,
+    16,
+    1500
+   ],
+   [
+    3,
+    34,
+    1650
+   ],
+   [
+    4,
+    5,
+    2250
+   ],
+   [
+    4,
+    42,
+    1650
+   ],
+   [
+    5,
+    13,
+    1700
+   ],
+   [
+    5,
+    36,
+    1600
+   ],
+   [
+    6,
+    9,
+    1700
+   ],
+   [
+    6,
+    18,
+    1300
+   ],
+   [
+    6,
+    37,
+    1850
+   ],
+   [
+    6,
+    40,
+    1500
+   ],
+   [
+    7,
+    37,
+    2150
+   ],
+   [
+    7,
+    38,
+    1750
+   ],
+   [
+    7,
+    43,
+    1600
+   ],
+   [
+    8,
+    11,
+    1700
+   ],
+   [
+    8,
+    13,
+    1650
+   ],
+   [
+    8,
+    38,
+    2200
+   ],
+   [
+    9,
+    19,
+    1100
+   ],
+   [
+    9,
+    25,
+    1150
+   ],
+   [
+    9,
+    37,
+    1850
+   ],
+   [
+    10,
+    27,
+    950
+   ],
+   [
+    10,
+    38,
+    1750
+   ],
+   [
+    11,
+    29,
+    1200
+   ],
+   [
+    11,
+    32,
+    1000
+   ],
+   [
+    12,
+    17,
+    1050
+   ],
+   [
+    12,
+    39,
+    1200
+   ],
+   [
+    12,
+    40,
+    1550
+   ],
+   [
+    13,
+    14,
+    500
+   ],
+   [
+    13,
+    41,
+    1850
+   ],
+   [
+    18,
+    19,
+    1500
+   ],
+   [
+    18,
+    37,
+    1850
+   ],
+   [
+    20,
+    21,
+    950
+   ],
+   [
+    21,
+    22,
+    950
+   ],
+   [
+    22,
+    23,
+    950
+   ],
+   [
+    24,
+    30,
+    1250
+   ],
+   [
+    25,
+    26,
+    950
+   ],
+   [
+    26,
+    27,
+    950
+   ],
+   [
+    26,
+    37,
+    1950
+   ],
+   [
+    27,
+    28,
+    950
+   ],
+   [
+    28,
+    38,
+    1750
+   ],
+   [
+    29,
+    33,
+    1250
+   ],
+   [
+    30,
+    31,
+    1350
+   ],
+   [
+    32,
+    33,
+    1350
+   ],
+   [
+    35,
+    36,
+    1000
+   ],
+   [
+    39,
+    40,
+    1550
+   ],
+   [
+    39,
+    42,
+    2050
+   ],
+   [
+    40,
+    43,
+    2400
+   ],
+   [
+    41,
+    42,
+    450
+   ],
+   [
+    41,
+    43,
+    550
+   ]
+  ]
+ },
+ "colliders": {
+  "static": [
+   {
+    "id": "wall_000",
+    "kind": "wall",
+    "xmin": 405.3,
+    "xmax": 9372.6,
+    "ymin": -6884.7,
+    "ymax": -6864.7,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_000"
+   },
+   {
+    "id": "wall_001",
+    "kind": "wall",
+    "xmin": 0.0,
+    "xmax": 1444.2,
+    "ymin": -5912.1,
+    "ymax": -5892.1,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_001"
+   },
+   {
+    "id": "wall_002",
+    "kind": "wall",
+    "xmin": 1621.1,
+    "xmax": 2262.1,
+    "ymin": -5912.1,
+    "ymax": -5892.1,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_002"
+   },
+   {
+    "id": "wall_003",
+    "kind": "wall",
+    "xmin": 2505.3,
+    "xmax": 3558.9,
+    "ymin": -5912.1,
+    "ymax": -5892.1,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_003"
+   },
+   {
+    "id": "wall_004",
+    "kind": "wall",
+    "xmin": 3831.6,
+    "xmax": 4502.1,
+    "ymin": -5912.1,
+    "ymax": -5892.1,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_004"
+   },
+   {
+    "id": "wall_005",
+    "kind": "wall",
+    "xmin": 4664.2,
+    "xmax": 5821.1,
+    "ymin": -5912.1,
+    "ymax": -5892.1,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_005"
+   },
+   {
+    "id": "wall_006",
+    "kind": "wall",
+    "xmin": 6086.3,
+    "xmax": 7574.7,
+    "ymin": -5912.1,
+    "ymax": -5892.1,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_006"
+   },
+   {
+    "id": "wall_007",
+    "kind": "wall",
+    "xmin": 7913.7,
+    "xmax": 8186.3,
+    "ymin": -5912.1,
+    "ymax": -5892.1,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_007"
+   },
+   {
+    "id": "wall_008",
+    "kind": "wall",
+    "xmin": 8392.6,
+    "xmax": 9777.9,
+    "ymin": -5912.1,
+    "ymax": -5892.1,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_008"
+   },
+   {
+    "id": "wall_009",
+    "kind": "wall",
+    "xmin": 1731.6,
+    "xmax": 2954.7,
+    "ymin": -5506.8,
+    "ymax": -5486.8,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_009"
+   },
+   {
+    "id": "wall_010",
+    "kind": "wall",
+    "xmin": 3514.7,
+    "xmax": 6263.2,
+    "ymin": -5506.8,
+    "ymax": -5486.8,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_010"
+   },
+   {
+    "id": "wall_011",
+    "kind": "wall",
+    "xmin": 6823.2,
+    "xmax": 7125.3,
+    "ymin": -5506.8,
+    "ymax": -5486.8,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_011"
+   },
+   {
+    "id": "wall_012",
+    "kind": "wall",
+    "xmin": 7501.1,
+    "xmax": 8053.7,
+    "ymin": -5506.8,
+    "ymax": -5486.8,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_012"
+   },
+   {
+    "id": "wall_013",
+    "kind": "wall",
+    "xmin": 0.0,
+    "xmax": 1429.5,
+    "ymin": -4954.2,
+    "ymax": -4934.2,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_013"
+   },
+   {
+    "id": "wall_014",
+    "kind": "wall",
+    "xmin": 1635.8,
+    "xmax": 1731.6,
+    "ymin": -4954.2,
+    "ymax": -4934.2,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_014"
+   },
+   {
+    "id": "wall_015",
+    "kind": "wall",
+    "xmin": 8053.7,
+    "xmax": 9777.9,
+    "ymin": -4954.2,
+    "ymax": -4934.2,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_015"
+   },
+   {
+    "id": "wall_016",
+    "kind": "wall",
+    "xmin": 3514.7,
+    "xmax": 4642.1,
+    "ymin": -4541.6,
+    "ymax": -4521.6,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_016"
+   },
+   {
+    "id": "wall_017",
+    "kind": "wall",
+    "xmin": 5040.0,
+    "xmax": 6263.2,
+    "ymin": -4541.6,
+    "ymax": -4521.6,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_017"
+   },
+   {
+    "id": "wall_018",
+    "kind": "wall",
+    "xmin": 1731.6,
+    "xmax": 2954.7,
+    "ymin": -4364.7,
+    "ymax": -4344.7,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_018"
+   },
+   {
+    "id": "wall_019",
+    "kind": "wall",
+    "xmin": 0.0,
+    "xmax": 1436.8,
+    "ymin": -3996.3,
+    "ymax": -3976.3,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_019"
+   },
+   {
+    "id": "wall_020",
+    "kind": "wall",
+    "xmin": 1643.2,
+    "xmax": 1731.6,
+    "ymin": -3996.3,
+    "ymax": -3976.3,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_020"
+   },
+   {
+    "id": "wall_021",
+    "kind": "wall",
+    "xmin": 6823.2,
+    "xmax": 9777.9,
+    "ymin": -3988.9,
+    "ymax": -3968.9,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_021"
+   },
+   {
+    "id": "wall_022",
+    "kind": "wall",
+    "xmin": 1731.6,
+    "xmax": 2954.7,
+    "ymin": -3406.8,
+    "ymax": -3386.8,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_022"
+   },
+   {
+    "id": "wall_023",
+    "kind": "wall",
+    "xmin": 0.0,
+    "xmax": 1296.8,
+    "ymin": -3038.4,
+    "ymax": -3018.4,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_023"
+   },
+   {
+    "id": "wall_024",
+    "kind": "wall",
+    "xmin": 8481.1,
+    "xmax": 9777.9,
+    "ymin": -3038.4,
+    "ymax": -3018.4,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_024"
+   },
+   {
+    "id": "wall_025",
+    "kind": "wall",
+    "xmin": 6823.2,
+    "xmax": 8053.7,
+    "ymin": -3016.3,
+    "ymax": -2996.3,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_025"
+   },
+   {
+    "id": "wall_026",
+    "kind": "wall",
+    "xmin": 1731.6,
+    "xmax": 2954.7,
+    "ymin": -2448.9,
+    "ymax": -2428.9,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_026"
+   },
+   {
+    "id": "wall_027",
+    "kind": "wall",
+    "xmin": 0.0,
+    "xmax": 1296.8,
+    "ymin": -2080.5,
+    "ymax": -2060.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_027"
+   },
+   {
+    "id": "wall_028",
+    "kind": "wall",
+    "xmin": 8481.1,
+    "xmax": 9777.9,
+    "ymin": -2080.5,
+    "ymax": -2060.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_028"
+   },
+   {
+    "id": "wall_029",
+    "kind": "wall",
+    "xmin": 6823.2,
+    "xmax": 8053.7,
+    "ymin": -2058.4,
+    "ymax": -2038.4,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_029"
+   },
+   {
+    "id": "wall_030",
+    "kind": "wall",
+    "xmin": 0.0,
+    "xmax": 596.8,
+    "ymin": -1557.4,
+    "ymax": -1537.4,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_030"
+   },
+   {
+    "id": "wall_031",
+    "kind": "wall",
+    "xmin": 1731.6,
+    "xmax": 2954.7,
+    "ymin": -1380.5,
+    "ymax": -1360.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_031"
+   },
+   {
+    "id": "wall_032",
+    "kind": "wall",
+    "xmin": 3514.7,
+    "xmax": 4627.4,
+    "ymin": -1380.5,
+    "ymax": -1360.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_032"
+   },
+   {
+    "id": "wall_033",
+    "kind": "wall",
+    "xmin": 5216.8,
+    "xmax": 6263.2,
+    "ymin": -1380.5,
+    "ymax": -1360.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_033"
+   },
+   {
+    "id": "wall_034",
+    "kind": "wall",
+    "xmin": 6823.2,
+    "xmax": 8053.7,
+    "ymin": -1380.5,
+    "ymax": -1360.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_034"
+   },
+   {
+    "id": "wall_035",
+    "kind": "wall",
+    "xmin": 0.0,
+    "xmax": 2166.3,
+    "ymin": -960.5,
+    "ymax": -940.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_035"
+   },
+   {
+    "id": "wall_036",
+    "kind": "wall",
+    "xmin": 2483.2,
+    "xmax": 4671.6,
+    "ymin": -960.5,
+    "ymax": -940.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_036"
+   },
+   {
+    "id": "wall_037",
+    "kind": "wall",
+    "xmin": 5165.3,
+    "xmax": 7228.4,
+    "ymin": -960.5,
+    "ymax": -940.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_037"
+   },
+   {
+    "id": "wall_038",
+    "kind": "wall",
+    "xmin": 7604.2,
+    "xmax": 9777.9,
+    "ymin": -960.5,
+    "ymax": -940.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_038"
+   },
+   {
+    "id": "wall_039",
+    "kind": "wall",
+    "xmin": 4177.9,
+    "xmax": 4656.8,
+    "ymin": -393.2,
+    "ymax": -373.2,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_039"
+   },
+   {
+    "id": "wall_040",
+    "kind": "wall",
+    "xmin": 5121.1,
+    "xmax": 5585.3,
+    "ymin": -393.2,
+    "ymax": -373.2,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_040"
+   },
+   {
+    "id": "wall_041",
+    "kind": "wall",
+    "xmin": 0.0,
+    "xmax": 2682.1,
+    "ymin": -10.0,
+    "ymax": 10.0,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_041"
+   },
+   {
+    "id": "wall_042",
+    "kind": "wall",
+    "xmin": 7073.7,
+    "xmax": 9777.9,
+    "ymin": -10.0,
+    "ymax": 10.0,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_042"
+   },
+   {
+    "id": "wall_043",
+    "kind": "wall",
+    "xmin": 395.3,
+    "xmax": 415.3,
+    "ymin": -6874.7,
+    "ymax": -5902.1,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_043"
+   },
+   {
+    "id": "wall_044",
+    "kind": "wall",
+    "xmin": 1706.8,
+    "xmax": 1726.8,
+    "ymin": -6874.7,
+    "ymax": -5902.1,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_044"
+   },
+   {
+    "id": "wall_045",
+    "kind": "wall",
+    "xmin": 2996.3,
+    "xmax": 3016.3,
+    "ymin": -6874.7,
+    "ymax": -5902.1,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_045"
+   },
+   {
+    "id": "wall_046",
+    "kind": "wall",
+    "xmin": 4285.8,
+    "xmax": 4305.8,
+    "ymin": -6874.7,
+    "ymax": -5902.1,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_046"
+   },
+   {
+    "id": "wall_047",
+    "kind": "wall",
+    "xmin": 6356.3,
+    "xmax": 6376.3,
+    "ymin": -6874.7,
+    "ymax": -5902.1,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_047"
+   },
+   {
+    "id": "wall_048",
+    "kind": "wall",
+    "xmin": 8087.9,
+    "xmax": 8107.9,
+    "ymin": -6874.7,
+    "ymax": -5902.1,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_048"
+   },
+   {
+    "id": "wall_049",
+    "kind": "wall",
+    "xmin": 9362.6,
+    "xmax": 9382.6,
+    "ymin": -6874.7,
+    "ymax": -5902.1,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_049"
+   },
+   {
+    "id": "wall_050",
+    "kind": "wall",
+    "xmin": -10.0,
+    "xmax": 10.0,
+    "ymin": -5902.1,
+    "ymax": 0.0,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_050"
+   },
+   {
+    "id": "wall_051",
+    "kind": "wall",
+    "xmin": 1286.8,
+    "xmax": 1306.8,
+    "ymin": -5902.1,
+    "ymax": -5533.7,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_051"
+   },
+   {
+    "id": "wall_052",
+    "kind": "wall",
+    "xmin": 1286.8,
+    "xmax": 1306.8,
+    "ymin": -5327.4,
+    "ymax": -4944.2,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_052"
+   },
+   {
+    "id": "wall_053",
+    "kind": "wall",
+    "xmin": 1286.8,
+    "xmax": 1306.8,
+    "ymin": -3986.3,
+    "ymax": -3662.1,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_053"
+   },
+   {
+    "id": "wall_054",
+    "kind": "wall",
+    "xmin": 1286.8,
+    "xmax": 1306.8,
+    "ymin": -3382.1,
+    "ymax": -2800.0,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_054"
+   },
+   {
+    "id": "wall_055",
+    "kind": "wall",
+    "xmin": 1286.8,
+    "xmax": 1306.8,
+    "ymin": -2615.8,
+    "ymax": -1923.2,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_055"
+   },
+   {
+    "id": "wall_056",
+    "kind": "wall",
+    "xmin": 1286.8,
+    "xmax": 1306.8,
+    "ymin": -1635.8,
+    "ymax": -950.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_056"
+   },
+   {
+    "id": "wall_057",
+    "kind": "wall",
+    "xmin": 1721.6,
+    "xmax": 1741.6,
+    "ymin": -5496.8,
+    "ymax": -3102.1,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_057"
+   },
+   {
+    "id": "wall_058",
+    "kind": "wall",
+    "xmin": 1721.6,
+    "xmax": 1741.6,
+    "ymin": -2829.5,
+    "ymax": -2232.6,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_058"
+   },
+   {
+    "id": "wall_059",
+    "kind": "wall",
+    "xmin": 1721.6,
+    "xmax": 1741.6,
+    "ymin": -1878.9,
+    "ymax": -1370.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_059"
+   },
+   {
+    "id": "wall_060",
+    "kind": "wall",
+    "xmin": 2944.7,
+    "xmax": 2964.7,
+    "ymin": -5496.8,
+    "ymax": -5084.2,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_060"
+   },
+   {
+    "id": "wall_061",
+    "kind": "wall",
+    "xmin": 2944.7,
+    "xmax": 2964.7,
+    "ymin": -4620.0,
+    "ymax": -1370.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_061"
+   },
+   {
+    "id": "wall_062",
+    "kind": "wall",
+    "xmin": 3504.7,
+    "xmax": 3524.7,
+    "ymin": -5496.8,
+    "ymax": -3315.8,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_062"
+   },
+   {
+    "id": "wall_063",
+    "kind": "wall",
+    "xmin": 3504.7,
+    "xmax": 3524.7,
+    "ymin": -2792.6,
+    "ymax": -1370.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_063"
+   },
+   {
+    "id": "wall_064",
+    "kind": "wall",
+    "xmin": 5295.3,
+    "xmax": 5315.3,
+    "ymin": -5496.8,
+    "ymax": -5334.7,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_064"
+   },
+   {
+    "id": "wall_065",
+    "kind": "wall",
+    "xmin": 5295.3,
+    "xmax": 5315.3,
+    "ymin": -5047.4,
+    "ymax": -4531.6,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_065"
+   },
+   {
+    "id": "wall_066",
+    "kind": "wall",
+    "xmin": 6253.2,
+    "xmax": 6273.2,
+    "ymin": -5496.8,
+    "ymax": -3249.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_066"
+   },
+   {
+    "id": "wall_067",
+    "kind": "wall",
+    "xmin": 6253.2,
+    "xmax": 6273.2,
+    "ymin": -2689.5,
+    "ymax": -1370.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_067"
+   },
+   {
+    "id": "wall_068",
+    "kind": "wall",
+    "xmin": 6813.2,
+    "xmax": 6833.2,
+    "ymin": -5496.8,
+    "ymax": -4826.3,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_068"
+   },
+   {
+    "id": "wall_069",
+    "kind": "wall",
+    "xmin": 6813.2,
+    "xmax": 6833.2,
+    "ymin": -4524.2,
+    "ymax": -2689.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_069"
+   },
+   {
+    "id": "wall_070",
+    "kind": "wall",
+    "xmin": 6813.2,
+    "xmax": 6833.2,
+    "ymin": -2402.1,
+    "ymax": -1370.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_070"
+   },
+   {
+    "id": "wall_071",
+    "kind": "wall",
+    "xmin": 8043.7,
+    "xmax": 8063.7,
+    "ymin": -5496.8,
+    "ymax": -4944.2,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_071"
+   },
+   {
+    "id": "wall_072",
+    "kind": "wall",
+    "xmin": 8043.7,
+    "xmax": 8063.7,
+    "ymin": -3978.9,
+    "ymax": -1370.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_072"
+   },
+   {
+    "id": "wall_073",
+    "kind": "wall",
+    "xmin": 8471.1,
+    "xmax": 8491.1,
+    "ymin": -5902.1,
+    "ymax": -5327.4,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_073"
+   },
+   {
+    "id": "wall_074",
+    "kind": "wall",
+    "xmin": 8471.1,
+    "xmax": 8491.1,
+    "ymin": -5076.8,
+    "ymax": -4627.4,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_074"
+   },
+   {
+    "id": "wall_075",
+    "kind": "wall",
+    "xmin": 8471.1,
+    "xmax": 8491.1,
+    "ymin": -4347.4,
+    "ymax": -3610.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_075"
+   },
+   {
+    "id": "wall_076",
+    "kind": "wall",
+    "xmin": 8471.1,
+    "xmax": 8491.1,
+    "ymin": -3293.7,
+    "ymax": -2711.6,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_076"
+   },
+   {
+    "id": "wall_077",
+    "kind": "wall",
+    "xmin": 8471.1,
+    "xmax": 8491.1,
+    "ymin": -2380.0,
+    "ymax": -1621.1,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_077"
+   },
+   {
+    "id": "wall_078",
+    "kind": "wall",
+    "xmin": 8471.1,
+    "xmax": 8491.1,
+    "ymin": -1296.8,
+    "ymax": -950.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_078"
+   },
+   {
+    "id": "wall_079",
+    "kind": "wall",
+    "xmin": 9436.3,
+    "xmax": 9456.3,
+    "ymin": -4944.2,
+    "ymax": -4826.3,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_079"
+   },
+   {
+    "id": "wall_080",
+    "kind": "wall",
+    "xmin": 9436.3,
+    "xmax": 9456.3,
+    "ymin": -4627.4,
+    "ymax": -3978.9,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_080"
+   },
+   {
+    "id": "wall_081",
+    "kind": "wall",
+    "xmin": 9767.9,
+    "xmax": 9787.9,
+    "ymin": -5902.1,
+    "ymax": -4634.7,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_081"
+   },
+   {
+    "id": "wall_082",
+    "kind": "wall",
+    "xmin": 9767.9,
+    "xmax": 9787.9,
+    "ymin": -4354.7,
+    "ymax": 0.0,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_082"
+   },
+   {
+    "id": "wall_083",
+    "kind": "wall",
+    "xmin": 586.8,
+    "xmax": 606.8,
+    "ymin": -1547.4,
+    "ymax": -1392.6,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_083"
+   },
+   {
+    "id": "wall_084",
+    "kind": "wall",
+    "xmin": 586.8,
+    "xmax": 606.8,
+    "ymin": -1178.9,
+    "ymax": -950.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_084"
+   },
+   {
+    "id": "wall_085",
+    "kind": "wall",
+    "xmin": 947.9,
+    "xmax": 967.9,
+    "ymin": -950.5,
+    "ymax": -574.7,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_085"
+   },
+   {
+    "id": "wall_086",
+    "kind": "wall",
+    "xmin": 947.9,
+    "xmax": 967.9,
+    "ymin": -338.9,
+    "ymax": 0.0,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_086"
+   },
+   {
+    "id": "wall_087",
+    "kind": "wall",
+    "xmin": 2672.1,
+    "xmax": 2692.1,
+    "ymin": -950.5,
+    "ymax": 0.0,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_087"
+   },
+   {
+    "id": "wall_088",
+    "kind": "wall",
+    "xmin": 4167.9,
+    "xmax": 4187.9,
+    "ymin": -950.5,
+    "ymax": -383.2,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_088"
+   },
+   {
+    "id": "wall_089",
+    "kind": "wall",
+    "xmin": 5575.3,
+    "xmax": 5595.3,
+    "ymin": -950.5,
+    "ymax": -383.2,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_089"
+   },
+   {
+    "id": "wall_090",
+    "kind": "wall",
+    "xmin": 7063.7,
+    "xmax": 7083.7,
+    "ymin": -950.5,
+    "ymax": 0.0,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_090"
+   },
+   {
+    "id": "wall_091",
+    "kind": "wall",
+    "xmin": 8810.0,
+    "xmax": 8830.0,
+    "ymin": -950.5,
+    "ymax": -589.5,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_091"
+   },
+   {
+    "id": "wall_092",
+    "kind": "wall",
+    "xmin": 8810.0,
+    "xmax": 8830.0,
+    "ymin": -257.9,
+    "ymax": 0.0,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "fbx": "UCX_SM_Mansion_1F_Blockout_092"
+   },
+   {
+    "id": "blocker_front_door",
+    "kind": "blocker",
+    "xmin": 4647.0,
+    "xmax": 5131.0,
+    "ymin": -393.0,
+    "ymax": -373.0,
+    "zmin": 0.0,
+    "zmax": 300.0,
+    "blocks_move": true,
+    "blocks_sight": false,
+    "ref": "front_door",
+    "client": "InvisibleWall_FrontDoor",
+    "note": "현관 정문(②가 아닌 ①)을 막음. 캐릭터만 막고 시야·손전등은 통과"
+   }
+  ],
+  "dynamic": [
+   {
+    "id": "vault_101",
+    "kind": "vault",
+    "xmin": 9255.0,
+    "xmax": 9345.0,
+    "ymin": -105.0,
+    "ymax": -15.0,
+    "zmin": 0.0,
+    "zmax": 110.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "ref": "vault_slot_01"
+   },
+   {
+    "id": "vault_102",
+    "kind": "vault",
+    "xmin": 1755.0,
+    "xmax": 1845.0,
+    "ymin": -105.0,
+    "ymax": -15.0,
+    "zmin": 0.0,
+    "zmax": 110.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "ref": "vault_slot_02"
+   },
+   {
+    "id": "vault_103",
+    "kind": "vault",
+    "xmin": 9675.0,
+    "xmax": 9765.0,
+    "ymin": -2595.0,
+    "ymax": -2505.0,
+    "zmin": 0.0,
+    "zmax": 110.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "ref": "vault_slot_03"
+   },
+   {
+    "id": "vault_104",
+    "kind": "vault",
+    "xmin": 7950.0,
+    "xmax": 8040.0,
+    "ymin": -2575.0,
+    "ymax": -2485.0,
+    "zmin": 0.0,
+    "zmax": 110.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "ref": "vault_slot_04"
+   },
+   {
+    "id": "vault_105",
+    "kind": "vault",
+    "xmin": 4355.0,
+    "xmax": 4445.0,
+    "ymin": -5485.0,
+    "ymax": -5395.0,
+    "zmin": 0.0,
+    "zmax": 110.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "ref": "vault_slot_05"
+   },
+   {
+    "id": "vault_106",
+    "kind": "vault",
+    "xmin": 2850.0,
+    "xmax": 2940.0,
+    "ymin": -2965.0,
+    "ymax": -2875.0,
+    "zmin": 0.0,
+    "zmax": 110.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "ref": "vault_slot_06"
+   },
+   {
+    "id": "vault_107",
+    "kind": "vault",
+    "xmin": 15.0,
+    "xmax": 105.0,
+    "ymin": -3545.0,
+    "ymax": -3455.0,
+    "zmin": 0.0,
+    "zmax": 110.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "ref": "vault_slot_07"
+   },
+   {
+    "id": "vault_108",
+    "kind": "vault",
+    "xmin": 8695.0,
+    "xmax": 8785.0,
+    "ymin": -6860.0,
+    "ymax": -6770.0,
+    "zmin": 0.0,
+    "zmax": 110.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "ref": "vault_slot_08"
+   },
+   {
+    "id": "vault_109",
+    "kind": "vault",
+    "xmin": 5285.0,
+    "xmax": 5375.0,
+    "ymin": -6860.0,
+    "ymax": -6770.0,
+    "zmin": 0.0,
+    "zmax": 110.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "ref": "vault_slot_09"
+   },
+   {
+    "id": "vault_110",
+    "kind": "vault",
+    "xmin": 1015.0,
+    "xmax": 1105.0,
+    "ymin": -6860.0,
+    "ymax": -6770.0,
+    "zmin": 0.0,
+    "zmax": 110.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "ref": "vault_slot_10"
+   },
+   {
+    "id": "exit_gate_1",
+    "kind": "exit_gate",
+    "xmin": 9770.5,
+    "xmax": 9785.5,
+    "ymin": -4645.0,
+    "ymax": -4345.0,
+    "zmin": 0.0,
+    "zmax": 280.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "ref": "exit_gate"
+   },
+   {
+    "id": "jail_door_1",
+    "kind": "jail_door",
+    "xmin": 3500.0,
+    "xmax": 3800.0,
+    "ymin": -6555.0,
+    "ymax": -6545.0,
+    "zmin": 0.0,
+    "zmax": 250.0,
+    "blocks_move": true,
+    "blocks_sight": true,
+    "ref": "jail"
+   }
+  ]
+ },
+ "floors": [
+  {
+   "id": "floor_0",
+   "xmin": -10.0,
+   "xmax": 9787.9,
+   "ymin": -5912.1,
+   "ymax": -940.5,
+   "fbx": "UCX_SM_Mansion_1F_Blockout_093"
+  },
+  {
+   "id": "floor_1",
+   "xmin": 395.3,
+   "xmax": 9382.6,
+   "ymin": -6884.7,
+   "ymax": -5892.1,
+   "fbx": "UCX_SM_Mansion_1F_Blockout_094"
+  },
+  {
+   "id": "floor_2",
+   "xmin": -10.0,
+   "xmax": 2692.1,
+   "ymin": -960.5,
+   "ymax": 10.0,
+   "fbx": "UCX_SM_Mansion_1F_Blockout_095"
+  },
+  {
+   "id": "floor_3",
+   "xmin": 4167.9,
+   "xmax": 5595.3,
+   "ymin": -960.5,
+   "ymax": -373.2,
+   "fbx": "UCX_SM_Mansion_1F_Blockout_096"
+  },
+  {
+   "id": "floor_4",
+   "xmin": 7063.7,
+   "xmax": 9787.9,
+   "ymin": -960.5,
+   "ymax": 10.0,
+   "fbx": "UCX_SM_Mansion_1F_Blockout_097"
+  },
+  {
+   "id": "floor_exit",
+   "xmin": 9778.0,
+   "xmax": 10180.0,
+   "ymin": -4685.0,
+   "ymax": -4305.0,
+   "client": "Floor_Exit",
+   "note": "FBX에 없는 바닥(클라가 레벨에 추가). 탈출 구역이 이 위에 있다"
+  }
+ ],
+ "nav_grid": {
+  "cell": 50,
+  "origin_x": 10190.0,
+  "origin_y": -6890,
+  "rows": 205,
+  "cols": 139,
+  "cell_center": "x = origin_x - (row+0.5)*cell, y = origin_y + (col+0.5)*cell",
+  "note": "칸 데이터는 서버가 충돌체(25cm 넓힘)와 바닥(floors)으로 직접 만든다"
+ }
+}

@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>VaultHeist Consumable Concepts v1</title>
+<!--
+  소비 아이템 4종 구상안 v1 (무기 구상안 v2.2 와 같은 재질 톤: 무광 블랙 · 브러시드 스틸 · 황동 + 종류별 발광 띠)
+  주소 뒤에 붙이는 값
+    (없음)              전체 시트 1600×1000
+    ?mode=icon&c=1      HUD·정보창 아이콘 1장 (512×512, 배경 투명). c = 1 회복 키트 · 2 연막탄 · 3 섬광탄 · 4 제트팩
+    ?mode=top&c=1       탑뷰 그림 1장 (512×512, 배경 투명)
+  render_consumables.ps1 이 Edge/Chrome 화면 없는 모드로 찍는다.
+-->
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0b0c0f}
+body{font-family:'Malgun Gothic','맑은 고딕',sans-serif;color:#ece8df}
+.sheet{width:1600px;height:1000px;padding:36px 40px;background:radial-gradient(1200px 700px at 30% 0,#1d1e23 0,#0b0c0f 75%);overflow:hidden}
+.kicker{font:600 14px Georgia,serif;letter-spacing:6px;color:#c8a55a}
+h1{font-size:38px;margin:6px 0 4px}
+.sub{font-size:16px;color:#a9a59c;margin-bottom:18px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+.card{background:#111216;border:1px solid #24262b;padding:14px;position:relative}
+.head{display:flex;align-items:baseline;gap:10px;border-bottom:1px solid #c8a55a55;padding-bottom:8px;margin-bottom:10px}
+.no{font:italic 400 34px Georgia,serif;color:#c8a55a;line-height:1}
+.head h2{font-size:24px}
+.chip{margin-left:auto;font-size:13px;font-weight:700;padding:3px 10px;border:1px solid var(--g);color:var(--g);letter-spacing:1px;box-shadow:0 0 12px -4px var(--g)}
+.side{height:250px;background:#0d0e11;border:1px solid #1f2126;position:relative}
+.side svg{display:block;width:100%;height:100%}
+.lbl{position:absolute;left:8px;bottom:5px;font-size:11px;letter-spacing:2px;color:#8f8a80}
+.row{display:flex;gap:10px;margin-top:10px}
+.floor{flex:1;height:150px;position:relative;
+  background:linear-gradient(#0000 calc(100% - 1px),#0002 0) 0 0/40px 40px,linear-gradient(90deg,#0000 calc(100% - 1px),#0002 0) 0 0/40px 40px,#cdbb9c}
+.floor svg{position:absolute}
+.floor .big{left:6px;top:6px;width:138px;height:138px}
+.floor .real{right:14px;top:51px;width:48px;height:48px}
+.floor .lbl{color:#5d5446}
+.floor .lbl2{position:absolute;right:6px;top:104px;font-size:10px;color:#5d5446;text-align:right;width:100px;white-space:nowrap}
+.ui{margin-top:10px;display:flex;gap:10px;align-items:flex-end}
+.slot{width:112px;height:84px;background:#2a3446e6;border:1px solid #ffffff22;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.slot svg{width:50px;height:50px}
+.slot span{font-size:13px;font-weight:700;margin-top:1px}
+.slot i{position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--g);box-shadow:0 0 8px var(--g)}
+.info{flex:1;height:52px;background:#f4f1ea;border-radius:4px;display:flex;align-items:center;gap:6px;padding:0 8px 0 0;overflow:hidden;color:#1d1d1f;font-size:13px;font-weight:700}
+.info b{align-self:stretch;width:5px;background:var(--g)}
+.info svg{width:40px;height:40px;flex:0 0 40px}
+.notes{margin-top:10px;font-size:13px;line-height:1.5;color:#c9c5bb}
+.notes p{margin-bottom:2px}
+.notes em{font-style:normal;color:#c8a55a}
+.foot{margin-top:14px;font-size:13px;color:#8f8a80}
+.palette{display:flex;gap:16px;margin-top:6px;font-size:13px;color:#c9c5bb;align-items:center}
+.palette s{display:inline-block;width:18px;height:18px;border-radius:3px;vertical-align:-4px;margin-right:5px;text-decoration:none}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+// ── 색 (sRGB) ──
+const C=[null,
+  {id:1,key:'HealKit',  name:'회복 키트',en:'HEAL KIT',  g:'#2BF5B0',band:'민트',     shape:'네모 상자 + 큰 십자',  effect:'HP 30 회복', note:['탑뷰 실루엣 = <em>네모</em>(손잡이 달린 상자)','뚜껑의 <em>민트 십자</em>가 빛난다 — 회복약(초록 구)과 모양으로 구분','황동 모서리 4개 · 스틸 걸쇠 2개']},
+  {id:2,key:'Smoke',    name:'연막탄',  en:'SMOKE',     g:'#B07CFF',band:'라벤더',   shape:'세운 깡통 + 레버',    effect:'반경 5m 연막 10초', note:['탑뷰 실루엣 = <em>동그라미 + 꼬리</em>(옆으로 나온 레버·고리)','뚜껑 둘레 <em>라벤더 고리</em> + 연기 구멍 8개','몸통 위·아래 띠 2줄']},
+  {id:3,key:'Flashbang',name:'섬광탄',  en:'FLASHBANG', g:'#FFE45C',band:'플래시 옐로',shape:'눕힌 원통 + 구멍 줄',  effect:'6m 투척 · 반경 3m 섬광', note:['탑뷰 실루엣 = <em>긴 막대</em>(눕혀 놓음)','양 끝 가까이 <em>노란 띠 2줄</em> + 몸통 구멍 3줄','위에 황동 레버, 왼쪽 끝 고리']},
+  {id:4,key:'Jetpack',  name:'제트팩',  en:'JETPACK',   g:'#4C7DFF',band:'코발트',   shape:'쌍둥이 탱크',          effect:'앞으로 빠르게 이동', note:['탑뷰 실루엣 = <em>동그라미 2개</em>(쌍안경 모양)','탱크마다 <em>코발트 고리</em> + 아래 분사구 발광','스틸 돔 · 황동 밸브 · 가운데 등판']},
+];
+
+// ── 공통 정의 (재질 그라데이션 · 발광) ──
+function defs(s){return `<defs>
+<linearGradient id="gB${s}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#34363b"/><stop offset=".18" stop-color="#1b1c20"/><stop offset=".75" stop-color="#121316"/><stop offset="1" stop-color="#08090b"/></linearGradient>
+<linearGradient id="gBX${s}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0c0d0f"/><stop offset=".3" stop-color="#2c2e33"/><stop offset=".55" stop-color="#17181b"/><stop offset="1" stop-color="#08090b"/></linearGradient>
+<linearGradient id="gS${s}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eef0f3"/><stop offset=".35" stop-color="#a9aeb5"/><stop offset=".6" stop-color="#6e737a"/><stop offset="1" stop-color="#c3c8ce"/></linearGradient>
+<linearGradient id="gSX${s}" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#6e737a"/><stop offset=".35" stop-color="#e3e6ea"/><stop offset=".6" stop-color="#9ea3aa"/><stop offset="1" stop-color="#5e636a"/></linearGradient>
+<radialGradient id="gSR${s}" cx=".38" cy=".35" r=".75"><stop offset="0" stop-color="#f4f6f8"/><stop offset=".45" stop-color="#a6abb2"/><stop offset="1" stop-color="#5a5f66"/></radialGradient>
+<linearGradient id="gBr${s}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6dc96"/><stop offset=".45" stop-color="#cfa650"/><stop offset="1" stop-color="#7f6024"/></linearGradient>
+<radialGradient id="gBrR${s}" cx=".35" cy=".35" r=".8"><stop offset="0" stop-color="#fbe7ad"/><stop offset=".5" stop-color="#cfa650"/><stop offset="1" stop-color="#6f5420"/></radialGradient>
+<radialGradient id="gBR${s}" cx=".4" cy=".35" r=".8"><stop offset="0" stop-color="#3a3c42"/><stop offset=".6" stop-color="#16171a"/><stop offset="1" stop-color="#070809"/></radialGradient>
+<filter id="fG${s}" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB"><feGaussianBlur stdDeviation="3.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>`;}
+
+// ── 옆모습 (HUD 아이콘도 이 그림). viewBox 200×200 ──
+const SIDE={
+1:(s)=>`
+<path d="M74 66 Q74 50 90 50 L110 50 Q126 50 126 66 L126 80 L116 80 L116 64 Q116 60 112 60 L88 60 Q84 60 84 64 L84 80 L74 80Z" fill="url(#gB${s})" stroke="#000" stroke-width="1"/>
+<rect x="70" y="74" width="16" height="9" rx="2" fill="url(#gS${s})"/><rect x="114" y="74" width="16" height="9" rx="2" fill="url(#gS${s})"/>
+<rect x="26" y="80" width="148" height="78" rx="12" fill="url(#gB${s})" stroke="#000" stroke-width="1.2"/>
+<rect x="26" y="98" width="148" height="6" fill="url(#gS${s})"/>
+<rect x="26" y="88" width="148" height="3" fill="var(--g)" filter="url(#fG${s})"/>
+<rect x="46" y="94" width="14" height="16" rx="2" fill="url(#gS${s})" stroke="#3b3e43"/><rect x="140" y="94" width="14" height="16" rx="2" fill="url(#gS${s})" stroke="#3b3e43"/>
+<path d="M26 92 L26 92 Q26 80 38 80 L44 80 L44 88 L34 88 L34 96 L26 96Z" fill="url(#gBr${s})"/><path d="M174 92 Q174 80 162 80 L156 80 L156 88 L166 88 L166 96 L174 96Z" fill="url(#gBr${s})"/>
+<path d="M26 146 Q26 158 38 158 L44 158 L44 150 L34 150 L34 142 L26 142Z" fill="url(#gBr${s})"/><path d="M174 146 Q174 158 162 158 L156 158 L156 150 L166 150 L166 142 L174 142Z" fill="url(#gBr${s})"/>
+<path d="M92 112 h16 v10 h10 v16 h-10 v10 h-16 v-10 h-10 v-16 h10z" fill="var(--g)" filter="url(#fG${s})"/>
+<text x="100" y="154" font-family="Georgia" font-size="7" fill="#7d8188" text-anchor="middle" letter-spacing="1">VH-C1</text>`,
+2:(s)=>`
+<rect x="68" y="58" width="64" height="112" rx="7" fill="url(#gBX${s})" stroke="#000" stroke-width="1.2"/>
+<rect x="68" y="76" width="64" height="9" fill="var(--g)" filter="url(#fG${s})"/>
+<rect x="68" y="150" width="64" height="5" fill="var(--g)" filter="url(#fG${s})"/>
+<rect x="64" y="44" width="72" height="18" rx="4" fill="url(#gSX${s})" stroke="#4a4d52"/>
+<g fill="#1a1b1e"><rect x="72" y="49" width="7" height="8" rx="1.5"/><rect x="84" y="49" width="7" height="8" rx="1.5"/><rect x="96" y="49" width="8" height="8" rx="1.5"/><rect x="109" y="49" width="7" height="8" rx="1.5"/><rect x="121" y="49" width="7" height="8" rx="1.5"/></g>
+<path d="M126 46 L140 52 Q146 56 144 64 L140 126 Q139 132 134 130 L134 66 Q134 58 126 54Z" fill="url(#gBr${s})" stroke="#5c4519" stroke-width=".8"/>
+<circle cx="146" cy="44" r="9" fill="none" stroke="url(#gBr${s})" stroke-width="3.5"/>
+<rect x="72" y="166" width="56" height="8" rx="2" fill="url(#gSX${s})"/>
+<text x="100" y="122" font-family="Georgia" font-size="8" fill="#7d8188" text-anchor="middle" letter-spacing="1">VH-C2</text>`,
+3:(s)=>`
+<rect x="22" y="80" width="156" height="42" rx="10" fill="url(#gB${s})" stroke="#000" stroke-width="1.2"/>
+<rect x="22" y="80" width="18" height="42" rx="6" fill="url(#gS${s})"/><rect x="160" y="80" width="18" height="42" rx="6" fill="url(#gS${s})"/>
+<rect x="46" y="80" width="7" height="42" fill="var(--g)" filter="url(#fG${s})"/><rect x="147" y="80" width="7" height="42" fill="var(--g)" filter="url(#fG${s})"/>
+<g fill="#050506" stroke="#4a4d52" stroke-width=".8">${[0,1,2].map(r=>[0,1,2,3,4,5,6,7].map(k=>`<circle cx="${64+k*11}" cy="${90+r*11}" r="3"/>`).join('')).join('')}</g>
+<path d="M58 78 L150 74 Q156 74 156 79 L156 82 L58 84Z" fill="url(#gBr${s})" stroke="#5c4519" stroke-width=".8"/>
+<circle cx="36" cy="72" r="8.5" fill="none" stroke="url(#gBr${s})" stroke-width="3.5"/>
+<text x="100" y="134" font-family="Georgia" font-size="8" fill="#7d8188" text-anchor="middle" letter-spacing="1">VH-C3</text>`,
+4:(s)=>`
+<rect x="86" y="70" width="28" height="84" rx="5" fill="url(#gB${s})" stroke="#000"/>
+<rect x="84" y="88" width="32" height="7" rx="2" fill="url(#gBr${s})"/><rect x="84" y="128" width="32" height="7" rx="2" fill="url(#gBr${s})"/>
+${[[46,94],[106,154]].map(([a,b])=>`
+<path d="M${a+4} 160 L${b-4} 160 L${b-10} 176 L${a+10} 176Z" fill="url(#gSX${s})" stroke="#3b3e43"/>
+<ellipse cx="${(a+b)/2}" cy="177" rx="${(b-a)/2-11}" ry="3.5" fill="var(--g)" filter="url(#fG${s})"/>
+<rect x="${a}" y="58" width="${b-a}" height="104" rx="8" fill="url(#gBX${s})" stroke="#000" stroke-width="1.2"/>
+<path d="M${a} 66 Q${a} 40 ${(a+b)/2} 40 Q${b} 40 ${b} 66Z" fill="url(#gSX${s})" stroke="#4a4d52"/>
+<rect x="${(a+b)/2-5}" y="30" width="10" height="11" rx="2" fill="url(#gBr${s})"/>
+<rect x="${a}" y="118" width="${b-a}" height="7" fill="var(--g)" filter="url(#fG${s})"/>`).join('')}
+<text x="70" y="104" font-family="Georgia" font-size="7" fill="#7d8188" text-anchor="middle" letter-spacing="1">VH-C4</text>`,
+};
+
+// ── 탑뷰 (게임 카메라에서 보이는 모습). viewBox 200×200, 오른쪽 = +Y ──
+const TOP={
+1:(s)=>`
+<rect x="24" y="44" width="152" height="112" rx="14" fill="url(#gBR${s})" stroke="#000" stroke-width="1.5"/>
+<rect x="32" y="52" width="136" height="96" rx="9" fill="none" stroke="url(#gS${s})" stroke-width="3"/>
+<g fill="url(#gBrR${s})"><circle cx="38" cy="58" r="9"/><circle cx="162" cy="58" r="9"/><circle cx="38" cy="142" r="9"/><circle cx="162" cy="142" r="9"/></g>
+<rect x="74" y="36" width="52" height="12" rx="5" fill="url(#gB${s})" stroke="url(#gS${s})" stroke-width="2"/>
+<path d="M86 64 h28 v22 h22 v28 h-22 v22 h-28 v-22 h-22 v-28 h22z" fill="var(--g)" filter="url(#fG${s})"/>`,
+2:(s)=>`
+<path d="M128 92 L170 94 Q176 100 170 106 L128 108Z" fill="url(#gBr${s})" stroke="#5c4519"/>
+<circle cx="178" cy="100" r="11" fill="none" stroke="url(#gBrR${s})" stroke-width="5"/>
+<circle cx="100" cy="100" r="58" fill="url(#gBR${s})" stroke="#000" stroke-width="1.5"/>
+<circle cx="100" cy="100" r="51" fill="none" stroke="var(--g)" stroke-width="8" filter="url(#fG${s})"/>
+<circle cx="100" cy="100" r="42" fill="url(#gSR${s})" stroke="#4a4d52"/>
+<g fill="#141518">${[0,1,2,3,4,5,6,7].map(k=>{const a=k*Math.PI/4;return `<circle cx="${100+Math.cos(a)*27}" cy="${100+Math.sin(a)*27}" r="5.5"/>`}).join('')}</g>
+<circle cx="100" cy="100" r="11" fill="url(#gBrR${s})"/>`,
+3:(s)=>`
+<rect x="14" y="74" width="172" height="52" rx="14" fill="url(#gB${s})" stroke="#000" stroke-width="1.5"/>
+<rect x="14" y="74" width="20" height="52" rx="8" fill="url(#gS${s})"/><rect x="166" y="74" width="20" height="52" rx="8" fill="url(#gS${s})"/>
+<rect x="42" y="74" width="9" height="52" fill="var(--g)" filter="url(#fG${s})"/><rect x="149" y="74" width="9" height="52" fill="var(--g)" filter="url(#fG${s})"/>
+<g fill="#050506" stroke="#4a4d52" stroke-width=".8">${[0,1].map(r=>[0,1,2,3,4,5,6].map(k=>`<circle cx="${66+k*11.5}" cy="${84+r*32}" r="3.2"/>`).join('')).join('')}</g>
+<rect x="58" y="93" width="86" height="14" rx="5" fill="url(#gBr${s})" stroke="#5c4519"/>
+<circle cx="30" cy="62" r="10" fill="none" stroke="url(#gBrR${s})" stroke-width="5"/>`,
+4:(s)=>`
+<rect x="66" y="84" width="68" height="32" rx="6" fill="url(#gB${s})" stroke="#000" stroke-width="1.5"/>
+<rect x="94" y="80" width="12" height="40" rx="3" fill="url(#gBr${s})"/>
+${[64,136].map(cx=>`
+<circle cx="${cx}" cy="100" r="36" fill="url(#gBR${s})" stroke="#000" stroke-width="1.5"/>
+<circle cx="${cx}" cy="100" r="31" fill="none" stroke="var(--g)" stroke-width="6" filter="url(#fG${s})"/>
+<circle cx="${cx}" cy="100" r="23" fill="url(#gSR${s})" stroke="#4a4d52"/>
+<circle cx="${cx}" cy="100" r="8" fill="url(#gBrR${s})"/>`).join('')}`,
+};
+
+function svg(fn,c,s,attr,vb){return `<svg viewBox="${vb||'0 0 200 200'}" ${attr||''} style="display:block;--g:${C[c].g}">${defs(s)}${fn[c](s)}</svg>`;}
+
+const q=new URLSearchParams(location.search),root=document.getElementById('root'),mode=q.get('mode');
+if(mode==='icon'||mode==='top'){
+  document.head.insertAdjacentHTML('beforeend','<style>html,body{background:transparent!important;overflow:hidden}</style>');
+  const c=+(q.get('c')||1);
+  // 아이콘은 그림 둘레 여백을 줄여(가운데 168×168) 작은 칸에서도 크게 보이게 한다
+  const px=q.get('s')||512;
+  root.innerHTML=svg(mode==='icon'?SIDE:TOP,c,'x','width="'+px+'" height="'+px+'"',mode==='icon'?'16 16 168 168':'0 0 200 200');
+}else{
+  let h=`<div class="sheet"><div class="kicker">VAULTHEIST · CONSUMABLES v1</div><h1>소비 아이템 4종 구상안</h1>
+  <div class="sub">무기 구상안 v2.2 와 같은 재질(무광 블랙 · 브러시드 스틸 · 황동). <b style="color:#ece8df">실루엣 = 종류</b>, <b style="color:#ece8df">발광 띠 색 = 종류</b>. 띠 색은 무기 분류 4색(레드·시안·앰버·라임)과 겹치지 않게 골랐다.</div><div class="grid">`;
+  for(let c=1;c<=4;c++){const o=C[c];
+    h+=`<div class="card" style="--g:${o.g}"><div class="head"><span class="no">C${c}</span><h2>${o.name}</h2><span class="chip">${o.band} ${o.g}</span></div>
+    <div class="side">${svg(SIDE,c,'s'+c)}<span class="lbl">옆모습 · HUD 아이콘</span></div>
+    <div class="row"><div class="floor">${svg(TOP,c,'t'+c,'class="big"')}${svg(TOP,c,'r'+c,'class="real"')}<span class="lbl">탑뷰(게임 화면)</span><span class="lbl2">1080p 실제 크기<br>약 48px</span></div></div>
+    <div class="ui"><div class="slot">${svg(SIDE,c,'u'+c)}<span>[E] ${o.name}</span><i></i></div>
+      <div class="info"><b></b>${svg(SIDE,c,'i'+c)}<span>${o.name}/소비/${o.effect}</span></div></div>
+    <div class="notes"><p><em>모양</em> ${o.shape}</p>${o.note.map(n=>`<p>· ${n}</p>`).join('')}</div></div>`;}
+  h+=`</div><div class="palette">공통 재질 <span><s style="background:#16171a;border:1px solid #444"></s>무광 블랙</span><span><s style="background:linear-gradient(90deg,#6e737a,#e3e6ea,#9ea3aa)"></s>브러시드 스틸</span><span><s style="background:linear-gradient(#f6dc96,#cfa650,#7f6024)"></s>황동</span>
+  <span style="margin-left:24px">각인 VH-C1 ~ VH-C4</span><span style="margin-left:auto;color:#8f8a80">아래 칸: HUD 소비 칸(왼쪽) · 바닥 정보창(오른쪽) — 아이콘 + 띠 색</span></div></div>`;
+  root.innerHTML=h;
+}
+</script>
+</body>
+</html>

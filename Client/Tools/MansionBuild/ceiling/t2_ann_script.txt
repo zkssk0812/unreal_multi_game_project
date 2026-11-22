@@ -1,0 +1,8 @@
+# 2026-11-21 taser: wheel while holding puts it away (no cooldown), then hold again and fire
+1.0 vh.CeilingGo -3450 -2050
+1.3 vh.Aim 90
+3.0 vh.Press skill
+3.8 vh.Press wheel
+4.6 vh.Press skill
+6.5 vh.Press attack
+8.0 vh.Press skill

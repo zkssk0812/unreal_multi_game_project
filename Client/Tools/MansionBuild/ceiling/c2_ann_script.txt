@@ -1,0 +1,20 @@
+# 2026-11-21 ceiling compare: 2 clients only (less VRAM). Ann in corridor next to GuestRoom4 where Bob stands. ceiling on / off / Ann enters room
+1.0 vh.CeilingGo -3450 -2050
+3.0 vh.CeilingInfo
+3.3 vh.Shot c2_ann_01_corridor_on
+4.3 vh.Ceiling 0
+5.3 vh.Shot c2_ann_02_corridor_off
+5.6 vh.CeilingInfo
+6.3 vh.Ceiling 1
+7.0 vh.CeilingGo -3950 -2250
+9.0 vh.CeilingInfo
+9.3 vh.Shot c2_ann_03_room
+10.5 vh.Cam 3600 -65 0 0
+12.0 vh.Shot c2_ann_04_wide
+13.0 vh.Cam off
+14.0 vh.CeilingGo guard 120
+16.0 vh.CeilingInfo
+16.3 vh.Shot c2_ann_05_guard_same_zone
+17.5 vh.CeilingGo guard 120
+19.0 vh.CeilingInfo
+19.3 vh.Shot c2_ann_06_guard_same_zone

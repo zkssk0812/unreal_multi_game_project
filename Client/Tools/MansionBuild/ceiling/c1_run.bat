@@ -1,0 +1,9 @@
+@echo off
+rem 2026-11-21 ceiling test: 3 clients on real server V3b (server V3b must already run)
+copy /Y "C:\UnrealProjects\MCPTest\Tools\MansionBuild\ceiling\c1_ann_script.txt" "C:\UnrealProjects\MCPTest\Saved\V3Test\c1_ann_script.txt" > NUL
+copy /Y "C:\UnrealProjects\MCPTest\Tools\MansionBuild\ceiling\c1_bob_script.txt" "C:\UnrealProjects\MCPTest\Saved\V3Test\c1_bob_script.txt" > NUL
+start "" "C:\Users\FORYOUCOM\Desktop\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" "C:\UnrealProjects\MCPTest\MCPTest.uproject" -game -windowed -ResX=1280 -ResY=720 -WinX=0 -WinY=0 -VHServer=127.0.0.1:9000 -VHBot=Ann -VHBotMin=3 -VHBotChar=1 -VHBotPerks=5,6,7 -VHScript=C:\UnrealProjects\MCPTest\Saved\V3Test\c1_ann_script.txt -log -abslog=C:\UnrealProjects\MCPTest\Saved\V3Test\c1_Ann.log
+timeout /t 8 > NUL
+start "" "C:\Users\FORYOUCOM\Desktop\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" "C:\UnrealProjects\MCPTest\MCPTest.uproject" -game -windowed -ResX=640 -ResY=360 -WinX=1280 -WinY=0 -VHServer=127.0.0.1:9000 -VHBot=Bob -VHBotMin=3 -VHBotChar=2 -VHScript=C:\UnrealProjects\MCPTest\Saved\V3Test\c1_bob_script.txt -log -abslog=C:\UnrealProjects\MCPTest\Saved\V3Test\c1_Bob.log
+timeout /t 8 > NUL
+start "" "C:\Users\FORYOUCOM\Desktop\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" "C:\UnrealProjects\MCPTest\MCPTest.uproject" -game -windowed -ResX=640 -ResY=360 -WinX=1280 -WinY=400 -VHServer=127.0.0.1:9000 -VHBot=Cat -VHBotMin=3 -VHBotChar=3 -VHBotLoot -log -abslog=C:\UnrealProjects\MCPTest\Saved\V3Test\c1_Cat.log

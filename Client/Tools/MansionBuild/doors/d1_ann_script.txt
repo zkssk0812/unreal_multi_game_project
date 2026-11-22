@@ -1,0 +1,36 @@
+# 2026-11-21 (4) doors: Ann (char 1) watches from the corridor next to the GuestRoom4 door (camera-side wall). Bob stands in the band, then walks through the door.
+1.0 vh.CeilingGo -3400 -2050
+2.6 vh.CeilingInfo
+2.8 vh.Shot d1_ann_01_band_cut1
+3.2 vh.CeilingCut 0
+3.6 vh.Shot d1_ann_02_band_cut0
+4.0 vh.CeilingCut 1
+5.2 vh.Shot d1_ann_03_bob_go
+5.6 vh.Shot d1_ann_04
+6.0 vh.Shot d1_ann_05
+6.4 vh.Shot d1_ann_06
+6.8 vh.Shot d1_ann_07
+7.4 vh.Shot d1_ann_08
+8.4 vh.Shot d1_ann_09
+9.0 vh.DoorInfo
+9.2 vh.CeilingInfo
+10.0 vh.Walk -1 0 1.8
+12.4 vh.CeilingInfo
+12.6 vh.Shot d1_ann_10_in_room4
+13.0 vh.Walk 1 0 1.8
+15.4 vh.CeilingInfo
+16.0 vh.Walk -1 0 1.8
+18.4 vh.CeilingInfo
+19.0 vh.Walk 1 0 1.8
+21.4 vh.CeilingInfo
+22.0 vh.Walk -1 0 1.8 1
+24.4 vh.CeilingInfo
+25.0 vh.Walk 1 0 1.4 1
+27.4 vh.CeilingInfo
+28.0 vh.CeilingGo -2050 400
+30.0 vh.Walk 1 0 1.6
+32.4 vh.CeilingInfo
+32.6 vh.Shot d1_ann_11_hall
+33.0 vh.Walk -1 0 1.6
+35.4 vh.CeilingInfo
+36.0 vh.DoorInfo all

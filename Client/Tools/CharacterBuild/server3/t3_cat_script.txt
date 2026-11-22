@@ -1,0 +1,9 @@
+# 2026-11-21 thief3: Cat(thief3) walks left (-Y) right after spawn (spawn protection 5s), then shots
+1.0 vh.Walk 0 -1 0.9 0
+1.1 vh.Aim 0
+2.6 vh.Shot t3e_cat_02
+2.8 vh.Cam 750 -65 0 0
+3.2 vh.Shot t3e_cat_03_close
+3.6 vh.Cam 1400 -70 0 0
+4.1 vh.Shot t3e_cat_04_wide
+4.6 vh.Cam off

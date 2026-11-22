@@ -1,0 +1,9 @@
+newmtl M_Travertine
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.30 0.30 0.30
+Ns 110
+d 1.0
+illum 2
+map_Kd T_Travertine.png
+

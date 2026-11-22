@@ -1,0 +1,36 @@
+newmtl M_Stone_Dark
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.30 0.30 0.30
+Ns 110
+d 1.0
+illum 2
+map_Kd T_Stone_Dark.png
+
+newmtl M_Water
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.90 0.90 0.90
+Ns 290
+d 0.6
+illum 2
+map_Kd T_Water.png
+
+newmtl M_Water_Fall
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.90 0.90 0.90
+Ns 290
+d 0.6
+illum 2
+map_Kd T_FX_WaterStreak.png
+
+newmtl M_Water_Jet
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.90 0.90 0.90
+Ns 290
+d 0.6
+illum 2
+map_Kd T_FX_WaterStreak.png
+

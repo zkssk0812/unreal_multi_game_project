@@ -1,0 +1,943 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>VaultHeist Weapon Concepts v2.2</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#0b0c0f}
+body{font-family:'Malgun Gothic','맑은 고딕',sans-serif;color:#ece8df}
+small{font-size:.6em;font-weight:400;color:#a9a59c;margin-left:4px}
+.kicker{font:600 15px Georgia,serif;letter-spacing:6px;color:#c8a55a}
+.floor{background:
+  linear-gradient(#0000 calc(100% - 1px),#0003 0) 0 0/55px 55px,
+  linear-gradient(90deg,#0000 calc(100% - 1px),#0003 0) 0 0/55px 55px,#5d574e}
+.side{background:#0d0e11;border:1px solid #24262b;position:relative}
+.side svg,.tvbig svg{display:block;width:100%;height:100%}
+.lbl{position:absolute;left:12px;bottom:8px;font-size:13px;letter-spacing:3px;color:#8f8a80}
+.shead{height:104px;display:flex;align-items:center;gap:22px;border-bottom:1px solid #c8a55a66;margin-bottom:18px}
+.no2{font:italic 400 84px Georgia,serif;color:#c8a55a;line-height:1}
+.shead h2{font-size:50px;line-height:1.15}
+.shead h2 em{font:400 16px Georgia,serif;letter-spacing:5px;color:#8f8a80;margin-left:14px;font-style:normal}
+.chip2{margin-left:auto;font-size:20px;font-weight:700;padding:6px 20px;border:1px solid var(--g);color:var(--g);letter-spacing:3px;box-shadow:0 0 16px -4px var(--g)}
+.tvbig{height:222px;position:relative}
+.tvbig .lbl{color:#d6d2c8}
+
+/* 비교 페이지 */
+.cmp{width:1600px;height:1090px;padding:44px;background:radial-gradient(1200px 700px at 30% 0,#1d1e23 0,#0b0c0f 75%);overflow:hidden}
+.crow{display:grid;grid-template-columns:1040px 1fr;gap:28px;margin-bottom:24px}
+.clip{position:relative;overflow:hidden}
+.clip iframe{position:absolute;width:1600px;height:790px;border:0}
+.badge{position:absolute;right:12px;top:12px;font:italic 400 30px Georgia,serif;color:#c8a55a;background:#000a;padding:2px 16px;border:1px solid #c8a55a88;z-index:2}
+.chg{list-style:none;margin-top:14px;font-size:17px;line-height:1.55;color:#d6d2c8}
+.chg li{padding-left:16px;position:relative}
+.chg li::before{content:'';position:absolute;left:0;top:11px;width:6px;height:6px;border-radius:50%;background:#c8a55a}
+.chg.old{color:#8f8a80}.chg.old li::before{background:#5a564e}
+.foot{font-size:14px;color:#8f8a80}
+
+/* 무기별 카드 */
+.single{width:1600px;height:790px;padding:44px;display:grid;grid-template-columns:1040px 1fr;gap:28px;
+  background:radial-gradient(1200px 700px at 30% 0,#1d1e23 0,#0b0c0f 75%);overflow:hidden}
+.notes{margin-top:20px;font-size:20px;line-height:1.6;color:#d6d2c8}
+.notes p{display:flex;gap:16px;margin-bottom:8px}
+.notes b{flex:0 0 110px;color:#c8a55a;font-weight:400;letter-spacing:2px;font-size:16px;padding-top:4px}
+.minirow{display:flex;gap:10px;margin-top:10px}
+.minirow .m{flex:1;height:84px;display:flex;align-items:center;justify-content:center;position:relative}
+.minirow .m.l{background:#cbbfa9}.minirow .m.d{background:#26221e}
+.minirow span{position:absolute;left:6px;bottom:3px;font-size:11px;color:#777}
+table.s{width:100%;margin-top:22px;border-collapse:collapse;font-size:22px}
+table.s td{padding:13px 4px;border-bottom:1px solid #2b2d32}
+table.s td:first-child{color:#8f8a80;font-size:16px;letter-spacing:3px;width:110px}
+table.s td:last-child{font-weight:700}
+</style>
+</head>
+<body>
+<div id="defs"></div>
+<div id="root"></div>
+<script>
+const CAT={
+  melee:{name:'근접',full:'근접 무기',color:'#FF2D55',cname:'루비 레드'},
+  ranged:{name:'원거리',full:'원거리 무기',color:'#35D6FF',cname:'아이스 시안'},
+  thrown:{name:'투척',full:'투척 무기',color:'#FF9A1F',cname:'앰버 오렌지'},
+  placed:{name:'설치',full:'설치 무기',color:'#B6FF3A',cname:'라임'}
+};
+
+/* ================= 필터·재질 정의 ================= */
+// 조명 통일: 왼쪽 위 키 라이트(azimuth 235) + 오른쪽 뒤 림 라이트(azimuth 20, 푸른빛)
+function filters(sfx,region,k,ss){
+  const key=e=>`<feDistantLight azimuth="235" elevation="${e}"/>`;
+  const rim=`<feSpecularLighting in="h" surfaceScale="${ss}" specularConstant=".75" specularExponent="20" lighting-color="#7aa7ff" result="rim"><feDistantLight azimuth="20" elevation="22"/></feSpecularLighting>`;
+  const shadow=`<feGaussianBlur in="SourceAlpha" stdDeviation="${2.6*k}" result="sb"/><feOffset in="sb" dx="${1.6*k}" dy="${3*k}" result="so"/>
+   <feComponentTransfer in="so" result="shadow"><feFuncA type="linear" slope=".62"/></feComponentTransfer>`;
+  return `
+<filter id="fBlack${sfx}" ${region} color-interpolation-filters="sRGB">
+  <feGaussianBlur in="SourceAlpha" stdDeviation="${1.8*k}" result="h"/>
+  <feDiffuseLighting in="h" surfaceScale="${ss}" diffuseConstant="1.22" lighting-color="#fff" result="dif">${key(55)}</feDiffuseLighting>
+  <feComposite in="SourceGraphic" in2="dif" operator="arithmetic" k1="1" k2="0" k3="0" k4="0" result="lit"/>
+  <feSpecularLighting in="h" surfaceScale="${ss}" specularConstant=".7" specularExponent="26" lighting-color="#eef2ff" result="sp">${key(40)}</feSpecularLighting>
+  ${rim}
+  <feComposite in="sp" in2="rim" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="sp2"/>
+  <feComposite in="sp2" in2="SourceAlpha" operator="in" result="sp3"/>
+  <feTurbulence type="fractalNoise" baseFrequency="${1.4/k}" numOctaves="2" seed="7" result="n"/>
+  <feColorMatrix in="n" type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 .4 0 0 0 -.175" result="n2"/>
+  <feComposite in="n2" in2="SourceAlpha" operator="in" result="grain"/>
+  ${shadow}
+  <feMerge><feMergeNode in="shadow"/><feMergeNode in="lit"/><feMergeNode in="grain"/><feMergeNode in="sp3"/></feMerge>
+</filter>
+<filter id="fMetal${sfx}" ${region} color-interpolation-filters="sRGB">
+  <feGaussianBlur in="SourceAlpha" stdDeviation="${1.3*k}" result="h"/>
+  <feTurbulence type="fractalNoise" baseFrequency="${.02/k} ${1.7/k}" numOctaves="3" seed="11" result="n"/>
+  <feColorMatrix in="n" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1.5 0 0 0 -.56" result="sd0"/>
+  <feComposite in="sd0" in2="SourceAlpha" operator="in" result="sd"/>
+  <feColorMatrix in="n" type="matrix" values="0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 1.3 0 0 -.5" result="sl0"/>
+  <feComposite in="sl0" in2="SourceAlpha" operator="in" result="sl"/>
+  <feMerge result="tex"><feMergeNode in="SourceGraphic"/><feMergeNode in="sd"/><feMergeNode in="sl"/></feMerge>
+  <feDiffuseLighting in="h" surfaceScale="${ss}" diffuseConstant="1.22" lighting-color="#fff" result="dif">${key(55)}</feDiffuseLighting>
+  <feComposite in="tex" in2="dif" operator="arithmetic" k1="1" k2="0" k3="0" k4="0" result="lit"/>
+  <feSpecularLighting in="h" surfaceScale="${ss}" specularConstant="1.25" specularExponent="30" lighting-color="#ffffff" result="sp">${key(42)}</feSpecularLighting>
+  ${rim}
+  <feComposite in="sp" in2="rim" operator="arithmetic" k1="0" k2="1" k3="1" k4="0" result="sp2"/>
+  <feComposite in="sp2" in2="SourceAlpha" operator="in" result="sp3"/>
+  ${shadow}
+  <feMerge><feMergeNode in="shadow"/><feMergeNode in="lit"/><feMergeNode in="sp3"/></feMerge>
+</filter>
+<filter id="fLeather${sfx}" ${region} color-interpolation-filters="sRGB">
+  <feGaussianBlur in="SourceAlpha" stdDeviation="${2.2*k}" result="h"/>
+  <feTurbulence type="fractalNoise" baseFrequency="${.6/k}" numOctaves="3" seed="5" result="n"/>
+  <feComposite in="h" in2="n" operator="arithmetic" k1="0" k2="1" k3=".13" k4="0" result="hn"/>
+  <feDiffuseLighting in="hn" surfaceScale="${ss*.6}" diffuseConstant="1.25" lighting-color="#fff" result="dif">${key(55)}</feDiffuseLighting>
+  <feComposite in="SourceGraphic" in2="dif" operator="arithmetic" k1="1" k2="0" k3="0" k4="0" result="lit"/>
+  <feSpecularLighting in="hn" surfaceScale="${ss*.6}" specularConstant=".4" specularExponent="16" lighting-color="#ffe9d2" result="sp">${key(40)}</feSpecularLighting>
+  <feComposite in="sp" in2="SourceAlpha" operator="in" result="sp3"/>
+  <feMerge><feMergeNode in="lit"/><feMergeNode in="sp3"/></feMerge>
+</filter>
+<filter id="fGloss${sfx}" ${region} color-interpolation-filters="sRGB">
+  <feGaussianBlur in="SourceAlpha" stdDeviation="${1.2*k}" result="h"/>
+  <feDiffuseLighting in="h" surfaceScale="${ss}" diffuseConstant="1.22" lighting-color="#fff" result="dif">${key(55)}</feDiffuseLighting>
+  <feComposite in="SourceGraphic" in2="dif" operator="arithmetic" k1="1" k2="0" k3="0" k4="0" result="lit"/>
+  <feSpecularLighting in="h" surfaceScale="${ss}" specularConstant="1.1" specularExponent="34" lighting-color="#fff" result="sp">${key(42)}</feSpecularLighting>
+  <feComposite in="sp" in2="SourceAlpha" operator="in" result="sp3"/>
+  <feMerge><feMergeNode in="lit"/><feMergeNode in="sp3"/></feMerge>
+</filter>
+<filter id="fGlow${sfx}" ${region} color-interpolation-filters="sRGB">
+  <feGaussianBlur in="SourceGraphic" stdDeviation="${5.5*k}" result="b1"/>
+  <feComponentTransfer in="b1" result="b1a"><feFuncA type="linear" slope=".7"/></feComponentTransfer>
+  <feGaussianBlur in="SourceGraphic" stdDeviation="${1.4*k}" result="b2"/>
+  <feMerge><feMergeNode in="b1a"/><feMergeNode in="b2"/><feMergeNode in="SourceGraphic"/></feMerge>
+</filter>
+<filter id="fBlur${sfx}" ${region}><feGaussianBlur stdDeviation="${2.2*k}"/></filter>
+<filter id="fBlurL${sfx}" ${region}><feGaussianBlur stdDeviation="${6*k}"/></filter>`;
+}
+document.getElementById('defs').innerHTML=`<svg width="0" height="0" style="position:absolute"><defs>
+<linearGradient id="gSlide" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b3e44"/><stop offset=".12" stop-color="#25272b"/><stop offset=".55" stop-color="#18191c"/><stop offset="1" stop-color="#0d0e10"/></linearGradient>
+<linearGradient id="gFrame" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2b2d31"/><stop offset=".5" stop-color="#18191c"/><stop offset="1" stop-color="#0c0d0f"/></linearGradient>
+<linearGradient id="gTop" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7b8088"/><stop offset=".5" stop-color="#5d6168"/><stop offset="1" stop-color="#474a51"/></linearGradient>
+<linearGradient id="gSteel2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f3f5f7"/><stop offset=".22" stop-color="#b9bec5"/><stop offset=".52" stop-color="#868c94"/><stop offset=".78" stop-color="#c9cdd3"/><stop offset="1" stop-color="#6b7078"/></linearGradient>
+<linearGradient id="gBrass2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f8e6ab"/><stop offset=".35" stop-color="#cfa650"/><stop offset=".68" stop-color="#9a7228"/><stop offset="1" stop-color="#dbb964"/></linearGradient>
+<radialGradient id="gBrassR" cx=".36" cy=".3" r=".8"><stop offset="0" stop-color="#fff2c4"/><stop offset=".45" stop-color="#cba14a"/><stop offset="1" stop-color="#7a581b"/></radialGradient>
+<linearGradient id="gLeather2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7a4d32"/><stop offset=".5" stop-color="#482b1b"/><stop offset="1" stop-color="#27160d"/></linearGradient>
+<linearGradient id="gTopBody" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#565a61"/><stop offset=".38" stop-color="#2c2e33"/><stop offset="1" stop-color="#121316"/></linearGradient>
+<linearGradient id="gSheen" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+<radialGradient id="gSpot" cx=".5" cy=".45" r=".6"><stop offset="0" stop-color="#2a2d34"/><stop offset="1" stop-color="#2a2d34" stop-opacity="0"/></radialGradient>
+<pattern id="pCarbon2" width="3.2" height="3.2" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3.2" height="3.2" fill="#101114"/><rect width="1.6" height="1.6" fill="#2b2e33"/><rect x="1.6" y="1.6" width="1.6" height="1.6" fill="#24262b"/></pattern>
+<pattern id="pGrid" width="30" height="30" patternUnits="userSpaceOnUse"><rect width="30" height="30" fill="#0d0e11"/><path d="M30 0H0V30" fill="none" stroke="#fff" stroke-opacity=".045"/></pattern>
+${filters('','filterUnits="userSpaceOnUse" x="-20" y="-20" width="640" height="280"',1,9)}
+${filters('T','filterUnits="userSpaceOnUse" x="-10" y="-10" width="140" height="80"',.3,7)}
+</defs></svg>`;
+
+/* ================= 그리기 도우미 ================= */
+const D=[6,-7];                                   // 깊이 방향(오른쪽 위): 윗면·앞면 두께가 보이게
+const chain=(pts,dx=0,dy=0)=>{const q=pts.map(([x,y])=>[x+dx,y+dy]);let s=`${q[0][0]} ${q[0][1]}`;
+  for(let i=1;i<q.length;i+=3)s+=`C${q[i][0]} ${q[i][1]} ${q[i+1][0]} ${q[i+1][1]} ${q[i+2][0]} ${q[i+2][1]}`;return s;};
+const strip=(pts,d=D)=>`M${chain(pts)}L${chain([...pts].reverse(),d[0],d[1])}Z`;
+function extrude(d,{fill='#0b0c0e',rim='#8fb2e6',n=16,dv=D}={}){
+  let s=`<g fill="${fill}" fill-rule="evenodd"><path d="${d}" transform="translate(${dv[0]},${dv[1]})" stroke="${rim}" stroke-opacity=".5" stroke-width=".8"/>`;
+  for(let i=n-1;i>=1;i--){const t=i/n;s+=`<path d="${d}" transform="translate(${(dv[0]*t).toFixed(2)},${(dv[1]*t).toFixed(2)})"/>`;}
+  return s+'</g>';
+}
+const dial=()=>{let t='';for(let i=0;i<12;i++){const a=i*Math.PI/6;t+=`M${(Math.cos(a)*4.6).toFixed(2)} ${(Math.sin(a)*4.6).toFixed(2)}L${(Math.cos(a)*6).toFixed(2)} ${(Math.sin(a)*6).toFixed(2)}`;}
+  return `<circle r="6.8"/><path d="${t}"/><circle r="2.6"/><path d="M0 -2.6V-4.4"/>`;};
+// 새김(음각) 로고·글자: 어두운 선 + 오른쪽 아래 밝은 선
+const logo=(x,y,s=1,dark='#060607',light='#fff',lo=.28)=>`<g transform="translate(${x},${y}) scale(${s})" fill="none" stroke-width=".85" stroke-linecap="round">
+  <g transform="translate(.45,.55)" stroke="${light}" stroke-opacity="${lo}">${dial()}</g><g stroke="${dark}">${dial()}</g></g>`;
+const engr=(x,y,t,fs=6.2,dark='#050506',lo=.3)=>{const st=`font:700 ${fs}px Consolas,monospace;letter-spacing:.9px`;
+  return `<text x="${x+.4}" y="${y+.5}" style="${st}" fill="#fff" fill-opacity="${lo}">${t}</text><text x="${x}" y="${y}" style="${st}" fill="${dark}">${t}</text>`;};
+const groove=(d,w=.9)=>`<path d="${d}" fill="none" stroke="#000" stroke-opacity=".75" stroke-width="${w}" stroke-linecap="round"/><path d="${d}" transform="translate(.5,.65)" fill="none" stroke="#fff" stroke-opacity=".13" stroke-width=".55" stroke-linecap="round"/>`;
+const screw=(x,y,r=3,f='')=>{let h='';for(let i=0;i<6;i++){const a=i*Math.PI/3+.3;h+=`${i?'L':'M'}${(Math.cos(a)*r*.5).toFixed(2)} ${(Math.sin(a)*r*.5).toFixed(2)}`;}
+  return `<g transform="translate(${x},${y})"><circle r="${r+1}" fill="#000" fill-opacity=".6"/><g filter="url(#fMetal${f})"><circle r="${r}" fill="url(#gBrassR)"/></g><path d="${h}Z" fill="#2c1f08"/><path d="${h}Z" transform="translate(.3,.35)" fill="none" stroke="#fff3c9" stroke-opacity=".5" stroke-width=".3"/></g>`;};
+const glowLine=(d,dash,w=2.4,f='')=>`<path d="${d}" fill="none" stroke="var(--g)" stroke-width="${w}" stroke-dasharray="${dash}" filter="url(#fGlow${f})"/><path d="${d}" fill="none" stroke="#fff" stroke-opacity=".75" stroke-width="${w*.36}" stroke-dasharray="${dash}"/>`;
+
+/* ================= v2.2 공통 추가 ================= */
+document.querySelector('#defs defs').insertAdjacentHTML('beforeend',`
+<linearGradient id="gLeatherV" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5a3826"/><stop offset=".22" stop-color="#8b5b3d"/><stop offset=".55" stop-color="#4a2c1b"/><stop offset="1" stop-color="#1c1009"/></linearGradient>
+<linearGradient id="gBlackV" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#25272b"/><stop offset=".2" stop-color="#474a51"/><stop offset=".5" stop-color="#1c1d21"/><stop offset="1" stop-color="#09090b"/></linearGradient>
+<linearGradient id="gSteelDark" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a7acb3"/><stop offset=".3" stop-color="#70757c"/><stop offset=".6" stop-color="#4c5057"/><stop offset="1" stop-color="#3a3d43"/></linearGradient>
+<linearGradient id="gSteelX" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7d838b"/><stop offset=".25" stop-color="#f0f2f4"/><stop offset=".52" stop-color="#9aa0a8"/><stop offset=".82" stop-color="#5f646b"/><stop offset="1" stop-color="#8d939a"/></linearGradient>
+<linearGradient id="gBrassX" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8a651f"/><stop offset=".25" stop-color="#f6e2a4"/><stop offset=".56" stop-color="#b98f3c"/><stop offset="1" stop-color="#6f5018"/></linearGradient>
+<linearGradient id="gBlackX" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#191a1e"/><stop offset=".22" stop-color="#43464d"/><stop offset=".56" stop-color="#1b1c20"/><stop offset="1" stop-color="#08080a"/></linearGradient>
+<linearGradient id="gFacet" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#3d4046"/><stop offset=".228" stop-color="#34373c"/><stop offset=".228" stop-color="#202226"/><stop offset=".772" stop-color="#191a1d"/><stop offset=".772" stop-color="#0d0e10"/><stop offset="1" stop-color="#0a0a0c"/></linearGradient>
+<linearGradient id="gSteelTop" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#f1f3f5"/><stop offset="1" stop-color="#b3b8bf"/></linearGradient>
+<linearGradient id="gBrassTop" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fbeab4"/><stop offset="1" stop-color="#cfa650"/></linearGradient>
+<radialGradient id="gDiscTop" cx=".36" cy=".3" r=".8"><stop offset="0" stop-color="#3f4248"/><stop offset=".6" stop-color="#1f2125"/><stop offset="1" stop-color="#101113"/></radialGradient>
+<linearGradient id="gSteelDisc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f4f6f8"/><stop offset=".35" stop-color="#a9aeb5"/><stop offset=".6" stop-color="#d5d8dc"/><stop offset="1" stop-color="#70757c"/></linearGradient>
+${filters('B','x="-150%" y="-150%" width="400%" height="400%"',1,9)}`);
+
+const rad=Math.PI/180;
+const fillOf=f=>f[0]==='#'?f:`url(#${f})`;
+const rr=(x,y,w,h,r)=>`M${x+r} ${y}L${x+w-r} ${y}C${x+w-r*.45} ${y} ${x+w} ${y+r*.45} ${x+w} ${y+r}L${x+w} ${y+h-r}C${x+w} ${y+h-r*.45} ${x+w-r*.45} ${y+h} ${x+w-r} ${y+h}L${x+r} ${y+h}C${x+r*.45} ${y+h} ${x} ${y+h-r*.45} ${x} ${y+h-r}L${x} ${y+r}C${x} ${y+r*.45} ${x+r*.45} ${y} ${x+r} ${y}Z`;
+// 날카로운 캐릭터 라인: 밝은 선 + 바로 아래 어두운 선
+const crease=(d,lo=.34,w=.55)=>`<path d="${d}" fill="none" stroke="#fff" stroke-opacity="${lo}" stroke-width="${w}"/><path d="${d}" transform="translate(0,.7)" fill="none" stroke="#000" stroke-opacity=".6" stroke-width=".6"/>`;
+// 파인 채널 + 그 안의 발광선
+const chan=(d,w=6,dash='none',gw=2.4,f='')=>`<path d="${d}" fill="none" stroke="#030304" stroke-width="${w}" stroke-linecap="round"/><path d="${d}" transform="translate(.3,${(w*.55).toFixed(2)})" fill="none" stroke="#fff" stroke-opacity=".15" stroke-width=".6" stroke-linecap="round"/>`+glowLine(d,dash,gw,f);
+const scr=(x,y,r=2.5)=>screw(x,y,r,'B');
+const pin=(x,y,r=1.8)=>`<circle cx="${x}" cy="${y}" r="${r+.8}" fill="#000" fill-opacity=".6"/><g filter="url(#fMetalB)"><circle cx="${x}" cy="${y}" r="${r}" fill="url(#gSteel2)"/></g>`;
+const lightText=(x,y,t,fs=5,c='#aeb3b9')=>`<text x="${x}" y="${y}" style="font:700 ${fs}px Consolas,monospace;letter-spacing:.9px" fill="${c}" fill-opacity=".85">${t}</text>`;
+const floorShadow=(cx,rx,cy=235)=>`<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="4" fill="#000" opacity=".7" filter="url(#fBlurL)"/>`;
+const medal=(x,y,r)=>`<circle cx="${x+.6}" cy="${y+1.2}" r="${r+1.5}" fill="#000" fill-opacity=".55" filter="url(#fBlur)"/><g filter="url(#fMetalB)"><circle cx="${x}" cy="${y}" r="${r}" fill="url(#gBrassR)"/></g><circle cx="${x}" cy="${y}" r="${r*.81}" fill="none" stroke="#5a4012" stroke-width=".7" stroke-opacity=".8"/>${logo(x,y,r/12,'#4a330c','#fff6d5',.55)}`;
+// 가죽 패널: 그림자 + 황동 실선 테두리 + 가죽 + 바느질
+const leatherPanel=(d,cx,cy,s=.86)=>`<path d="${d}" fill="none" stroke="#000" stroke-width="6" stroke-opacity=".55" filter="url(#fBlur)"/>
+<g filter="url(#fGloss)"><path d="${d}" fill="none" stroke="url(#gBrass2)" stroke-width="3.2" stroke-linejoin="round"/></g>
+<path d="${d}" fill="#000" stroke="#000" stroke-width=".9"/><g filter="url(#fLeather)"><path d="${d}" fill="url(#gLeather2)"/></g>
+<path d="${d}" transform="translate(${cx+.4},${cy+.5}) scale(${s}) translate(${-cx},${-cy})" fill="none" stroke="#1a0e07" stroke-width="1.4" stroke-dasharray="3.2 2.4" stroke-linecap="round"/>
+<path d="${d}" transform="translate(${cx},${cy}) scale(${s}) translate(${-cx},${-cy})" fill="none" stroke="#d2ab74" stroke-width=".95" stroke-dasharray="3.2 2.4" stroke-linecap="round"/>`;
+
+// 그리기 문맥: 무기를 기울여 놓아도 조명·깊이 방향은 화면 기준으로 유지한다
+function ctx(theta=0,cx=300,cy=120,extra=''){
+  const tfs=(theta?`rotate(${theta} ${cx} ${cy}) `:'')+extra;
+  const tf=tfs.trim()?` transform="${tfs.trim()}"`:'';
+  const c=Math.cos(theta*rad),s=Math.sin(theta*rad);
+  const ld=[D[0]*c+D[1]*s,-D[0]*s+D[1]*c];
+  const P=(d,a)=>`<path d="${d}"${tf} ${a}/>`;
+  const F=(f,inner)=>`<g filter="url(#${f})">${inner}</g>`;
+  return {tf,ld,P,
+    raw:inner=>`<g${tf}>${inner}</g>`,
+    bk:(d,fill='gSlide',f='fBlack')=>F(f,P(d,`fill="${fillOf(fill)}" fill-rule="evenodd"`)),
+    st:(d,fill='gSteel2',f='fMetal')=>F(f,P(d,`fill="${fillOf(fill)}"`)),
+    br:(d,fill='gBrass2',f='fMetal')=>F(f,P(d,`fill="${fillOf(fill)}"`)),
+    le:(d,fill='gLeather2')=>F('fLeather',P(d,`fill="${fillOf(fill)}"`)),
+    cb:d=>P(d,'fill="#000" stroke="#000" stroke-width="1.5" stroke-linejoin="round"')+F('fGloss',P(d,'fill="url(#pCarbon2)"')),
+    sk:(d,color,w,f='fBlack')=>F(f,P(d,`fill="none" stroke="${fillOf(color)}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"`)),
+    ext:(d,o={})=>{const {fill='#0b0c0e',rim='#8fb2e6',n=14,k=1}=o;let out=`<g fill="${fill}" fill-rule="evenodd">`;
+      out+=`<g transform="translate(${D[0]*k},${D[1]*k})">${P(d,`stroke="${rim}" stroke-opacity=".5" stroke-width=".8"`)}</g>`;
+      for(let i=n-1;i>=1;i--){const t=i/n*k;out+=`<g transform="translate(${(D[0]*t).toFixed(2)},${(D[1]*t).toFixed(2)})">${P(d,'')}</g>`;}
+      return out+'</g>';},
+    top:(pts,fill='gTop',k=1)=>P(strip(pts,[ld[0]*k,ld[1]*k]),`fill="${fillOf(fill)}"`)+P('M'+chain(pts,ld[0]*k,ld[1]*k),'fill="none" stroke="#9fc0f0" stroke-opacity=".5" stroke-width=".7"')
+  };
+}
+// 탑뷰용 간단 도우미
+const tSh=d=>`<path d="${d}" transform="translate(1.6,2.6)" fill="#000" fill-opacity=".5" filter="url(#fBlurT)"/>`;
+const tB=(d,fill='gTopBody')=>`<g filter="url(#fBlackT)"><path d="${d}" fill="${fillOf(fill)}"/></g>`;
+const tS=(d,fill='gSteel2')=>`<g filter="url(#fMetalT)"><path d="${d}" fill="${fillOf(fill)}"/></g>`;
+const tL=(d,fill='gLeatherV')=>`<g filter="url(#fLeatherT)"><path d="${d}" fill="${fillOf(fill)}"/></g>`;
+const tChan=(d,dash='none',w=1.3,gw=.7)=>`<path d="${d}" fill="none" stroke="#020203" stroke-width="${w}" stroke-linecap="round"/>`+glowLine(d,dash,gw,'T');
+
+/* ================= 04 권총 ================= */
+function pistolSide(){
+  const slide='M139 36C230 34 370 35 458 39.5C462 39.7 465 42 465.6 45.5L468.4 62C468.9 66 466.5 68.8 462.5 69L141 71.5C137 71.5 134.6 69 134.3 65.5L132.6 42.5C132.3 38.8 135 36 139 36Z';
+  const slideTop=[[132.6,42.5],[132.3,38.8],[135,36],[139,36],[230,34],[370,35],[458,39.5],[462,39.7],[465,42],[465.6,45.5]];
+  const slideFront=[[465.6,45.5],[466.5,51],[467.5,56.5],[468.4,62],[468.9,66],[466.5,68.8],[462.5,69]];
+  // 그립: 뒤쪽(손바닥)은 살짝 볼록, 아래로 갈수록 아주 조금 벌어짐
+  const frame='M148 66L134.4 66L134.8 76C135.2 86 143 95 147 107C148.5 120 140 140 136 160C133 175 129.5 196 128.3 212C127.6 218 130.5 222.6 135.5 223L200 225C205 225.2 209 222.2 209.8 217.5C212 198 217 168 223 144C224.5 138.5 231 137 236 141C246 149 260 153.5 278 153.5L300 153.5C318 153.5 331 143 332 127C332.5 112 337 97.5 349 95.5L444 90L459.5 78C461.5 76.4 462.3 74.8 462.2 73L462 66Z'
+    +'M250 99L318 96.4C322.6 96.2 324.6 100 324.4 106C324 126 314 144.5 298 144.5L280 144.5C262 144.5 247 136 243.6 120C242 110 244 99.3 250 99Z';
+  const plate='M131.5 222.6L204 224.6L211.5 226.8C213 227.3 213.6 229 212.8 230.3C212.2 231.4 211 232 209.6 232L132.5 230.6C129.1 230.5 126.9 228.5 127.2 226C127.5 223.8 129.1 222.6 131.5 222.6Z';
+  const inlay='M160.5 121.5L213 130.5C215.5 131 216.8 133 216.4 135.5C213.5 160 207.5 186 202 209C201.3 211.5 199.3 213 196.8 212.9L142.5 211.2C139.9 211.1 138.4 209 138.8 206.5C140.5 192 143.5 176 147 160C150 148 157 136 157.6 125C157.7 123 158.8 121.6 160.5 121.5Z';
+  const trigger='M273 94L281.5 94L284 124C284.3 128 281.5 130.5 278 129C275 127.5 273.6 124 273.4 120Z';
+  const carbon='M358 76.5L450 74.5L455 79L446 86.2L356 90.6Z';
+  const port='M300 35.3L346 35.9L346 49C346 51 344.6 52.4 342.6 52.4L303.4 52.4C301.4 52.4 300 51 300 49Z';
+  let serr='',serrHl='';for(let i=0;i<6;i++){const x=148+i*6.6;serr+=`M${x} 43.6L${x+3.2} 43.6L${x+1.6} 57.6L${(x-1.6).toFixed(1)} 57.6Z`;serrHl+=`M${x+3.6} 43.8L${x+2} 57.6`;}
+  const glowD='M214 65.3L448 63.5';
+  const rs='M141 34L141 30.4C141 29.3 141.9 28.5 143 28.5L151.5 28.5L157 33.8Z';
+  const fs='M444 37L446.6 32.8C447 32.1 447.8 31.7 448.7 31.7L451.6 31.7C452.5 31.7 453.2 32.1 453.7 32.9L456.4 37.7Z';
+  const c=ctx();
+  return `
+${floorShadow(298,165)}<ellipse cx="170" cy="234.3" rx="46" ry="2" fill="#000" opacity=".8" filter="url(#fBlur)"/>
+${c.ext(plate,{fill:'#4a3510',rim:'#f1dca0'})}${c.br(plate)}
+${c.ext(frame)}
+<g filter="url(#fMetal)"><path d="${trigger}" transform="translate(3,-3)" fill="url(#gBrass2)"/></g>
+${c.bk(frame,'gFrame')}
+<path d="M150 112C151 130 143 150 139 178" fill="none" stroke="#fff" stroke-opacity=".07" stroke-width="5" filter="url(#fBlur)"/>
+<path d="M134.6 72L462 68.5L462.2 73C462.3 74.8 461.5 76.4 459.5 78L459 78.4L352 78L135 79.6Z" fill="#fff" fill-opacity=".045"/>
+${crease('M135 79.6L352 78',.3)}
+${leatherPanel(inlay,178,168)}${medal(178,170,10.5)}
+${c.cb(carbon)}
+<path d="M360 77.6L449.4 75.6L452.6 78.6L358.6 81.6Z" fill="url(#gSheen)" opacity=".75"/>
+<path d="M356 90.6L446 86.2L455 79" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width=".5"/>
+${c.st(rr(290,82.4,26,5.6,1.3))}${groove('M295 85.2H311',.6)}
+<g filter="url(#fMetalB)"><circle cx="166" cy="91.5" r="3.7" fill="url(#gBrassR)"/></g>
+<path d="M163.8 91.5H168.2" stroke="#3a2a0c" stroke-width=".9" stroke-linecap="round"/>
+${scr(340,86.4)}${pin(236,88)}
+${c.ext(slide)}${c.top(slideTop)}
+<path d="M300 35.3L346 35.9L352 28.9L306 28.3Z" fill="url(#gSteel2)" stroke="#111" stroke-width=".7"/>
+<path d="M302.4 34.2L344.4 34.8L348.6 29.9L306.6 29.3Z" fill="#fff" fill-opacity=".25"/>
+<path d="${strip(slideFront)}" fill="#0c0d0f"/>
+<ellipse cx="470.2" cy="50.4" rx="2.8" ry="5.6" fill="url(#gSteel2)" stroke="#000" stroke-width=".6"/>
+<ellipse cx="470.4" cy="50.4" rx="1.6" ry="3.7" fill="#020203"/>
+${extrude(rs,{n:8,dv:[3.4,-4],rim:'#9fc0f0'})}<path d="${rs}" fill="#23252a" stroke="#000" stroke-width=".5"/>
+${extrude(fs,{n:8,dv:[3.4,-4],rim:'#9fc0f0'})}<path d="${fs}" fill="#23252a" stroke="#000" stroke-width=".5"/>
+<circle cx="450.2" cy="34.6" r="1.15" fill="url(#gBrassR)"/>
+${c.bk(slide)}
+<path d="M139 36C230 34 370 35 458 39.5C461 39.7 463.6 41.6 464.9 44.2C370 39.7 230 38.7 133 40.7C133.6 38 136 36 139 36Z" fill="url(#gSheen)" opacity=".85"/>
+<path d="M139 36C230 34 370 35 458 39.5" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width=".8"/>
+${crease('M133 40.7C230 38.7 370 39.7 464.9 44.2',.42)}
+<path d="M140 49C230 47 370 48 464 52.4" fill="none" stroke="#fff" stroke-opacity=".08" stroke-width="5" stroke-linecap="round" filter="url(#fBlur)"/>
+<path d="M134 60.5L468 57.5L468.4 62C468.9 66 466.5 68.8 462.5 69L141 71.5C137 71.5 134.6 69 134.3 65.5Z" fill="#000" fill-opacity=".24"/>
+${crease('M134 60.5L468 57.5',.3)}
+<path d="${port}" fill="#000"/>
+${c.st('M301.6 36L344.4 36.6L344.4 48.8C344.4 50 343.5 50.9 342.3 50.9L303.7 50.9C302.5 50.9 301.6 50 301.6 48.8Z')}
+<path d="M301.6 36L344.4 36.6L344.4 40.6L301.6 40Z" fill="#000" fill-opacity=".45"/>
+<path d="M404 46.3L452 48.4L455.5 56.2L399 55.2Z" fill="#060708" stroke="#000" stroke-width=".7"/>
+<path d="M399 55.2L455.5 56.2L452 48.4" fill="none" stroke="#fff" stroke-opacity=".3" stroke-width=".5" transform="translate(.3,.5)"/>
+${c.st('M410 49.6L426 50.2L424.6 52.8L408.6 52.2ZM431 50.5L447 51.1L445.6 53.7L429.6 53.1Z')}
+<path d="${serr}" fill="#040405"/><path d="${serrHl}" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width=".5"/>
+${chan(glowD,6,'15 4.9')}
+${logo(204,50.6,.72)}${engr(213,52.6,'VAULT HEIST',5)}${engr(354,52.3,'VH-04 · 12',5.4)}
+`;
+}
+function pistolTop(){
+  const body='M30 24.2C30 23 31 22.4 32.2 22.4L84.6 23.6C87.6 23.7 89.6 25.4 89.6 27.8L89.6 32.2C89.6 34.6 87.6 36.3 84.6 36.4L32.2 37.6C31 37.6 30 37 30 35.8Z';
+  return `${tSh(body)}
+${tS('M89 27.9H91.6C92.5 27.9 93.1 28.5 93.1 29.3V30.7C93.1 31.5 92.5 32.1 91.6 32.1H89Z')}
+${tB(body)}
+<path d="M33 26.9L86 27.6M33 33.1L86 32.4" fill="none" stroke="#fff" stroke-opacity=".3" stroke-width=".3"/>
+<path d="M33 27.2L86 27.9M33 33.4L86 32.7" fill="none" stroke="#000" stroke-opacity=".5" stroke-width=".3"/>
+${tS(rr(56,27.9,12.5,4.2,.7))}
+<path d="M32.4 27.6H35.2V29.2H32.4ZM32.4 30.8H35.2V32.4H32.4Z" fill="#050506"/>
+<rect x="83.4" y="29.1" width="3" height="1.8" rx=".5" fill="#050506"/><circle cx="84.9" cy="30" r=".5" fill="#d9b662"/>
+<path d="M76 28.3L81.5 28.5L81.2 31.5L76 31.7Z" fill="#050506"/>
+${tChan('M40 35.9L84 35','2.9 .84')}${tChan('M40 24.1L84 25','2.9 .84')}`;
+}
+
+/* ================= 01 삼단봉 ================= */
+function batonSide(){
+  const grip='M58 84C90 82.5 170 82.5 200 84C202.5 84 204 85.5 204 88L204 104C204 106.5 202.5 108 200 108C170 109.5 90 109.5 58 108C55.5 108 54 106.5 54 104L54 88C54 85.5 55.5 84 58 84Z';
+  const pommel='M54 85.5L46 85.5C41.5 85.5 38 89 38 93.5L38 98.5C38 103 41.5 106.5 46 106.5L54 106.5Z';
+  const collar=rr(204,82,24,28,1.6);
+  const part=(c,ext)=>`
+${c.br(pommel)}${c.raw(groove('M47.5 86V106',.7)+groove('M50.8 86V106',.7)+'<ellipse cx="42.6" cy="96" rx="1.5" ry="2.6" fill="#1a1206"/>')}
+${c.le(grip,'gLeatherV')}
+${c.raw(groove('M84 83.4V108.6')+groove('M114 83V109')+groove('M144 83V109')+groove('M174 83.4V108.6')
+  +'<path d="M60 87.4C90 86 170 86 198 87.4" fill="none" stroke="#fff" stroke-opacity=".16" stroke-width="1.6" filter="url(#fBlur)"/>')}
+${c.bk(collar,'gBlackV')}
+${c.raw(groove('M208 83V109',.6)+groove('M210.4 83V109',.6)+groove('M212.8 83V109',.6)+chan('M220.5 84.6V107.4',4.2,'none',1.9))}
+${ext}`;
+  const c=ctx(-10,300,118), c2=ctx(-10,300,118,'translate(292,72)');
+  const extended=`
+${c.st(rr(228,87.5,122,17,1))}${c.bk(rr(346,85.5,12,21,1.4),'gBlackV')}
+${c.st(rr(358,89.5,108,13,1))}${c.bk(rr(462,87.5,10,17,1.2),'gBlackV')}
+${c.st(rr(472,91,76,10,1))}${c.st(rr(545,89.6,4,12.8,.8),'gSteelDark')}
+${c.br('M549 90.5L554 90.5C559 90.5 563 92.8 563 96C563 99.2 559 101.5 554 101.5L549 101.5Z')}
+${c.raw(chan('M352 87.4V104.6',3.6,'none',1.7)+chan('M467 89.2V102.8',3.2,'none',1.5)
+  +groove('M232 88V104',.6)+groove('M341 88V104',.6)+groove('M362 90V102',.6)+groove('M458 90V102',.6)+groove('M476 91.4V100.6',.6)+groove('M541 91.4V100.6',.6)
+  +logo(246,96,.62)+engr(254,98,'VH-01',5.4)+engr(300,98,'65 CM',4.4))}`;
+  const collapsed=`
+${c2.st(rr(228,85.5,7,21,1),'gSteelDark')}${c2.bk(rr(234,86.5,6,19,1),'gBlackV')}${c2.st(rr(239.4,88,5,16,.8),'gSteelDark')}
+${c2.br('M244 89.4L249 89.4C254 89.4 258 92.3 258 96C258 99.7 254 102.6 249 102.6L244 102.6Z')}
+${c2.raw(chan('M237 88.4V103.6',2.6,'none',1.3)+'<text x="270" y="99" font-size="8.5" fill="#8f8a80">수납 시</text>')}`;
+  return `${floorShadow(300,200)}
+${c.raw('<path d="M41 100C30 118 34 150 52 160C66 167 74 150 66 136C60 126 50 112 43.5 101" fill="none" stroke="#000" stroke-opacity=".5" stroke-width="4" transform="translate(2,3)" filter="url(#fBlur)"/><path d="M41 100C30 118 34 150 52 160C66 167 74 150 66 136C60 126 50 112 43.5 101" fill="none" stroke="#4a2c1b" stroke-width="2.8" stroke-linecap="round"/><path d="M41 100C30 118 34 150 52 160C66 167 74 150 66 136" fill="none" stroke="#a9744e" stroke-opacity=".6" stroke-width=".8"/>')}
+${part(c,extended)}${part(c2,collapsed)}`;
+}
+function batonTop(){
+  const g='M17 26.3H50C51 26.3 51.8 27.1 51.8 28.1V31.9C51.8 32.9 51 33.7 50 33.7H17C15.4 33.7 14 32.3 14 30.7V29.3C14 27.7 15.4 26.3 17 26.3Z';
+  return `${tSh('M14 26.3H106V33.7H14Z')}
+${tS(rr(56,27.6,22,4.8,.6))}${tS(rr(80,28.2,16,3.6,.5))}${tS(rr(97,28.7,9,2.6,.4))}
+${tS('M105.6 28.3H107.6C109 28.3 110 29 110 30C110 31 109 31.7 107.6 31.7H105.6Z','gBrass2')}
+${tL(g)}${tS('M14 29.3C14 27.7 15.4 26.3 17 26.3H18.4V33.7H17C15.4 33.7 14 32.3 14 30.7Z','gBrass2')}
+${tB(rr(51.4,25.6,5.2,8.8,.8),'gBlackV')}${tB(rr(77.4,26.6,3.2,6.8,.6),'gBlackV')}${tB(rr(95.2,27.2,2.6,5.6,.5),'gBlackV')}
+${glowLine('M54 26.2V33.8','none',.8,'T')}${glowLine('M79 27.2V32.8','none',.7,'T')}${glowLine('M96.5 27.7V32.3','none',.6,'T')}`;
+}
+
+/* ================= 02 도검 ================= */
+function bladeSide(){
+  const c=ctx(-9,300,120);
+  const blade='M198 79C320 76.5 450 77.5 540 82C552 83 561 87.5 566 94C556 99 540 102.5 520 103.5C420 106 300 105.5 198 105Z';
+  const spine=[[198,79],[320,76.5],[450,77.5],[540,82],[552,83],[561,87.5],[566,94]];
+  const bevel='M198 95.4C320 94 450 93.6 536 91.2L566 94C556 99 540 102.5 520 103.5C420 106 300 105.5 198 105Z';
+  const tipF='M534 81.6C546 82.4 558 86.4 566 94L536 91.2Z';
+  const guard=rr(170,66,12,52,2);
+  const guardTop=[[170,68],[170,66.9],[170.9,66],[172,66],[174.7,66],[177.3,66],[180,66],[181.1,66],[182,66.9],[182,68]];
+  let wrap='',wrapH='';for(let i=0;i<8;i++){const x=52+i*14.6;wrap+=`M${x} 82L${x+13} 102M${x+13} 82L${x} 102`;wrapH+=`M${x+.8} 82L${x+13.8} 102`;}
+  let slots='';for(let i=0;i<3;i++){const x=206+i*13;slots+=`M${x} 89.6L${x+9} 89.4L${x+6.6} 93L${x-2.4} 93.2Z`;}
+  const scab='M112 137C240 134.5 400 135.5 492 139.5C500 140 506 145.5 506 152.5C506 159 500 164 492 164.5C400 167.5 240 167.5 112 166.5Z';
+  return `${floorShadow(300,205)}
+<!-- 칼집 -->
+${c.bk(scab,'gBlackV','fGloss')}
+${c.raw('<path d="M116 141C240 138.6 400 139.6 492 143.4" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="1.6" filter="url(#fBlur)"/><path d="M214 146.4C300 145.2 400 145.8 470 148.2" fill="none" stroke="#c8a55a" stroke-opacity=".85" stroke-width=".8"/>')}
+${c.st('M98 135.5L112 135.5L112 168L98 168C96.9 168 96 167.1 96 166L96 137.5C96 136.4 96.9 135.5 98 135.5Z')}
+${c.br('M474 138.3L492 139.5C500 140 506 145.5 506 152.5C506 159 500 164 492 164.5L474 165.4Z')}
+${c.le('M190 134.4L206 134.2L206 167.6L190 167.4Z','gLeatherV')}
+${c.sk('M198 134.5C192 128 194 122 198 122C202 122 204 128 198 134.5','gBrass2',2.2,'fMetal')}
+${c.raw(groove('M104 136V167.6',.6)+groove('M108 136V167.6',.6)+groove('M474 138.4V165.2',.7)+chan('M124 152H158',3.6,'none',1.7)+logo(340,157,.62,'#c8a55a','#000',.5)+lightText(349,159,'VH-02',4.8,'#c8a55a'))}
+<!-- 검 -->
+${c.br('M48 81.5L40 81.5C37.2 81.5 35 83.7 35 86.5L35 97.5C35 100.3 37.2 102.5 40 102.5L48 102.5Z')}
+${c.le('M48 81.2C80 82.6 140 82.6 170 81.2L170 102.8C140 101.4 80 101.4 48 102.8Z','gLeatherV')}
+${c.raw(`<path d="${wrap}" fill="none" stroke="#1d1009" stroke-width="2.4"/><path d="${wrapH}" fill="none" stroke="#b07a52" stroke-opacity=".55" stroke-width=".7"/>`+groove('M43.6 82V102',.7))}
+${c.br('M104 92L111 88L118 92L111 96Z','gBrassR','fMetalB')}
+${c.ext(guard,{fill:'#4a3510',rim:'#f1dca0',k:1.7})}${c.top(guardTop,'gBrassTop',1.7)}${c.br(guard,'gBrassX')}
+${c.raw(crease('M170.6 70.5H181.4',.5)+crease('M170.6 113.5H181.4',.4))}
+${c.st('M182 78.4L197 79.2L197 105L182 105.8Z','gBrass2')}${c.raw(groove('M186 79V105.4',.6)+groove('M193.4 79.4V105',.6))}
+${c.ext(blade)}${c.top(spine)}
+${c.bk(blade)}${c.st(bevel)}${c.st(tipF,'gSteelTop')}
+${c.raw(crease('M198 95.4C320 94 450 93.6 536 91.2',.6)+'<path d="M534 81.8L536.4 91.2" fill="none" stroke="#000" stroke-opacity=".6" stroke-width=".7"/><path d="M200 103.6C300 104.2 420 104.6 520 102.2C540 101.2 554 98 564 94" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width=".6"/>'
+  +chan('M214 86.4C320 84.4 440 84.9 522 87.4',4,'none',1.7)+`<path d="${slots}" fill="#040405"/>`+logo(250,91.5,.5)+engr(256,93.2,'VH-02',4.6))}`;
+}
+function bladeTop(){
+  return `${tSh('M12 27H40V21H44V27H104L112 30L104 33H44V39H40V33H12Z')}
+${tL('M15 27.3C22 27.7 32 27.7 40 27.3V32.7C32 32.3 22 32.3 15 32.7Z')}${tS('M15 27.3H13.6C12.2 27.3 11 28.5 11 29.9V30.1C11 31.5 12.2 32.7 13.6 32.7H15Z','gBrass2')}
+${tS('M44 27.2C70 26.5 92 26.9 104 28.3C107.6 28.8 110.4 29.4 112 30C110.4 30.6 107.6 31.2 104 31.7C92 33.1 70 33.5 44 32.8Z')}
+<path d="M44 27.2C70 26.5 92 26.9 104 28.3C107.6 28.8 110.4 29.4 112 30L44 30Z" fill="#17181b"/>
+${tS(rr(40,20.6,4,18.8,1),'gBrassX')}
+${tChan('M48 29C70 28.4 90 28.6 102 29.4','none',1,.6)}`;
+}
+
+/* ================= 03 빔 소드 ================= */
+function beamSide(){
+  const c=ctx(-8,300,122);
+  const hilt=rr(56,95.5,140,29,2);
+  const sleeve='M66 94.5C90 93.5 120 93.5 144 94.5C145.2 94.6 146 95.4 146 96.6L146 123.4C146 124.6 145.2 125.4 144 125.5C120 126.5 90 126.5 66 125.5C64.8 125.4 64 124.6 64 123.4L64 96.6C64 95.4 64.8 94.6 66 94.5Z';
+  const emit='M196 90L224 90C230 90 236 94 238 100L240 106L240 120C240 126 235 130.5 228 130.5L196 130.5Z';
+  const emitTop=[[196,90],[205,90],[215,90],[224,90],[230,90],[236,94],[238,100]];
+  const spine='M238 88L536 88C550 88 566 96 584 114L578 119C562 106 550 101 534 101L238 101Z';
+  const spineTop=[[238,88],[337,88],[437,88],[536,88],[550,88],[566,96],[584,114]];
+  let cells='',cellsW='';for(let i=0;i<6;i++){const x=155.6+i*6;cells+=rr(x,103.4,3.8,13.2,1.6);cellsW+=`M${x+1.9} 105.6V114.4`;}
+  let fins='',finScr='';for(const x of [286,356,426,496]){fins+=`M${x} 103.4L${x+9} 103.4L${x+6.6} 113L${x+2.4} 113Z`;finScr+=scr(x+4.5,94.5,1.9);}
+  return `${floorShadow(300,205)}
+${c.br('M56 97L48 97C43.6 97 40 100.6 40 105L40 115C40 119.4 43.6 123 48 123L56 123Z')}
+${c.sk('M40 110C33 106 29 110 30 115C31 120 37 121 40.5 116','gBrass2',2.2,'fMetal')}
+${c.bk(hilt,'gBlackV')}
+${c.le(sleeve,'gLeatherV')}
+${c.raw(groove('M78 94.4V125.6')+groove('M92 94V126')+groove('M106 94V126')+groove('M120 94V126')+groove('M134 94.4V125.6')+groove('M50.6 97.6V122.4',.7))}
+${c.br('M104 91.6L122 91.6C123 91.6 123.8 92.4 123.8 93.4L123.8 95.4L102.2 95.4L102.2 93.4C102.2 92.4 103 91.6 104 91.6Z')}
+${c.cb('M152 100L190 100L193 103L193 120L152 120Z')}
+${c.raw(`<path d="${cells}" fill="var(--g)" filter="url(#fGlow)"/><path d="${cellsW}" fill="none" stroke="#fff" stroke-opacity=".8" stroke-width="1" stroke-linecap="round"/>`+groove('M199 96V125',.6))}
+${c.ext(emit,{fill:'#3c4047'})}${c.top(emitTop,'gSteelTop')}${c.st(emit)}
+${c.br(rr(201,90,6.2,40.5,.8),'gBrass2')}
+${c.raw(crease('M196.6 95.4L226 95.4C230 95.6 234 98 236.4 101.6',.55)+'<path d="M214 104L222 104L220.4 122L212.4 122ZM225 104L233 104L231.4 122L223.4 122Z" fill="#07080a"/><path d="M222.6 104.2L221 122M233.6 104.2L232 122" stroke="#fff" stroke-opacity=".5" stroke-width=".5"/>')}
+${c.br('M236 112L247 112.6L247 121.4L236 122Z')}
+${c.ext(spine)}${c.top(spineTop)}${c.cb(spine)}
+${c.raw('<path d="M240 89.6L536 89.6C549 89.6 563 97 578 111.4" fill="none" stroke="#fff" stroke-opacity=".3" stroke-width=".7"/>')}
+${c.st('M238 101L534 101C550 101 562 106 578 119L576.2 121C561 108.6 549.6 103.8 534 103.8L238 103.8Z')}
+${c.st(fins)}${c.st('M568 112.6L580.5 120.6L577.4 123.6L566.4 117.6Z','gSteelDark')}
+${c.raw(finScr+`<path d="M247 117H569" fill="none" stroke="var(--g)" stroke-width="6.4" stroke-linecap="round" filter="url(#fGlow)"/><path d="M247 117H569" fill="none" stroke="#fff" stroke-opacity=".92" stroke-width="2" stroke-linecap="round"/>`
+  +logo(252,94.6,.5,'#c8a55a','#000',.5)+lightText(300,96.6,'VH-03 · 6 CELL',5))}`;
+}
+function beamTop(){
+  const sp='M45 25.6H103C106 25.6 109.6 28.4 113 32.4L111.4 33.6C108.4 30.6 105.6 29.4 103 29.4H45Z';
+  return `${tSh('M8 26H113V34H8Z')}
+${tB(rr(9,25.8,29,8.4,1.4),'gBlackV')}${tL(rr(13,25.4,17,9.2,1),'gLeatherV')}
+${tS('M9 26.6H8.4C7 26.6 6 27.8 6 29.2V30.8C6 32.2 7 33.4 8.4 33.4H9Z','gBrass2')}
+${tS(rr(38,24.2,7.4,11.6,1.2))}${tB(sp)}
+${tS('M45 29.4H103C105.6 29.4 108.4 30.6 111.4 33.6L111 34C108.2 31.2 105.6 30.2 103 30.2H45Z')}
+<path d="M46.5 33.4H108.6" fill="none" stroke="var(--g)" stroke-width="2.6" stroke-linecap="round" filter="url(#fGlowT)"/><path d="M46.5 33.4H108.6" fill="none" stroke="#fff" stroke-opacity=".9" stroke-width=".8" stroke-linecap="round"/>
+${glowLine('M32.4 27.6H36.6','none',1.6,'T')}`;
+}
+
+/* ================= 원거리 3종 공통 도우미 ================= */
+// 윗모서리를 깎은 면(밝은 띠 + 날카로운 선)
+const facet=(pts,dy=4.6,lo=.42)=>`<path d="${strip(pts,[0,dy])}" fill="url(#gSheen)" opacity=".85"/><path d="M${chain(pts)}" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width=".8"/>${crease('M'+chain(pts,0,dy),lo)}`;
+// 자연스럽게 갈라지는 번개(중점 변위 + 잔가지), 씨앗값이 같으면 항상 같은 모양
+function bolt(x1,y1,x2,y2,seed,disp=14,depth=5,arch=0){
+  let s=seed>>>0;const rnd=()=>{s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};
+  let pts=[[x1,y1],[x2,y2]];
+  for(let d=0;d<depth;d++){const np=[pts[0]];for(let i=0;i<pts.length-1;i++){const a=pts[i],b=pts[i+1],dx=b[0]-a[0],dy=b[1]-a[1],len=Math.hypot(dx,dy)||1;
+    const off=(rnd()-.5)*2*disp/Math.pow(1.7,d)+(d===0?arch:0);np.push([(a[0]+b[0])/2-dy/len*off,(a[1]+b[1])/2+dx/len*off],b);}pts=np;}
+  return pts;
+}
+const boltPath=pts=>'M'+pts.map(p=>p[0].toFixed(1)+' '+p[1].toFixed(1)).join('L');
+function lightning(x1,y1,x2,y2,seed,o={}){
+  const {disp=14,arch=0,w=1.5,branches=3,f=''}=o;const main=bolt(x1,y1,x2,y2,seed,disp,5,arch);let br='',s=seed*7+3;
+  for(let i=0;i<branches;i++){s=(s*1103515245+12345)&0x7fffffff;const p=main[4+(s%(main.length-8))];const ang=((s>>8)%628)/100,len=(9+((s>>4)%13))*(o.bl||1);
+    br+=boltPath(bolt(p[0],p[1],p[0]+Math.cos(ang)*len,p[1]+Math.sin(ang)*len,seed+i*31+5,len*.28,3));}
+  const m=boltPath(main);
+  return `<path d="${m}" fill="none" stroke="var(--g)" stroke-width="${w}" stroke-linejoin="round" stroke-linecap="round" filter="url(#fGlow${f})"/><path d="${br}" fill="none" stroke="var(--g)" stroke-width="${w*.6}" stroke-linejoin="round" stroke-linecap="round" filter="url(#fGlow${f})" opacity=".85"/><path d="${m}" fill="none" stroke="#fff" stroke-opacity=".9" stroke-width="${w*.38}" stroke-linejoin="round"/>`;
+}
+const KD=1.8;   // 양손 무기는 몸통이 두꺼워 윗면이 더 많이 보인다
+
+/* ================= 05 화염방사기 ================= */
+function flamerSide(){
+  const c=ctx();
+  const body='M50 86C80 80 120 76 156 74C220 71 300 70.5 352 72C362 72.4 370 77 374 84C377 88 378 96 378 104C378 112 374 118 366 120L276 121.6C272 121.7 270.4 124 270.4 128C270.4 144 262 157 246 157L222 157C217 157 214.6 160 214 165C212.6 178 210.4 190 208.6 199C208 202.6 205 205 201.4 205L172 204.4C150 204 100 178 58 159C51 156 46.4 152 46 146C43.5 128 43.5 106 46 92C46.6 88.6 48 86.6 50 86Z'
+    +'M94 113C118 106 150 104.5 172 106C178.5 106.6 182 111 181 118C178 142 172 168 166 188C164.6 192 161 193.4 157 192C132 182 108 164 90 140C82 129 84 116.5 94 113Z'
+    +'M222 124L258 123.4C262 123.3 263.6 126 263.4 130C262.6 142 256 150 244 150L228 150C220 150 216.4 144 216.6 136C216.8 129 218 124 222 124Z';
+  const top=[[46,92],[46.6,88.6],[48,86.6],[50,86],[80,80],[120,76],[156,74],[220,71],[300,70.5],[352,72],[362,72.4],[370,77],[374,84]];
+  const front=[[374,84],[377,88],[378,96],[378,104],[378,112],[374,118],[366,120]];
+  const pad='M50 86C48 86.6 46.6 88.6 46 92C43.5 106 43.5 128 46 146C46.4 152 51 156 58 159L62.6 161C56.6 140 56.6 106 61.6 83.8Z';
+  const cheek='M72 91C100 85.4 130 82.6 160 81.6L165 96.4C140 97.2 114 99.6 92 104.4C82 103.6 74.6 98.6 72 91Z';
+  const inlay='M187 128L208 128.6C207.4 150 204.6 174 201 194C200.6 196.4 198.8 198 196.4 198L176 197.6C173.6 197.6 172 195.6 172.6 193.2C176.6 174 183 150 185.2 130C185.4 128.8 186 128 187 128Z';
+  const tank='M298 130L462 130C469.2 130 475 135.8 475 143C475 150.2 469.2 156 462 156L298 156C290.8 156 285 150.2 285 143C285 135.8 290.8 130 298 130Z';
+  const bell='M528 78C540 78 550 74 560 66L560 114C550 106 540 102 528 102Z';
+  let holes='',holesH='';for(let i=0;i<10;i++){const x=400+i*12.4;
+    holes+=`<ellipse cx="${x}" cy="82.4" rx="3" ry="1.5"/><ellipse cx="${x+6.2}" cy="90" rx="3" ry="2.8"/><ellipse cx="${x}" cy="97.4" rx="3" ry="2"/>`;
+    holesH+=`M${x+4} ${91.8}A3 2.8 0 0 0 ${x+8.8} ${91.2}M${x-2.2} ${98.6}A3 2 0 0 0 ${x+2.6} ${98.2}`;}
+  const far=`transform="translate(${D[0]*1.7},${D[1]*1.7})"`;
+  return `${floorShadow(300,245)}<ellipse cx="190" cy="209" rx="30" ry="2" fill="#000" opacity=".6" filter="url(#fBlur)"/>
+<!-- 뒤쪽 연료통 -->
+<g ${far}>${c.st(tank,'gSteelDark')}${c.bk(rr(312,128.6,9,28.8,2),'gBlackV')}${c.bk(rr(428,128.6,9,28.8,2),'gBlackV')}</g>
+<!-- 몸통 두께 → 윗면 → 앞면 -->
+${c.ext(body,{k:KD})}${c.top(top,'gTop',KD)}
+<path d="${strip(front,[D[0]*KD,D[1]*KD])}" fill="#0c0d0f"/>
+<!-- 윗면: 주입구 마개와 발광 레일 -->
+<g transform="translate(${D[0]*KD*.5},${D[1]*KD*.5})">
+  <ellipse cx="170" cy="74.2" rx="10.6" ry="4" fill="#000" fill-opacity=".6"/><g filter="url(#fMetalB)"><ellipse cx="170" cy="73.2" rx="9" ry="3.4" fill="url(#gBrassR)"/></g>
+  <ellipse cx="170" cy="73.2" rx="5.4" ry="2" fill="none" stroke="#5a4012" stroke-width=".6"/>
+  ${chan('M200 71.7C240 70.8 300 70.5 346 71.7',3.4,'none',1.6)}
+</g>
+<!-- 방열 덮개(원통)와 노즐 -->
+${c.st(rr(382,78,144,24,2))}
+<g fill="#07080a">${holes}</g><path d="${holesH}" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width=".55"/>
+<path d="M392 80.6H518" stroke="#fff" stroke-opacity=".5" stroke-width="1.4" filter="url(#fBlur)"/>
+${c.bk(rr(378,76,12,28,2.4),'gBlackV')}${c.bk(rr(519,76,9,28,2.4),'gBlackV')}
+${chan('M384.6 77.6V102.4',3.6,'none',1.7)}${groove('M522 76.6V103.4',.6)}
+${c.sk('M491 143C506 143 511 128 509 103','#15161a',4.6)}
+<path d="M491 142C505 142 509.6 128 508 104" fill="none" stroke="#fff" stroke-opacity=".18" stroke-width=".8"/>
+${c.st('M506 106.4L556 108.6L556 112.2L506 110.4Z')}
+${c.br(bell)}${groove('M534 77.6V102.4',.7)}${crease('M530 81C541 81 551 77 559 70.6',.6)}
+<ellipse cx="560" cy="90" rx="6.5" ry="24" fill="#0a0806" stroke="#e7c97c" stroke-width="1.5"/>
+<path d="M562.6 70A4.6 21 0 0 1 562.6 110" fill="none" stroke="#b98f3c" stroke-opacity=".7" stroke-width="2.2"/><ellipse cx="559.4" cy="90" rx="2.6" ry="15" fill="#000"/>
+<path d="M557 110.4C564 104.4 572 105.9 577 110.4C572 114.9 564 116.4 557 110.4Z" fill="#ff9d3c" filter="url(#fBlur)" opacity=".7"/><path d="M557 110.4C563 105.9 570 106.9 574 110.4C570 113.9 563 114.9 557 110.4Z" fill="#ffb14e"/><path d="M557.6 110.4C561 108.3 565 108.7 567.4 110.4C565 112.1 561 112.5 557.6 110.4Z" fill="#fff3c4"/>
+<!-- 연료통 걸이 -->
+${c.bk('M300 120.6C301 126 304 130 309 131.4L325 131.4C330 130 333 126 334 120.4Z','gBlackX')}
+${c.bk('M436 100C436 114 440 126 448 131L462 131C470 126 474 114 474 100Z','gBlackX')}
+<!-- 몸통 옆면 -->
+${c.bk(body)}
+${facet(top.slice(3))}
+<path d="M184 109L377.6 107C378 112 374 118 366 120L276 121.6C273 121.7 271.4 122.6 270.8 123.4L184 123.4Z" fill="#000" fill-opacity=".24"/>${crease('M184 109L377.6 107',.3)}
+<path d="M60 152C100 170 146 196 172 199" fill="none" stroke="#fff" stroke-opacity=".07" stroke-width="5" filter="url(#fBlur)"/>
+${c.le(pad)}${groove('M61.6 84.4C56.6 106 56.6 140 62.6 160.6',.8)}
+${leatherPanel(cheek,118,93,.82)}${leatherPanel(inlay,190,163,.8)}
+${c.cb('M232 82L338 80.4L344 86L338 101L228 102.4Z')}
+<path d="M233.6 83.2L337.4 81.6L341.4 85.4L232.4 87.6Z" fill="url(#gSheen)" opacity=".6"/>
+${chan('M243 93.4L330 92.4',5.2,'6.9 2',2.9)}${lightText(242,88.6,'FUEL',3.6)}${lightText(302,100.2,'VH-05',4.2)}
+${logo(204,92,1.1)}${engr(288,116.6,'VAULT HEIST',4.4)}${scr(196,113.6,2.2)}${scr(358,112.6,2.2)}${pin(150,96)}
+${c.br('M233 123L240.5 123L242.2 140C242.4 143 240.4 144.8 237.8 143.8C235.6 142.8 234.4 140.4 234.2 137.6Z')}
+<!-- 앞쪽 연료통 -->
+${c.st(tank)}
+<path d="M300 134.4H460" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="1.6" filter="url(#fBlur)"/>
+${c.bk(rr(312,128.6,9,28.8,2),'gBlackV')}${c.bk(rr(428,128.6,9,28.8,2),'gBlackV')}
+${c.br(rr(314,140,5,6,.8),'gBrassR','fMetalB')}${c.br(rr(430,140,5,6,.8),'gBrassR','fMetalB')}
+${c.br(rr(475,137.6,10,10.8,2))}${c.br(rr(484.6,137.4,11.2,11.2,5.6),'gBrassR','fMetalB')}
+${groove('M298 131V155',.6)}${groove('M462 131V155',.6)}${engr(340,147,'TANK · 90',5.2)}`;
+}
+function flamerTop(){
+  const body='M9 26.4C9 25 10 24 11.4 23.9C30 22.6 56 22 72 22C74.2 22 76 23.8 76 26V34C76 36.2 74.2 38 72 38C56 38 30 37.4 11.4 36.1C10 36 9 35 9 33.6Z';
+  return `${tSh(body+rr(57,15,37,7.6,3.8)+rr(57,37.4,37,7.6,3.8)+rr(76,26.2,26,7.6,1)+'M101.6 25.8H103C105 25.8 107.6 24.4 110 22.6V37.4C107.6 35.6 105 34.2 103 34.2H101.6Z')}
+${tS(rr(57,15,37,7.6,3.8))}${tS(rr(57,37.4,37,7.6,3.8))}
+${tS(rr(76,26.2,26,7.6,1))}<path d="M81 28.6h1.6M85 28.6h1.6M89 28.6h1.6M93 28.6h1.6M83 31.4h1.6M87 31.4h1.6M91 31.4h1.6M95 31.4h1.6" stroke="#07080a" stroke-width="1.4" stroke-linecap="round"/>
+${tS('M101.6 25.8H103C105 25.8 107.6 24.4 110 22.6V37.4C107.6 35.6 105 34.2 103 34.2H101.6Z','gBrass2')}
+${tB(body)}
+${tL('M7 26.6C6.2 28.6 6.2 31.4 7 33.4H10.6V26.6Z','gLeather2')}${tL(rr(16,27,14,6,2),'gLeatherV')}
+${tS(rr(32,27.8,5.4,4.4,2.2),'gBrassR')}
+${tChan('M42 30H70','none',1.8,1)}`;
+}
+
+/* ================= 06 레일건 ================= */
+function railSide(){
+  const c=ctx();
+  const body='M48 86C70 78 110 71 150 69C200 67 262 68 296 72C302 72.8 306 76 306 82L306 128C306 134 302 138 296 138.4L288 138.6C284 138.7 282.4 141 282.4 145C282.4 158 274 168 260 168L240 168C236 168 234 170.6 233.4 175C232 190 229 204 226.4 214C225.6 217.6 222.6 220 219 220L193 219.6C189 219.6 186.4 216 187.2 212C191 192 196 168 198 150C198.6 144 195 140.6 189 140.4C150 140 100 146 62 156C54 158 47.6 154 46.6 147C44 128 44 106 46 92C46.4 89 47 87 48 86Z'
+    +'M64 104L96 98C100 97.4 103 99.6 103 103.6L103 132C103 135.6 100.4 138.4 96.8 139L68 144C63.6 144.8 60 142 60 138L60 109C60 106.4 61.6 104.4 64 104Z'
+    +'M240 141L270 140.4C274 140.3 275.6 143 275.4 147C274.8 156 268 161.4 258 161.4L246 161.4C239 161.4 235.4 156 235.6 149C235.8 144 237 141 240 141Z';
+  const top=[[46,92],[46.4,89],[47,87],[48,86],[70,78],[110,71],[150,69],[200,67],[262,68],[296,72],[302,72.8],[306,76],[306,82]];
+  const front=[[306,82],[306,97],[306,113],[306,128],[306,134],[302,138],[296,138.4]];
+  const pad='M48 86C47 87 46.4 89 46 92C44 106 44 128 46.6 147C47.6 154 54 158 62 156L64.6 155.2C59 138 59 104 63.4 81.4Z';
+  const inlay='M205 152L227 152.6C226.6 170 224 192 220.6 208C220.2 210.4 218.4 212 216 212L198.6 211.6C196.2 211.6 194.6 209.6 195.2 207.2C198.6 190 202.6 170 203.4 154C203.5 152.8 204 152 205 152Z';
+  const railT='M306 77L560 77L576 85L576 88.6L306 88.6Z', railB='M306 113L576 113L576 116.6L560 124.6L306 124.6Z';
+  const optic='M218 65.6C218 58 224 53 232 53L254 53C260 53 264.6 56 266.6 61L269 66.6Z';
+  const cyc=98.4,R=34,rxe=6,w=22,xs=[350,436,522];
+  const rails=`${c.ext(railB,{k:.9,fill:'#2c2f34'})}${c.top([[306,113],[396,113],[486,113],[576,113]],'gSteelTop',.9)}
+<rect x="312" y="90" width="262" height="22" fill="var(--g)" opacity=".18" filter="url(#fBlurL)"/>${glowLine('M312 100.8H574','2 6',1.6)}
+${c.st(railB)}${c.ext(railT,{k:.9,fill:'#2c2f34'})}${c.top([[306,77],[391,77],[475,77],[560,77]],'gSteelTop',.9)}${c.st(railT)}
+${crease('M307 80.2H564',.75)}${crease('M307 116.2H574',.6)}`;
+  const coil=x=>{let wind='';for(let i=1;i<9;i++){const xi=x+i*2.45;wind+=`M${xi} ${cyc-R+.8}A${rxe} ${R-.8} 0 0 0 ${xi} ${cyc+R-.8}`;}
+    const bodyD=`M${x} ${cyc-R}A${rxe} ${R} 0 0 0 ${x} ${cyc+R}L${x+w} ${cyc+R}A${rxe} ${R} 0 0 0 ${x+w} ${cyc-R}Z`;
+    return `<ellipse cx="${x+w+3}" cy="${cyc+4}" rx="${rxe+3}" ry="${R}" fill="#000" fill-opacity=".45" filter="url(#fBlur)"/>
+${c.br(bodyD)}<path d="${wind}" fill="none" stroke="#3a2a0c" stroke-opacity=".55" stroke-width=".6"/>
+<path d="M${x-1} ${cyc-R+12}H${x+w}" stroke="#fff" stroke-opacity=".6" stroke-width="3" filter="url(#fBlur)"/>
+<path d="M${x} ${cyc-R}A${rxe} ${R} 0 0 0 ${x} ${cyc+R}" fill="none" stroke="#0c0d0f" stroke-width="3.6"/><path d="M${x+1.6} ${cyc-R+1}A${rxe} ${R-1} 0 0 0 ${x+1.6} ${cyc+R-1}" fill="none" stroke="#fff" stroke-opacity=".25" stroke-width=".6"/>
+<g filter="url(#fMetal)"><ellipse cx="${x+w}" cy="${cyc}" rx="${rxe}" ry="${R}" fill="url(#gBrassX)"/></g>
+<ellipse cx="${x+w}" cy="${cyc}" rx="${rxe}" ry="${R}" fill="none" stroke="#0c0d0f" stroke-width="2.4"/>
+<ellipse cx="${x+w}" cy="${cyc}" rx="${rxe*.66}" ry="${R-9}" fill="#050608" stroke="#5a4012" stroke-width=".7"/>
+<ellipse cx="${x+w}" cy="${cyc+2}" rx="${rxe*.4}" ry="${R-17}" fill="var(--g)" opacity=".3" filter="url(#fBlur)"/>`;};
+  return `${floorShadow(300,255)}<ellipse cx="207" cy="224.4" rx="26" ry="2" fill="#000" opacity=".6" filter="url(#fBlur)"/>
+<defs><clipPath id="railStub">${xs.map(x=>`<rect x="${x+w-.5}" y="60" width="8.5" height="80"/>`).join('')}<rect x="302" y="60" width="12" height="80"/></clipPath></defs>
+<!-- 몸통 두께 → 윗면 → 앞면 -->
+${c.ext(body,{k:KD})}${c.top(top,'gTop',KD)}
+<path d="${strip(front,[D[0]*KD,D[1]*KD])}" fill="#0c0d0f"/>
+<!-- 윗면의 조준기 -->
+${c.ext(optic,{k:.8})}${c.bk(optic,'gFrame')}
+<ellipse cx="270.6" cy="60.6" rx="2.4" ry="4.4" fill="var(--g)" filter="url(#fGlow)"/>${crease('M221 61C222 57.4 226.4 55.4 232 55.4L254 55.4C258.6 55.4 262.4 57.6 264.4 61',.5)}
+<!-- 레일 → 코일 → 코일 앞으로 나온 레일 -->
+${rails}
+${c.cb('M306 125.6L344 125.6L338 141C336.6 144.4 333.6 146.4 330 146.4L306 146.4Z')}
+${engr(392,85.6,'VH-06',5)}${engr(478,85.6,'2 CELL',5)}
+${xs.map(coil).join('')}
+<g clip-path="url(#railStub)">${rails}</g>
+<!-- 몸통 옆면 -->
+${c.bk(body)}
+${facet(top.slice(3,10))}
+<path d="M46.4 133C120 124 220 121 306 119.4L306 128C306 134 302 138 296 138.4L288 138.6L189 140.4C150 140 100 146 62 156C54 158 47.6 154 46.6 147Z" fill="#000" fill-opacity=".24"/>${crease('M46.4 133C120 124 220 121 306 119.4',.3)}
+${c.le(pad)}${groove('M63.4 82C59 104 59 138 64.6 155',.8)}
+${leatherPanel(inlay,211,182,.8)}
+${c.br('M252 139L259.6 139L261.4 155C261.6 158 259.6 159.6 257 158.8C254.8 158 253.6 155.6 253.4 153Z')}
+<!-- 충전 셀 2칸 -->
+${c.st('M126 88L182 86.6C185.4 86.5 188 89 188 92.4L188 118C188 121.4 185.4 124 182 124.2L126 125.6C122.6 125.7 120 123.2 120 119.8L120 94C120 90.6 122.6 88.1 126 88Z')}
+<path d="${rr(124.6,91.6,58.8,30,3.4)}" fill="#050608"/>
+<path d="${rr(128.4,95.4,24,22.4,7)}${rr(156.6,95.4,24,22.4,7)}" fill="var(--g)" filter="url(#fGlow)" opacity=".92"/>
+<path d="${rr(131,96.8,18.8,6,3)}${rr(159.2,96.8,18.8,6,3)}" fill="#fff" fill-opacity=".55"/>
+<path d="M128.4 108H152.4M156.6 108H180.6" stroke="#000" stroke-opacity=".3" stroke-width=".8"/>
+${c.cb('M208 86L290 84.4L296 90L290 116L206 117.6Z')}
+<path d="M209.6 87.2L289.4 85.6L293.4 89.4L208.4 91.8Z" fill="url(#gSheen)" opacity=".6"/>
+${logo(250,101.6,1.45,'#c8a55a','#000',.6)}${scr(200,128,2.2)}${scr(296,128,2.2)}${scr(112,82,2.2)}
+${engr(110,137.6,'VAULT HEIST',4.4)}`;
+}
+function railTop(){
+  const stock='M4 25C4 23.4 5.2 22.2 6.8 22C16 20.4 28 19.6 33.4 19.6C35.6 19.6 37.4 21.4 37.4 23.6V36.4C37.4 38.6 35.6 40.4 33.4 40.4C28 40.4 16 39.6 6.8 38C5.2 37.8 4 36.6 4 35Z';
+  const coil=x=>tS(rr(x,17.4,6.4,25.2,3.2),'gBrass2')+`<path d="M${x+2.2} 18V42M${x+4.2} 18V42" stroke="#3a2a0c" stroke-opacity=".5" stroke-width=".3"/>`;
+  return `${tSh('M4 18H116V42H4Z')}
+${tS('M34 21.2H110L116 23.6V25.8H34Z')}${tS('M34 34.2H116V36.4L110 38.8H34Z')}
+<rect x="38" y="26.4" width="76" height="7.2" fill="var(--g)" opacity=".2" filter="url(#fBlurT)"/>
+${glowLine('M38 30H114','1.5 3',.9,'T')}
+${coil(50)}${coil(76)}${coil(102)}
+${tB(stock)}${tL('M2.4 25.6C1.8 27.6 1.8 32.4 2.4 34.4H5.4V25.6Z','gLeather2')}
+<path d="${rr(19.4,23.4,5.6,13.2,2.4)}${rr(26.6,23.4,5.6,13.2,2.4)}" fill="var(--g)" filter="url(#fGlowT)"/>`;
+}
+
+/* ================= 07 테이저건 ================= */
+function taserSide(){
+  const c=ctx(), KH=2;
+  const upper='M150 70C200 67 250 67 286 68C300 68.4 306 60 316 54C324 49.4 334 48 346 48L396 48C408 48 416 56 416 68L416 112C416 124 408 132 396 132L346 132C334 132 324 130.6 316 126C306 120 300 112.4 286 112L152 114C147 114 144 110.6 143.8 106L142.6 78C142.4 73.4 145.6 70 150 70Z';
+  const head='M316 54C324 49.4 334 48 346 48L396 48C408 48 416 56 416 68L416 112C416 124 408 132 396 132L346 132C334 132 324 130.6 316 126Z';
+  const bodyTop=[[142.6,78],[142.4,73.4],[145.6,70],[150,70],[200,67],[250,67],[286,68],[300,68.4],[306,60],[316,54]];
+  const headTop=[[316,54],[324,49.4],[334,48],[346,48],[363,48],[379,48],[396,48],[408,48],[416,56],[416,68]];
+  const headFront=[[416,68],[416,83],[416,97],[416,112],[416,124],[408,132],[396,132]];
+  const flow=[[150,70],[200,67],[250,67],[286,68],[300,68.4],[306,60],[316,54],[324,49.4],[334,48],[346,48],[363,48],[379,48],[396,48]];
+  const frame='M146 108C146 114 150 120 153 127C155 142 148 162 143 184C140 196 137 208 136 216C135.4 221 138.4 225 143.4 225.2L196 226.6C201 226.8 204.6 223.8 205.4 219C208 200 214 172 221 148C222.6 142.4 228.6 141 233.6 145C242 152 254 156.4 270 156.4L284 156.4C300 156.4 311 147 312 133C312.6 124 314 118 318 112L318 108Z'
+    +'M240 116L296 115C300.6 115 302.8 118.4 302.6 123.4C302 138 294 147.6 281 147.6L268 147.6C252 147.6 240 140 236.4 127C235 121 236.4 116.2 240 116Z';
+  const plate='M139 224.8L200 226.6L207 228.6C208.5 229.1 209.1 230.6 208.4 231.8C207.8 232.8 206.7 233.4 205.4 233.4L140 232C136.6 231.9 134.4 230 134.7 227.6C135 225.8 136.6 224.8 139 224.8Z';
+  const inlay='M168 136L208 142.4C210.4 142.8 211.6 144.8 211.2 147.2C208.6 168 203 192 197.4 212C196.7 214.4 194.8 215.8 192.4 215.7L149 214.4C146.5 214.3 145 212.2 145.4 209.8C148 194 152.6 176 157 160C159.6 150 164 144 165.4 138.4C165.8 136.8 166.6 136 168 136Z';
+  const cart='M340 56L394 56C402 56 408 62 408 70L408 110C408 118 402 124 394 124L340 124C333 124 328 119 328 112L328 68C328 61 333 56 340 56Z';
+  let serr='',serrH='';for(let i=0;i<5;i++){const x=154+i*6.6;serr+=`M${x} 77L${x+3.2} 77L${x+1.6} 95L${(x-1.6).toFixed(1)} 95Z`;serrH+=`M${x+3.6} 77.2L${x+2} 95`;}
+  const px=416+D[0]*KH*.5, off=D[1]*KH*.5;
+  const prong=y=>`<ellipse cx="${px}" cy="${y+off}" rx="3" ry="4.6" fill="#030304"/>`+c.st(`M${px} ${y+off-2.6}L${px+26} ${y+off-2}L${px+26} ${y+off+2}L${px} ${y+off+2.6}Z`)
+    +c.br(`M${px+26} ${y+off-3}L${px+32} ${y+off-1.8}C${px+34} ${y+off-1.2} ${px+35.4} ${y+off-.6} ${px+35.4} ${y+off}C${px+35.4} ${y+off+.6} ${px+34} ${y+off+1.2} ${px+32} ${y+off+1.8}L${px+26} ${y+off+3}Z`);
+  return `${floorShadow(290,175)}<ellipse cx="172" cy="235.4" rx="44" ry="2" fill="#000" opacity=".8" filter="url(#fBlur)"/>
+<!-- 프레임(긴 그립 + 둥근 방아쇠울) -->
+${c.ext(plate,{fill:'#4a3510',rim:'#f1dca0'})}${c.br(plate)}
+${c.ext(frame)}
+<g filter="url(#fMetal)"><path d="M262 112L270.5 112L273 138C273.3 142 270.5 144.5 267 143C264 141.5 262.6 138 262.4 134Z" transform="translate(3,-3)" fill="url(#gBrass2)"/></g>
+${c.bk(frame,'gFrame')}
+<path d="M156 130C157 146 150 166 145 188" fill="none" stroke="#fff" stroke-opacity=".07" stroke-width="5" filter="url(#fBlur)"/>
+${leatherPanel(inlay,178,176)}${medal(178,177,10)}
+<!-- 머리(넓적한 카트리지 집) 두께 -->
+${c.ext(head,{k:KH})}${c.top(headTop,'gTop',KH)}
+<path d="${strip(headFront,[D[0]*KH,D[1]*KH])}" fill="#0c0d0f"/>
+${prong(76)}${prong(110)}
+${lightning(px+35.6,76+off,px+35.6,110+off,5,{disp:7,arch:6,w:1.4,branches:2,bl:.7})}
+<!-- 몸통 + 머리 옆면(한 덩어리로 흐르는 형태) -->
+${c.ext(upper)}${c.top(bodyTop)}${c.bk(upper)}
+${facet(flow)}
+<path d="M143.4 100L288 99C298 99.4 304 105 314 112L318 114.6L318 127C306 120 300 112.4 286 112L152 114C147 114 144 110.6 143.8 106Z" fill="#000" fill-opacity=".24"/>${crease('M143.4 100L288 99',.3)}
+<path d="${serr}" fill="#040405"/><path d="${serrH}" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width=".5"/>
+${chan('M158 106.6H282',5.2,'none',2.3)}
+${logo(202,86,.8)}${engr(212,88.4,'VAULT HEIST',5)}${engr(212,95.6,'1 SHOT',4.2)}
+<!-- 스틸 카트리지 -->
+<path d="${cart}" fill="#000" stroke="#000" stroke-width="2.2"/>
+${c.st(cart)}
+${crease('M330 66.6C331 61.6 335 58.6 340 58.6L394 58.6C400 58.6 404.6 62.4 405.6 68',.7)}
+<path d="M344 78L390 78C394.4 78 398 81.6 398 86L398 96C398 100.4 394.4 104 390 104L344 104C340.7 104 338 101.3 338 98L338 84C338 80.7 340.7 78 344 78Z" fill="#08090b" stroke="#000" stroke-width=".8"/>
+<path d="M338 98C338 101.3 340.7 104 344 104L390 104C394.4 104 398 100.4 398 96" fill="none" stroke="#fff" stroke-opacity=".6" stroke-width=".6" transform="translate(.3,.6)"/>
+${c.br('M346 101L355 81L363.4 81L354.4 101ZM362 101L371 81L379.4 81L370.4 101ZM378 101L387 81L395.4 81L386.4 101Z','gBrass2','fGloss')}
+${c.br(rr(338,62.4,15,6.4,2))}${logo(392,68,.74)}${engr(340,116.4,'VH-07 · STUN',4.6)}${scr(400,116,2)}`;
+}
+function taserTop(){
+  const body='M34 27.4C34 26 35 25 36.4 25H60C64.6 25 66 21.4 68.6 18.6C70.4 16.6 72.8 15.4 75.6 15.4H82C84.6 15.4 86.6 17.4 86.6 20V40C86.6 42.6 84.6 44.6 82 44.6H75.6C72.8 44.6 70.4 43.4 68.6 41.4C66 38.6 64.6 35 60 35H36.4C35 35 34 34 34 32.6Z';
+  return `${tSh(body)}
+${tS('M86.4 18.2H93.6L95.6 19.4L93.6 20.6H86.4Z')}${tS('M86.4 39.4H93.6L95.6 40.6L93.6 41.8H86.4Z')}
+<circle cx="95.6" cy="19.4" r="1.1" fill="#d9b662"/><circle cx="95.6" cy="40.6" r="1.1" fill="#d9b662"/>
+${tB(body)}
+${tS(rr(73.4,18.4,10.6,23.2,3.4))}
+<path d="${rr(75.2,22.4,7,15.2,1.6)}" fill="#08090b"/><path d="M76 35.6L79 24.4H81L78 35.6Z" fill="#c8a55a"/>
+${lightning(96,20.6,96,39.4,5,{disp:2.4,arch:2,w:.9,branches:2,bl:.25,f:'T'})}
+${tChan('M40 30H62','none',1.6,.9)}`;
+}
+
+/* ================= 08 수류탄 ================= */
+function grenadeSide(){
+  const c=ctx();
+  const body='M256 92C256 78 266 70 280 67L320 67C334 70 344 78 344 92L344 192C344 204 336 211 322 213L278 213C264 211 256 204 256 192Z';
+  const lever='M316 33L334 33C340 33 345 36 348.5 41L358 56C360.6 60 362 64.6 362 69.4L362 150C362 152.2 360.2 154 358 154L356 154C354.3 154 353 152.7 353 151L353 71C353 67.6 352 64.2 350.2 61.4L342.6 49.4C340.6 46.2 337.4 43 333 43L316 43Z';
+  return `${floorShadow(300,90,231)}<ellipse cx="300" cy="224" rx="40" ry="3" fill="#000" opacity=".85" filter="url(#fBlur)"/>
+${c.br('M270 213L330 213L326 221.4L274 221.4Z')}
+<!-- 안전핀과 고리 -->
+<path d="M288 38.6H262" stroke="#000" stroke-opacity=".5" stroke-width="4" transform="translate(1,2)" filter="url(#fBlur)"/>
+${c.sk('M288 38.6H262','#aab0b6',2.6,'fMetal')}
+${c.sk('M262 38.6a13 13 0 1 0 -26 0a13 13 0 1 0 26 0Z','gBrass2',4,'fMetal')}
+<!-- 안전 손잡이(뒤쪽 층) -->
+${c.ext(lever,{fill:'#3c4047',k:.7})}${c.st(lever)}
+${crease('M318 35.4L334 35.4C339 35.4 343.4 38 346.4 42.4L356 57.4C358.4 61 359.6 65 359.6 69.4',.7)}
+<!-- 신관 -->
+${c.br(rr(292,23,16,8,1.6),'gBrassX')}
+${c.st('M286 30L314 30C316.2 30 318 31.8 318 34L318 52L282 52L282 34C282 31.8 283.8 30 286 30Z','gSteelX')}
+${groove('M289 31.4V51.4',.6)}${groove('M295 31V51.6',.6)}${groove('M301 31V51.6',.6)}${groove('M307 31V51.6',.6)}${groove('M313 31.4V51.4',.6)}
+${c.br('M280 52L320 52L320 67.4L280 67.4Z','gBrassX')}
+${crease('M280.6 56H319.4',.6)}${crease('M280.6 60H319.4',.5)}${crease('M280.6 64H319.4',.4)}
+<!-- 몸체 -->
+${c.bk(body,'gFacet')}
+<path d="M276 68.4V212.4M324 68.4V212.4" fill="none" stroke="#000" stroke-opacity=".8" stroke-width=".9"/>
+<path d="M276.8 68.6V212.2" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width=".6"/><path d="M324.8 68.6V212.2" fill="none" stroke="#fff" stroke-opacity=".1" stroke-width=".6"/>
+<path d="M262 90C262 82 268 76 276 73.4" fill="none" stroke="#fff" stroke-opacity=".3" stroke-width="2.4" stroke-linecap="round" filter="url(#fBlur)"/>
+${c.cb('M256 104L344 104L344 132L256 132Z')}
+<path d="M256 104H276V132H256Z" fill="#fff" fill-opacity=".07"/><path d="M324 104H344V132H324Z" fill="#000" fill-opacity=".4"/>
+${c.st('M255.4 101L344.6 101L344.6 104.4L255.4 104.4Z')}${c.st('M255.4 131.6L344.6 131.6L344.6 135L255.4 135Z')}
+${logo(300,118,1.55,'#c8a55a','#000',.6)}
+${chan('M260 149H340',9,'none',5)}
+<path d="M276 144.4V153.6M324 144.4V153.6" stroke="#000" stroke-opacity=".5" stroke-width=".8"/>
+${engr(285,182,'VH-08',6.2)}${engr(289,191,'FRAG',4.4)}
+${scr(286,81,2.2)}${scr(314,81,2.2)}${scr(286,203,2.2)}${scr(314,203,2.2)}`;
+}
+function grenadeTop(){
+  const oct='M73.4 35.6L65.6 43.4H54.4L46.6 35.6V24.4L54.4 16.6H65.6L73.4 24.4Z';
+  return `${tSh(oct)}
+<path d="M46 20.6H38.6" stroke="#aab0b6" stroke-width="1"/><g filter="url(#fMetalT)"><circle cx="35" cy="20.6" r="3.8" fill="none" stroke="url(#gBrass2)" stroke-width="1.5"/></g>
+${tB(oct,'gDiscTop')}
+<path d="M54.4 16.6L60 30L65.6 16.6M73.4 24.4L60 30L73.4 35.6M65.6 43.4L60 30L54.4 43.4M46.6 35.6L60 30L46.6 24.4" fill="none" stroke="#000" stroke-opacity=".45" stroke-width=".35"/>
+<circle cx="60" cy="30" r="9.6" fill="none" stroke="#020203" stroke-width="2.4"/>
+<circle cx="60" cy="30" r="9.6" fill="none" stroke="var(--g)" stroke-width="1.5" filter="url(#fGlowT)"/>
+${tS('M60 28.4H76.6C77.5 28.4 78.2 29.1 78.2 30C78.2 30.9 77.5 31.6 76.6 31.6H60Z')}
+${tS('M60 24.8a5.2 5.2 0 1 0 .01 0Z'.replace('M60 24.8a5.2 5.2 0 1 0 .01 0Z',rr(54.8,24.8,10.4,10.4,5.2)),'gSteelDisc')}
+${tS(rr(57.4,27.4,5.2,5.2,2.6),'gBrassR')}`;
+}
+
+/* ================= 09 폭발 지뢰 (위에서 비스듬히 본 각도) ================= */
+function blastSide(){
+  const c=ctx();
+  const K=.34, cx=300, cy=116;
+  const flat=(inner,dy=0)=>`<g transform="translate(${cx},${cy+dy}) scale(1,${K})">${inner}</g>`;
+  const F=(f,inner)=>`<g filter="url(#${f})">${inner}</g>`;
+  const wall=`M135 ${cy}L135 ${cy+30}A165 56.1 0 0 0 465 ${cy+30}L465 ${cy}A165 56.1 0 0 1 135 ${cy}Z`;
+  const ring=`M136.4 ${cy+17}A163.6 55.6 0 0 0 463.6 ${cy+17}`;
+  let seg='';for(let i=0;i<8;i++){const a=(i*45+22.5)*rad;seg+=`M${(Math.cos(a)*34).toFixed(1)} ${(Math.sin(a)*34).toFixed(1)}L${(Math.cos(a)*108).toFixed(1)} ${(Math.sin(a)*108).toFixed(1)}`;}
+  let scrs='';for(const a of [45,135,225,315]){const x=Math.cos(a*rad)*138,y=Math.sin(a*rad)*138;scrs+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="7.5" fill="#000" fill-opacity=".6"/><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5.6" fill="url(#gBrassR)"/><path d="M${(x-3).toFixed(1)} ${y.toFixed(1)}h6" stroke="#2c1f08" stroke-width="2"/>`;}
+  let tri='';for(const a of [90,0,180]){const x=Math.cos(a*rad)*138,y=Math.sin(a*rad)*138;tri+=`<path d="M${x} ${y-9}L${x+9} ${y+7}L${x-9} ${y+7}Z" fill="none" stroke="#c8a55a" stroke-width="1.6" stroke-linejoin="round"/>`;}
+  return `${floorShadow(300,190,222)}
+${c.st('M185 180L199 184L192 205ZM293 196L307 196L300 219ZM401 184L415 180L408 205Z','gSteelX')}
+<!-- 옆벽 -->
+${c.bk(wall,'gBlackX')}
+<path d="M136 ${cy+3}A164 55.7 0 0 0 464 ${cy+3}" fill="none" stroke="#fff" stroke-opacity=".18" stroke-width=".7"/>
+<path d="${ring}" fill="none" stroke="#030304" stroke-width="7"/><path d="${ring}" transform="translate(0,3.8)" fill="none" stroke="#fff" stroke-opacity=".14" stroke-width=".6"/>
+${glowLine(ring,'none',3)}
+${engr(281,cy+68.4,'VH-09',6)}${scr(240,cy+62,2.3)}${scr(360,cy+62,2.3)}
+<!-- 윗면 -->
+${F('fBlack',flat('<circle r="165" fill="url(#gDiscTop)"/>'))}
+${flat('<circle r="157" fill="none" stroke="#000" stroke-opacity=".7" stroke-width="2.4"/><circle r="154.6" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="1.6"/>'+tri+scrs)}
+<!-- 압력판(스틸) -->
+${flat('<circle r="113" fill="#000" fill-opacity=".6"/>',2)}
+${flat('<circle r="112" fill="#3c4047"/>',-1)}
+${F('fMetal',flat('<circle r="112" fill="url(#gSteelDisc)"/>',-7))}
+${flat(`<path d="${seg}" fill="none" stroke="#000" stroke-opacity=".75" stroke-width="2.6" stroke-linecap="round"/><path d="${seg}" transform="translate(1.2,3)" fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="1.4" stroke-linecap="round"/><circle r="72" fill="none" stroke="#000" stroke-opacity=".6" stroke-width="2"/><circle r="72" transform="translate(0,3.4)" fill="none" stroke="#fff" stroke-opacity=".45" stroke-width="1.2"/><circle r="106" fill="none" stroke="#fff" stroke-opacity=".6" stroke-width="1.4"/>`,-7)}
+<!-- 황동 중앙 캡 -->
+${flat('<circle r="31" fill="#000" fill-opacity=".55"/>',-5)}
+${flat('<circle r="28" fill="#4a3510"/>',-8)}
+${F('fMetal',`<path d="M272 ${cy-14}C272 ${cy-27} 328 ${cy-27} 328 ${cy-14}A28 9.5 0 0 1 272 ${cy-14}Z" fill="url(#gBrassX)"/>`)}
+<path d="M280 ${cy-19}C288 ${cy-24.4} 304 ${cy-25} 314 ${cy-21.4}" fill="none" stroke="#fff" stroke-opacity=".65" stroke-width="1.6" stroke-linecap="round" filter="url(#fBlur)"/>
+<ellipse cx="300" cy="${cy-21}" rx="5" ry="1.9" fill="#030304"/><ellipse cx="300" cy="${cy-21}" rx="3.2" ry="1.2" fill="var(--g)" filter="url(#fGlow)"/>`;
+}
+function blastTop(){
+  let seg='';for(let i=0;i<8;i++){const a=(i*45+22.5)*rad;seg+=`M${(60+Math.cos(a)*5.4).toFixed(2)} ${(30+Math.sin(a)*5.4).toFixed(2)}L${(60+Math.cos(a)*13).toFixed(2)} ${(30+Math.sin(a)*13).toFixed(2)}`;}
+  return `${tSh(rr(38,8,44,44,22))}
+${tB(rr(38,8,44,44,22),'gDiscTop')}
+${tS(rr(46,16,28,28,14),'gSteelDisc')}<path d="${seg}" fill="none" stroke="#1b1d20" stroke-width=".55"/>
+${tS(rr(55.4,25.4,9.2,9.2,4.6),'gBrassR')}
+<circle cx="60" cy="30" r="18" fill="none" stroke="#020203" stroke-width="3"/>
+<circle cx="60" cy="30" r="18" fill="none" stroke="var(--g)" stroke-width="1.9" filter="url(#fGlowT)"/><circle cx="60" cy="30" r="18" fill="none" stroke="#fff" stroke-opacity=".6" stroke-width=".5"/>`;
+}
+
+/* ================= 10 감전 지뢰 (위에서 비스듬히 본 각도) ================= */
+function shockSide(){
+  const c=ctx();
+  const cy=138, H=26;
+  const hex='M450 138L375 182.2L225 182.2L150 138L225 93.8L375 93.8Z';
+  const hexIn=s=>{const p=[[150,0],[75,44.2],[-75,44.2],[-150,0],[-75,-44.2],[75,-44.2]].map(([x,y])=>`${(300+x*s).toFixed(1)} ${(cy+y*s).toFixed(1)}`);return 'M'+p.join('L')+'Z';};
+  const band=`M152.5 ${cy+14.4}L225 ${cy+57.2}L375 ${cy+57.2}L447.5 ${cy+14.4}`;
+  const post=(x,y,h)=>`<ellipse cx="${x+2}" cy="${y+2.4}" rx="17" ry="6" fill="#000" fill-opacity=".6" filter="url(#fBlur)"/>
+${c.st(`M${x-13} ${y-5}L${x+13} ${y-5}L${x+13} ${y}A13 4.6 0 0 1 ${x-13} ${y}Z`,'gSteelX')}<ellipse cx="${x}" cy="${y-5}" rx="13" ry="4.6" fill="#d9dce0" stroke="#33373c" stroke-width=".6"/>
+${c.br(rr(x-7.5,y-30,15,25,2),'gBrassX')}<path d="M${x-7.5} ${y-25.6}h15M${x-7.5} ${y-21.6}h15M${x-7.5} ${y-17.6}h15M${x-7.5} ${y-13.6}h15M${x-7.5} ${y-9.6}h15" stroke="#3a2a0c" stroke-opacity=".6" stroke-width=".7"/>
+${c.bk(rr(x-8.6,y-33,17.2,4,1),'gBlackX')}
+${c.st(rr(x-2.6,y-h,5.2,h-32,1),'gSteelX')}
+<g filter="url(#fMetalB)"><circle cx="${x}" cy="${y-h}" r="6.2" fill="url(#gBrassR)"/></g>`;
+  // 전극 배치: 뒤 1개(가운데 위) + 앞 2개(좌우)
+  const A=[220.3,91.6],B=[379.7,91.6],C=[300,44.7];
+  // 자연스럽게 갈라지는 번개 2줄(앞쪽 전극 끝에서 뒤쪽 전극 끝으로)
+  const arcs=lightning(A[0]+4,A[1]-3,C[0]-4,C[1]+3,11,{disp:11,arch:-7,w:1.6,branches:4})
+    +lightning(C[0]+4,C[1]+3,B[0]-4,B[1]-3,23,{disp:11,arch:-7,w:1.6,branches:4});
+  return `${floorShadow(300,180,226)}
+${c.st('M182 180L194 180L188 196ZM294 208L306 208L300 225ZM406 180L418 180L412 196Z','gSteelX')}
+<!-- 옆면 3장 -->
+${c.bk(`M150 ${cy}L225 ${cy+44.2}L225 ${cy+44.2+H}L150 ${cy+H}Z`,'#2f3237')}
+${c.bk(`M225 ${cy+44.2}L375 ${cy+44.2}L375 ${cy+44.2+H}L225 ${cy+44.2+H}Z`,'#1c1d21')}
+${c.bk(`M375 ${cy+44.2}L450 ${cy}L450 ${cy+H}L375 ${cy+44.2+H}Z`,'#0e0f12')}
+<path d="M225 ${cy+44.6}V${cy+44+H}" stroke="#fff" stroke-opacity=".3" stroke-width=".7"/><path d="M375 ${cy+44.6}V${cy+44+H}" stroke="#fff" stroke-opacity=".16" stroke-width=".7"/>
+<path d="${band}" fill="none" stroke="#030304" stroke-width="6.4" stroke-linejoin="round"/>
+<path d="${band}" fill="none" stroke="var(--g)" stroke-width="2.8" stroke-dasharray="12 7" stroke-linejoin="round" filter="url(#fGlow)"/><path d="${band}" fill="none" stroke="#fff" stroke-opacity=".7" stroke-width=".9" stroke-dasharray="12 7"/>
+${engr(236,cy+52.4,'VH-10',5)}${logo(362,cy+50.6,.5,'#c8a55a','#000',.6)}
+<!-- 윗면 -->
+${c.cb(hex)}
+<path d="M150 138L225 93.8L375 93.8L450 138" fill="none" stroke="#9fc0f0" stroke-opacity=".4" stroke-width=".8"/>
+<path d="M225 182.2L150 138L225 93.8L300 93.8L300 182.2Z" fill="#fff" fill-opacity=".05"/>
+<path d="${hexIn(.9)}" fill="none" stroke="#000" stroke-opacity=".7" stroke-width="1"/><path d="${hexIn(.9)}" transform="translate(0,.8)" fill="none" stroke="#fff" stroke-opacity=".2" stroke-width=".6"/>
+<path d="${hexIn(.8)}" fill="none" stroke="#c8a55a" stroke-opacity=".85" stroke-width=".9"/>
+<!-- 뒤쪽 전극 → 가운데 허브 → 앞쪽 전극 2개 -->
+${post(300,106.7,62)}
+<ellipse cx="301.6" cy="${cy+3}" rx="37" ry="13" fill="#000" fill-opacity=".55" filter="url(#fBlur)"/>
+${c.st(`M266 ${cy-6}L334 ${cy-6}L334 ${cy}A34 11.6 0 0 1 266 ${cy}Z`,'gSteelX')}
+<g filter="url(#fMetal)"><ellipse cx="300" cy="${cy-6}" rx="34" ry="11.6" fill="url(#gSteelDisc)"/></g>
+<ellipse cx="300" cy="${cy-6}" rx="24" ry="8.2" fill="none" stroke="#000" stroke-opacity=".55" stroke-width=".8"/>
+<g filter="url(#fMetalB)"><ellipse cx="300" cy="${cy-8}" rx="15" ry="5.2" fill="url(#gBrassR)"/></g>
+${logo(300,cy-8.6,.42,'#4a330c','#fff6d5',.5)}
+${post(220.3,153.6,62)}${post(379.7,153.6,62)}
+${arcs}`;
+}
+function shockTop(){
+  const hex='M82 30L71 49.05H49L38 30L49 10.95H71Z';
+  return `${tSh(hex)}
+${tS('M80 26.4L90 30L80 33.6ZM53.2 10.6L45.5 4.9L46.8 14.4ZM53.2 49.4L45.5 55.1L46.8 45.6Z')}
+${tB(hex,'gDiscTop')}
+<path d="M77.6 30L68.8 45.2H51.2L42.4 30L51.2 14.8H68.8Z" fill="none" stroke="#c8a55a" stroke-opacity=".8" stroke-width=".4"/>
+<circle cx="60" cy="30" r="15.2" fill="none" stroke="#020203" stroke-width="2.8"/>
+<circle cx="60" cy="30" r="15.2" fill="none" stroke="var(--g)" stroke-width="1.8" stroke-dasharray="4 3" filter="url(#fGlowT)"/>
+<path d="M50 30L65 21.3V38.7Z" fill="none" stroke="var(--g)" stroke-width=".7" stroke-linejoin="round" filter="url(#fGlowT)"/>
+${tS(rr(46.6,26.6,6.8,6.8,3.4),'gBrassR')}${tS(rr(61.6,17.9,6.8,6.8,3.4),'gBrassR')}${tS(rr(61.6,35.3,6.8,6.8,3.4),'gBrassR')}
+${tS(rr(57,27,6,6,3),'gSteelDisc')}`;
+}
+
+/* ================= 목록·페이지 ================= */
+document.head.insertAdjacentHTML('beforeend',`<style>
+.sheet{width:1600px;height:2810px;padding:50px;background:radial-gradient(1300px 800px at 50% 0,#1d1e23 0,#0b0c0f 72%);overflow:hidden}
+.hdr{height:230px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:26px;border-bottom:1px solid #c8a55a66}
+.hdr>div:first-child{max-width:1010px}
+.hdr h1{font-size:62px;font-weight:700;letter-spacing:-1px;margin-top:14px;line-height:1.1;white-space:nowrap}
+.hdr h1 span{color:#c8a55a;font-weight:400}
+.sub{font-size:19px;color:#a9a59c;margin-top:12px}
+.legend{display:grid;grid-template-columns:auto;gap:9px;font-size:17px}
+.legend div{display:flex;align-items:center;gap:10px;white-space:nowrap}
+.legend i{width:14px;height:14px;border-radius:50%;background:var(--g);box-shadow:0 0 12px var(--g)}
+.legend b{color:var(--g)}
+.legend span{color:#8f8a80;font-size:14px}
+.legcap{font-size:14px;color:#8f8a80;letter-spacing:1px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.cell{height:460px;background:linear-gradient(#181a1e,#111215);border:1px solid #2b2d32;padding:16px;position:relative;border-radius:14px;overflow:hidden}
+.cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--g);box-shadow:0 0 14px var(--g)}
+.cell .side{height:283px;border-radius:6px;overflow:hidden}
+.no{position:absolute;left:14px;top:6px;font:italic 400 34px Georgia,serif;color:#c8a55a}
+.chip{position:absolute;right:12px;top:12px;font-size:15px;font-weight:700;padding:3px 12px;border:1px solid var(--g);color:var(--g);letter-spacing:2px;background:#000a;border-radius:4px}
+.info{display:flex;gap:14px;height:130px;margin-top:14px}
+.tv{width:220px;height:110px;position:relative;margin-top:10px;border-radius:4px;overflow:hidden}
+.tv svg{display:block;width:100%;height:100%}
+.minis{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.mini{width:64px;height:51px;display:flex;align-items:center;justify-content:center;border-radius:4px}
+.mini.l{background:#cbbfa9}.mini.d{background:#26221e}
+.mini svg{width:56px;height:28px}
+.txt{flex:1;min-width:0}
+.txt h3{font-size:33px;line-height:38px;font-weight:700;white-space:nowrap}
+.txt h3 em{font:400 12px Georgia,serif;letter-spacing:3px;color:#8f8a80;margin-left:10px;font-style:normal}
+.stats{display:flex;gap:10px;margin-top:6px}
+.stat{flex:1;height:52px;border:1px solid #2b2d32;background:#0d0e11;padding:4px 10px;border-radius:4px}
+.stat label{display:block;font-size:12px;color:#8f8a80;letter-spacing:2px}
+.stat b{font-size:21px;white-space:nowrap}
+.tag{font-size:13px;color:#a9a59c;margin-top:8px;white-space:nowrap;overflow:hidden}
+.ftr{height:80px;display:flex;align-items:flex-end;justify-content:space-between;font-size:15px;color:#8f8a80}
+.ftr b{color:#c8a55a;font-weight:400}
+</style>`);
+
+const W=[
+ {id:'01',key:'baton',name:'삼단봉',en:'TELESCOPIC BATON',cat:'melee',dmg:'10',range:'2m',mag:'무제한',
+  tag:'3단 스틸 봉 · 가죽 그립 · 마디 발광 링',
+  intent:'기본 무기답게 가장 단순한 막대. 마디 세 곳의 붉은 링만으로 세트 소속을 알린다.',
+  shape:'가죽 그립과 3단 브러시드 스틸 봉, 황동 끝 캡과 손목 끈. 접으면 손잡이 길이(오른쪽 아래).'},
+ {id:'02',key:'blade',name:'도검',en:'STRAIGHT BLADE',cat:'melee',dmg:'25',range:'3m',mag:'무제한',
+  tag:'곧은 외날 · 네모난 황동 코등이 · 칼등 발광선',
+  intent:'장식 없이 선 하나로 고급스럽게. 삼단봉보다 길고 날카로운 실루엣.',
+  shape:'무광 블랙 칼몸과 스틸 날 사이의 날카로운 능선, 곡선으로 흐르는 칼끝, 황동 코등이, 유광 칼집.'},
+ {id:'03',key:'beam',name:'빔 소드',en:'FRAME BEAM SWORD',cat:'melee',dmg:'40',range:'4m',mag:'6발',
+  tag:'카본 등뼈 프레임 · 한쪽 플라스마 날 · 충전 6칸',
+  intent:'빛기둥 대신 카본 등뼈에 플라스마 날을 건 프레임 검. 코가 꺾인 비대칭이 우리만의 형태.',
+  shape:'카본 등뼈 아래 스틸 지지대 4개가 플라스마 날을 붙잡는다. 손잡이의 충전 캡슐 6칸 = 탄창 6발.'},
+ {id:'04',key:'pistol',name:'권총',en:'SLAB PISTOL',cat:'ranged',dmg:'10',range:'무제한',mag:'12발',
+  tag:'얇고 긴 슬라이드 · 가죽 그립 메달 · 12칸 발광',
+  intent:'가장 흔한 총이라 가장 절제된 형태. 12칸 발광 채널로 탄창 12발을 보여 준다.',
+  shape:'얇고 긴 슬라이드에 깎은 면과 꺾임 선, 슬라이드에서 그대로 이어지는 긴 그립, 황동 테두리 가죽 패널.'},
+ {id:'05',key:'flamer',name:'화염방사기',en:'TWIN-TANK FLAMER',cat:'ranged',dmg:'2<small>× 초당 30회</small>',range:'6m',mag:'90발',
+  tag:'쌍둥이 연료통 · 구멍 뚫린 방열 덮개 · 황동 노즐',
+  intent:'연료통 두 개와 방열 덮개로 한눈에 불. 불꽃은 주황, 몸체 발광선은 원거리 색으로 통일.',
+  shape:'몸통과 한 덩어리로 이어지는 뚫린 곡면 개머리판, 아래 스틸 연료통 2개, 원통형 방열 덮개, 황동 나팔 노즐과 점화구.'},
+ {id:'06',key:'rail',name:'레일건',en:'OPEN-RAIL GUN',cat:'ranged',dmg:'20 × 6',range:'무제한<small>관통</small>',mag:'2발',
+  tag:'열린 두 줄 레일 · 황동 코일 3개 · 충전 셀 2칸',
+  intent:'총열이 뚫려 있는 소리굽쇠 형태. 세트에서 가장 길어 멀리서도 가장 위험해 보인다.',
+  shape:'평행 레일 2줄 사이로 빛이 달리고 원통형 황동 코일 3개가 감싼다. 곡면 몸통의 충전 셀 2칸 = 탄창 2발.'},
+ {id:'07',key:'taser',name:'테이저건',en:'STUN CARTRIDGE',cat:'ranged',dmg:'1<small>+ 경직</small>',range:'3m',mag:'1발',
+  tag:'넓적한 카트리지 머리 · 전극 2개 · T자 실루엣',
+  intent:'권총과 헷갈리지 않게 앞머리를 크게. 전극 사이 전기 불꽃이 경직 무기임을 알린다.',
+  shape:'몸통이 곡선으로 넓어지며 둥근 스틸 카트리지를 감싼다. 권총처럼 길게 기운 그립, 앞으로 나온 전극 2개.'},
+ {id:'08',key:'grenade',name:'수류탄',en:'FACETED GRENADE',cat:'thrown',dmg:'40~120',range:'6m<small>폭발 반경 6m</small>',mag:'1발',
+  tag:'팔각 캡슐 · 황동 링 핀 · 앰버 띠',
+  intent:'파인애플형 대신 향수병 같은 팔각 캡슐. 고급 소품처럼 보이지만 띠 색이 위험을 알린다.',
+  shape:'어깨가 둥근 팔각 몸체의 날카로운 면 경계, 카본 띠에 로고, 스틸 안전 손잡이와 황동 링 핀.'},
+ {id:'09',key:'blast',name:'폭발 지뢰',en:'BLAST MINE',cat:'placed',dmg:'80~20',range:'발밑 설치<small>반경 3m</small>',mag:'1발',
+  tag:'둥근 원반 · 끊김 없는 발광 링 · 황동 중앙 캡',
+  intent:'원 = 폭발. 끊김 없는 라임 링으로 바닥에서 가장 먼저 눈에 띄게.',
+  shape:'낮은 원반 몸체, 방사형으로 나뉜 스틸 압력판, 황동 중앙 캡. 납작해서 위에서 비스듬히 본 각도로 그림.'},
+ {id:'10',key:'shock',name:'감전 지뢰',en:'SHOCK MINE',cat:'placed',dmg:'20~1<small>+ 경직</small>',range:'발밑 설치<small>반경 3m</small>',mag:'1발',
+  tag:'육각 판 · 전극 3개 · 점선 발광',
+  intent:'각진 육각형과 점선 링으로 폭발 지뢰와 구분. 같은 라임색이어도 모양으로 읽힌다.',
+  shape:'카본 육각 판 위로 황동 코일을 감은 전극 3개가 솟고, 전극 사이로 전기 불꽃이 튄다.'}
+];
+const fnOf=(o,k)=>window[o.key+k]||(()=>'');
+let ticks='';for(let x=30;x<=570;x+=30)ticks+=`M${x} 237v${x%150===0?3:2}`;
+const sideSvg=o=>`<svg viewBox="0 0 600 240" style="--g:${CAT[o.cat].color}"><rect width="600" height="240" fill="url(#pGrid)"/>
+<rect x="40" y="0" width="520" height="232" fill="url(#gSpot)"/>
+<path d="M30 237H570${ticks}" stroke="#c8a55a" stroke-opacity=".35" stroke-width=".7" fill="none"/>${fnOf(o,'Side')()}</svg>`;
+const topSvg=o=>`<svg viewBox="0 0 120 60" style="--g:${CAT[o.cat].color}">${fnOf(o,'Top')()}</svg>`;
+
+const q=new URLSearchParams(location.search),root=document.getElementById('root');
+if(q.get('w')){
+  const o=W.find(x=>x.id===q.get('w')),c=CAT[o.cat];
+  root.innerHTML=`<div class="single" style="--g:${c.color}">
+  <div>
+    <div class="shead"><span class="no2">${o.id}</span><div><div class="kicker">VAULT HEIST · WEAPON CONCEPT · V2.2</div><h2>${o.name}<em>${o.en}</em></h2></div><span class="chip2">${c.full}</span></div>
+    <div class="side" style="height:416px">${sideSvg(o)}<span class="lbl">옆모습</span></div>
+    <div class="notes"><p><b>디자인 의도</b><span>${o.intent}</span></p><p><b>형태</b><span>${o.shape}</span></p><p><b>발광 색</b><span>${c.name} = ${c.cname} ${c.color}</span></p></div>
+  </div>
+  <div>
+    <div class="tvbig floor">${topSvg(o)}<span class="lbl">탑뷰 실루엣</span></div>
+    <div class="minirow">
+      <div class="m l"><div style="width:96px">${topSvg(o)}</div><span>밝은 바닥</span></div>
+      <div class="m d"><div style="width:96px">${topSvg(o)}</div><span>어두운 바닥</span></div>
+      <div class="m l"><div style="width:52px">${topSvg(o)}</div><span>작게</span></div>
+      <div class="m d"><div style="width:52px">${topSvg(o)}</div><span>작게</span></div>
+    </div>
+    <table class="s"><tr><td>분류</td><td style="color:${c.color}">${c.full}</td></tr><tr><td>대미지</td><td>${o.dmg}</td></tr><tr><td>사거리</td><td>${o.range}</td></tr><tr><td>탄창</td><td>${o.mag}</td></tr></table>
+    <div class="foot" style="margin-top:18px;line-height:1.6">※ 수치는 기획 문서 기준 (「상호작용 오브젝트와 아이템」 3.1)<br>코드로 그린 2D 구상 그림 · 확정 아님 · 2026-11-16</div>
+  </div></div>`;
+}else{
+  const leg=Object.values(CAT).map(c=>`<div style="--g:${c.color}"><i></i><b>${c.name}</b>${c.cname}<span>${W.filter(o=>CAT[o.cat]===c).map(o=>o.name).join(' · ')}</span></div>`).join('');
+  const cellsHtml=W.map(o=>{const c=CAT[o.cat];return `<div class="cell" style="--g:${c.color}">
+    <div class="side">${sideSvg(o)}<span class="no">${o.id}</span><span class="chip">${c.name}</span></div>
+    <div class="info">
+      <div class="tv floor">${topSvg(o)}</div>
+      <div class="minis"><div class="mini l">${topSvg(o)}</div><div class="mini d">${topSvg(o)}</div></div>
+      <div class="txt"><h3>${o.name}<em>${o.en}</em></h3>
+        <div class="stats"><div class="stat"><label>대미지</label><b>${o.dmg}</b></div><div class="stat"><label>사거리</label><b>${o.range}</b></div></div>
+        <div class="tag">${o.tag}</div></div>
+    </div></div>`;}).join('');
+  root.innerHTML=`<div class="sheet">
+  <div class="hdr"><div><div class="kicker">VAULT HEIST · WEAPON CONCEPT SHEET · V2.2</div>
+    <h1>털어라! 금고! <span>무기 구상안 10종</span></h1>
+    <div class="sub">디자인 콘셉트 「럭셔리 하이스트」 — 무광 블랙 · 브러시드 스틸 · 카본 · 짙은 가죽 · 황동 포인트 · 금고 다이얼 각인</div></div>
+    <div class="legend"><div class="legcap">발광 색 = 분류 &nbsp;/&nbsp; 실루엣 = 무기</div>${leg}</div></div>
+  <div class="grid">${cellsHtml}</div>
+  <div class="ftr"><span>※ 대미지·사거리는 <b>기획 문서 기준</b> (「상호작용 오브젝트와 아이템」 3.1 무기 아이템) · 각 칸 아래 왼쪽은 탑뷰 실루엣(밝은 바닥·어두운 바닥에서 작게 본 모습 포함)</span><span>구상안 v2.2 · 2026-11-16 · 확정 아님</span></div>
+  </div>`;
+}
+</script>
+</body>
+</html>
+

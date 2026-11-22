@@ -1,0 +1,36 @@
+newmtl M_Bark_Olive
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.05 0.05 0.05
+Ns 35
+d 1.0
+illum 2
+map_Kd T_Bark_Olive.png
+
+newmtl M_Leaf_Olive
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.15 0.15 0.15
+Ns 65
+d 1.0
+illum 2
+map_Kd T_Leaf_Olive.png
+
+newmtl M_Pot_Terracotta
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.10 0.10 0.10
+Ns 50
+d 1.0
+illum 2
+map_Kd T_Pot_Terracotta.png
+
+newmtl M_Soil
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.00 0.00 0.00
+Ns 20
+d 1.0
+illum 2
+map_Kd T_Soil.png
+
