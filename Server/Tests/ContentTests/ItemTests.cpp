@@ -1,6 +1,7 @@
 #include "ServerCore/CorePch.h"
 
 #include <cmath>
+#include <map>
 #include <set>
 
 #include "TestFramework.h"
@@ -32,6 +33,44 @@ bool BoxAt(const GameWorld& world, const Vec3& pos)
 }
 
 } // namespace
+
+// ───────────────── 상자 드롭 비율 (클라 2026-11-22) ─────────────────
+
+TEST_CASE(Box_Drops_Weapon60_PistolTaserCommon_RailgunFlameRare)
+{
+	// 상자 600개를 삼단봉으로 부수고 나온 무기를 센다: 무기 60%, 권총·테이저건 각 20%, 레일건·화염방사기 각 5%
+	GameWorld world = Arena(1);
+	const Vec3 spot = Offset(HallW, 100, 0);
+	constexpr int boxes = 600;
+	int weapons = 0;
+	std::map<WeaponId, int> byWeapon;
+	for (int i = 0; i < boxes; ++i)
+	{
+		world.AddNow(EntityKind::Box, spot);
+		world.TakeEvents();
+		Attack(world, A, 0.0f);
+		Run(world, 500);
+		Attack(world, A, 0.0f);									// 삼단봉 10 × 2 = 상자 HP 20
+		for (const WorldEvent& event : RunCollect(world, 500))
+			if (const auto* spawn = std::get_if<Msg::EntitySpawn>(&event))
+				for (const Msg::EntityInfo& info : spawn->entities)
+					if (info.kind == EntityKind::WeaponPickup)
+					{
+						++weapons;
+						++byWeapon[static_cast<WeaponId>(info.typeId)];
+					}
+		for (const Entity& e : world.Entities())				// 나온 것은 치운다 (다음 상자 판정에 끼지 않게)
+			if (e.kind != EntityKind::Thief && e.kind != EntityKind::Guard && e.kind != EntityKind::ReturnPoint)
+				world.Find(e.id)->removed = true;
+	}
+	const double weaponRate = static_cast<double>(weapons) / boxes;
+	CHECK(weaponRate > 0.52 && weaponRate < 0.68);
+	CHECK_EQ(byWeapon[WeaponId::Baton], 0);
+	const int common = byWeapon[WeaponId::Pistol] + byWeapon[WeaponId::Taser];
+	const int rare = byWeapon[WeaponId::Railgun] + byWeapon[WeaponId::Flamethrower];
+	CHECK(common > 3 * rare);									// 기대값 40% 대 10%
+	CHECK(rare > 0);
+}
 
 // ───────────────── 무작위 배치 (Q-38, A-05) ─────────────────
 
@@ -152,7 +191,8 @@ TEST_CASE(Item_Box_DropsAtMostOneItem)
 			if (e.kind != EntityKind::Thief && e.kind != EntityKind::Guard && e.pos.x == Offset(HallW, 100, 0).x)
 				world.Find(e.id)->pos = Parking;
 	}
-	CHECK(items > 0 && empty > 0);						// 확률표 (O-12): 아이템도 "없음"도 나온다
+	// 확률표 (O-12): 아이템이 나오는 쪽이 대부분 (95%). "없음"은 5%라 30개로는 안 나올 수도 있어 세지 않는다
+	CHECK(items > 0 && items > empty * 5);
 }
 
 // ───────────────── 소비 아이템 ─────────────────
