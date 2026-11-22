@@ -74,6 +74,12 @@ $remote = (Invoke-Git $TeamRepo remote get-url origin) | Select-Object -First 1
 if ($remote -notmatch 'zkssk0812/unreal_multi_game_project') { Stop-Script "팀 저장소 origin 이 예상과 다름: $remote" }
 $cur = (Invoke-Git $TeamRepo rev-parse --abbrev-ref HEAD) | Select-Object -First 1
 if ($cur -ne $Branch) { Stop-Script "팀 저장소 브랜치가 $Branch 가 아님: $cur" }
+# 로컬 전용 제외 규칙(.git/info/exclude, 공용 .gitignore 는 그대로): Client/ 에서 빌드할 때 생기는 솔루션 파일
+$excl = Join-Path $TeamRepo '.git\info\exclude'
+$exclText = if (Test-Path $excl) { [IO.File]::ReadAllText($excl) } else { '' }
+foreach ($pat in @('Client/*.slnx', 'Client/*.sln')) {
+    if ($exclText -notmatch [regex]::Escape($pat)) { Add-Content -LiteralPath $excl -Value $pat -Encoding ASCII }
+}
 $teamDirty = Invoke-Git $TeamRepo status --porcelain --untracked-files=no
 if ($teamDirty) { Stop-Script ("팀 저장소에 커밋 안 한 변경이 있음 (먼저 정리 필요):`n" + ($teamDirty -join "`n")) }
 
@@ -176,6 +182,12 @@ foreach ($p in $ign) {
 }
 Write-Host "   .obj 강제 추가 ${forced}개"
 if ($ignoredOther) { Write-Host ("   [주의] 공용 .gitignore 때문에 안 올라가는 파일:`n     " + ($ignoredOther -join "`n     ")) -ForegroundColor Yellow }
+
+# Client/ 에서 빌드하면 생기는 파일(*.slnx 등, 공용 .gitignore 에 없는 것)은 MCPTest 목록에 없으므로 스테이징에서 뺀다
+$stray = @(Invoke-Git $TeamRepo diff --cached --name-only --diff-filter=A -- Client |
+    Where-Object { -not $keep.ContainsKey($_.Substring('Client/'.Length).ToLowerInvariant()) })
+foreach ($p in $stray) { Invoke-Git $TeamRepo reset -q -- $p | Out-Null }
+if ($stray) { Write-Host ("   MCPTest 목록에 없는 새 파일은 올리지 않음:`n     " + ($stray -join "`n     ")) -ForegroundColor Yellow }
 
 $staged = @(Invoke-Git $TeamRepo diff --cached --name-only)
 $outside = $staged | Where-Object { -not $_.StartsWith('Client/') }
