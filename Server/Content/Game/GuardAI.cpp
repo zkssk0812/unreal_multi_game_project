@@ -24,6 +24,10 @@
 // 개선 (docs/경비원AI_공격탐색_개선안.md, 항목마다 GuardFeatures로 끌 수 있음. 기본 수치는 그대로)
 //   A-2 물러나며 돌아서기: 정면 60° 밖에서 맞거나(지금 타겟 포함) 4m 안의 타겟이 정면 밖이면,
 //       타겟 쪽으로 90°/s로 돌면서 대각선 뒤로 달린다. 정면에 들어오면 바로 쏘고, 정면에 둔 채 4m 넘게 벌어지거나 2초 지나면 끝
+//   탐색: S-1 도망 방향 1초 앞(최대 3m)부터 · S-3 첫 지점 한 바퀴(4초) · S-4 주변 3~7m 최대 2곳 좌우 60° 훑기 ·
+//         S-5 발견하면 20m 안 동료가 탐색하러 옴 · S-6 경직·수리 뒤 최근 6초 안에 본 곳부터
+//   순찰: P-1 오래 안 간 곳 우선(3명 공유 기록) · P-2 동료와 겹치지 않기 · P-3 연결 2개 지점은 통과 ·
+//         P-4 좌우 45° 훑기(문에서는 방 안쪽) · P-5 금고·반납 지점 방 가중치 · P-6 가끔 뒤돌아보기 · P-7 탐색 뒤 30초 경계 순찰
 //
 // 타겟 규칙 (N-13~N-16)
 //   처음 발견한 플레이어를 유지 · 동시에 보이면 가까운 쪽 · 다른 플레이어가 공격하면 그 사람으로 바꾸고,
@@ -273,29 +277,22 @@ void GameWorld::ThinkGuard(Entity& guard, GuardBrain& brain, uint32_t dtMs)
 			brain.path.clear();
 			return;
 		}
+		const Vec3 missed = brain.searchSpots.empty() ? guard.pos : brain.searchSpots.front();
 		StartPatrol(guard, brain);		// 없다 → 가까운 순찰 지점부터 다시
+		if (_guardFeatures.alertPatrol)
+		{
+			brain.alertUntilMs = _nowMs + GameData::AlertPatrolMs;	// P-7: 30초 동안 놓친 곳 근처를 경계 순찰
+			brain.alertCenter = missed;
+		}
 		return;
 	}
 
 	// 순찰
 	if (brain.looking)
 	{
-		LookAround(guard, dtMs);
-		if (_nowMs < brain.waitUntilMs)
+		if (!UpdateLook(guard, brain, dtMs))
 			return;
-		// 갈림길에서 다음 지점: 이어진 지점 중 무작위, 방금 온 곳은 막다른 길일 때만
-		std::vector<uint16_t> next;
-		for (const MapPatrolEdge& edge : _map->patrolEdges)
-		{
-			if (edge.a == brain.patrolNode && edge.b != brain.prevPatrolNode) next.push_back(edge.b);
-			if (edge.b == brain.patrolNode && edge.a != brain.prevPatrolNode) next.push_back(edge.a);
-		}
-		std::erase_if(next, [&](uint16_t n) { return !_map->nav.Connected(guard.pos, _map->patrolNodes[n]); });
-		if (next.empty() && brain.prevPatrolNode < _map->patrolNodes.size())
-			next.push_back(brain.prevPatrolNode);
-		brain.prevPatrolNode = brain.patrolNode;
-		if (!next.empty())
-			brain.patrolNode = next[std::uniform_int_distribution<size_t>(0, next.size() - 1)(_rng)];
+		PickPatrolNode(guard, brain);
 		brain.looking = false;
 	}
 	if (_map->patrolNodes.empty())
@@ -303,14 +300,13 @@ void GameWorld::ThinkGuard(Entity& guard, GuardBrain& brain, uint32_t dtMs)
 	if (brain.path.empty() && !SetGoal(guard, brain, _map->patrolNodes[brain.patrolNode]))
 	{
 		brain.looking = true;
-		brain.waitUntilMs = _nowMs + GameData::PatrolLookMs;
+		StartSpin(brain, GameData::PatrolLookMs);
 		return;
 	}
 	if (FollowPath(guard, brain, GameData::GuardWalkSpeed * slow, dtMs))
 	{
-		brain.looking = true;
-		brain.waitUntilMs = _nowMs + GameData::PatrolLookMs;
 		brain.path.clear();
+		ArrivePatrolNode(guard, brain);
 	}
 	else if (brain.pathIndex < brain.path.size())
 	{
@@ -475,6 +471,132 @@ void GameWorld::CallAllies(const Entity& caller, const Vec3& where)
 			continue;
 		StartSearch(*ally, other, where, false);
 	}
+}
+
+// ───────────────── 순찰 (P-1~P-7) ─────────────────
+
+void GameWorld::ArrivePatrolNode(Entity& guard, GuardBrain& brain)
+{
+	const uint16_t node = brain.patrolNode;
+	if (node < _patrolVisitMs.size())
+		_patrolVisitMs[node] = _nowMs;		// P-1: 3명이 함께 쓰는 방문 기록
+
+	// P-3: 복도 중간처럼 연결이 2개뿐인 지나가는 지점은 멈추지 않는다
+	if (_guardFeatures.passThrough && node < _patrolLinks.size() && _patrolLinks[node].size() == 2)
+	{
+		PickPatrolNode(guard, brain);
+		return;
+	}
+
+	brain.looking = true;
+	if (!_guardFeatures.sweepLook)
+	{
+		StartSpin(brain, GameData::PatrolLookMs);		// 개선 전: 한쪽으로 1초 (90°)
+	}
+	else
+	{
+		// P-4: 좌우 45° 훑기 (2초). 문 지점이면 방 안쪽을 가운데로
+		float center = guard.yaw;
+		if (node < _map->patrolKinds.size() && _map->patrolKinds[node] == PatrolNodeKind::Door && node < _patrolLinks.size())
+		{
+			const uint16_t* room = nullptr;
+			for (const uint16_t& n : _patrolLinks[node])
+			{
+				if (n >= _map->patrolKinds.size() || _map->patrolKinds[n] != PatrolNodeKind::Room)
+					continue;
+				if (room == nullptr || *room == brain.prevPatrolNode)
+					room = &n;
+			}
+			if (room != nullptr)
+				center = YawTo(_map->patrolNodes[node], _map->patrolNodes[*room]);
+		}
+		StartSweep(guard, brain, center, GameData::PatrolSweepDeg);
+	}
+
+	// P-6: 가끔 왔던 쪽을 돌아본다 (경계 순찰 중이면 더 자주)
+	if (_guardFeatures.lookBack && brain.prevPatrolNode < _map->patrolNodes.size())
+	{
+		const bool alert = _guardFeatures.alertPatrol && _nowMs < brain.alertUntilMs;
+		std::uniform_real_distribution<float> roll(0.0f, 1.0f);
+		if (roll(_rng) < (alert ? GameData::AlertLookBackChance : GameData::LookBackChance))
+		{
+			if (brain.lookYaws.empty())
+				brain.waitUntilMs = _nowMs;		// 한 바퀴 대신 돌아보기만
+			brain.lookYaws.push_back(YawTo(_map->patrolNodes[node], _map->patrolNodes[brain.prevPatrolNode]));
+			brain.waitUntilMs += static_cast<uint32_t>(180.0f / GameData::GuardTurnDegPerSec * 1000.0f) + 500;
+		}
+	}
+}
+
+void GameWorld::PickPatrolNode(Entity& guard, GuardBrain& brain)
+{
+	// 다음 지점: 이어진 지점 중에서. 방금 온 곳은 막다른 길일 때만
+	std::vector<uint16_t> next;
+	if (brain.patrolNode < _patrolLinks.size())
+		for (const uint16_t n : _patrolLinks[brain.patrolNode])
+			if (n != brain.prevPatrolNode)
+				next.push_back(n);
+	std::erase_if(next, [&](uint16_t n) { return !_map->nav.Connected(guard.pos, _map->patrolNodes[n]); });
+	if (next.empty() && brain.prevPatrolNode < _map->patrolNodes.size())
+		next.push_back(brain.prevPatrolNode);
+	brain.prevPatrolNode = brain.patrolNode;
+	if (next.empty())
+		return;
+
+	const GuardFeatures& f = _guardFeatures;
+	const bool alert = f.alertPatrol && _nowMs < brain.alertUntilMs;
+	if (!f.leastVisited && !f.spreadOut && !f.importantRooms && !alert)
+	{
+		brain.patrolNode = next[std::uniform_int_distribution<size_t>(0, next.size() - 1)(_rng)];	// 개선 전: 완전 무작위
+		return;
+	}
+
+	// 점수가 가장 높은 곳: 오래 안 간 곳(P-1) + 무작위 폭 + 중요한 방(P-5) + 경계 순찰(P-7) − 동료와 겹침(P-2)
+	std::vector<int16_t> importantRooms;
+	if (f.importantRooms)
+	{
+		for (const Entity& e : _entities)
+		{
+			if (e.removed) continue;
+			if (e.kind == EntityKind::Safe) importantRooms.push_back(static_cast<int16_t>(e.safeRoom));
+			if (e.kind == EntityKind::ReturnPoint) importantRooms.push_back(static_cast<int16_t>(e.typeId));
+		}
+	}
+	std::uniform_real_distribution<float> jitter(0.0f, static_cast<float>(GameData::PatrolJitterMs));
+	const Vec3& here = _map->patrolNodes[brain.patrolNode];
+	float best = -1e30f;
+	uint16_t pick = next.front();
+	for (const uint16_t n : next)
+	{
+		const Vec3& p = _map->patrolNodes[n];
+		uint32_t visited = n < _patrolVisitMs.size() ? _patrolVisitMs[n] : 0;
+		float penalty = 0.0f;
+		if (f.spreadOut)
+		{
+			for (const GuardBrain& other : _brains)
+			{
+				if (other.guardId == brain.guardId) continue;
+				if (other.state == GuardState::Patrol && other.patrolNode == n)
+					visited = _nowMs;										// 동료가 가는 곳은 방금 다녀간 것으로
+				const Entity* ally = Find(other.guardId);
+				if (ally != nullptr && Dist2D(ally->pos, here) <= GameData::AllySpreadCm &&
+					std::fabs(AngleDiff(YawTo(here, p), YawTo(here, ally->pos))) <= GameData::AllySpreadDeg)
+					penalty = static_cast<float>(GameData::AllySpreadPenaltyMs);	// 가까운 동료 쪽은 뒤로 미룸
+			}
+		}
+		float score = (f.leastVisited ? static_cast<float>(_nowMs - std::min(visited, _nowMs)) : 0.0f) + jitter(_rng) - penalty;
+		if (f.importantRooms && n < _map->patrolRooms.size() && _map->patrolRooms[n] >= 0 &&
+			std::find(importantRooms.begin(), importantRooms.end(), _map->patrolRooms[n]) != importantRooms.end())
+			score += static_cast<float>(GameData::ImportantRoomBonusMs);
+		if (alert && Dist2D(p, brain.alertCenter) <= GameData::AlertRadiusCm)
+			score += static_cast<float>(GameData::AlertBonusMs);
+		if (score > best)
+		{
+			best = score;
+			pick = n;
+		}
+	}
+	brain.patrolNode = pick;
 }
 
 // ───────────────── 둘러보기 ─────────────────

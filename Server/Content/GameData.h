@@ -241,6 +241,17 @@ constexpr size_t SearchPathTries = 8;				// S-4 경로 찾기 최대 횟수 (탐
 constexpr float SearchSweepDeg = 60.0f;				// S-4 주변 지점에서 좌우 60° 훑기 (약 2.7초)
 constexpr float AllyCallRangeCm = 2000.0f;			// S-5 이 거리 안의 순찰·탐색 중인 동료를 부른다
 constexpr uint32_t StunMemoryMs = 6000;				// S-6 경직·수리가 풀렸을 때 이 시간 안에 본(맞은) 곳을 탐색
+constexpr uint32_t PatrolJitterMs = 20000;			// P-1 "오래 안 간 곳"에 섞는 무작위 폭 (예측당하지 않게)
+constexpr float AllySpreadCm = 1000.0f;				// P-2 이 거리 안의 동료 쪽 지점은 뒤로 미룸
+constexpr float AllySpreadDeg = 60.0f;				// P-2 동료 방향에서 이 각도 안이면 "그쪽"
+constexpr uint32_t AllySpreadPenaltyMs = 60000;		// P-2 뒤로 미루는 정도 (60초 전에 다녀간 것만큼)
+constexpr float PatrolSweepDeg = 45.0f;				// P-4 지점에서 좌우 45° 훑기 (90°/s로 2초)
+constexpr uint32_t ImportantRoomBonusMs = 30000;	// P-5 금고·반납 지점이 있는 방은 30초 더 오래 안 간 것으로
+constexpr float LookBackChance = 0.2f;				// P-6 지점에서 왔던 쪽을 돌아볼 확률 (180°, 2초)
+constexpr float AlertLookBackChance = 0.5f;			// P-6·P-7 경계 순찰 중에는 더 자주
+constexpr uint32_t AlertPatrolMs = 30000;			// P-7 탐색을 마친 뒤 경계 순찰 시간
+constexpr float AlertRadiusCm = 1500.0f;			// P-7 놓친 곳에서 이 안의 지점을 먼저
+constexpr uint32_t AlertBonusMs = 60000;			// P-7 그 지점에 더하는 점수
 constexpr uint32_t TargetVelGapMs = 1000;			// 타겟 속도 추정: 두 관측 사이가 이보다 길면 속도를 모름
 constexpr float TargetVelMaxCm = 800.0f;			// 타겟 속도 추정의 상한 (순간이동 등 튀는 값)
 

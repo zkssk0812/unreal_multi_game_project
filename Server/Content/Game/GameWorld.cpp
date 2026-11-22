@@ -94,6 +94,15 @@ void GameWorld::Setup(const MapData& map, const std::vector<ThiefSlot>& thieves,
 	Flush();
 
 	// 5) 경비원 AI: 경비원마다 뇌 하나, 가장 가까운 순찰 지점부터 순찰
+	_patrolLinks.assign(map.patrolNodes.size(), {});
+	for (const MapPatrolEdge& edge : map.patrolEdges)
+	{
+		if (edge.a >= map.patrolNodes.size() || edge.b >= map.patrolNodes.size())
+			continue;
+		_patrolLinks[edge.a].push_back(edge.b);
+		_patrolLinks[edge.b].push_back(edge.a);
+	}
+	_patrolVisitMs.assign(map.patrolNodes.size(), 0);
 	for (Entity& e : _entities)
 	{
 		if (!e.IsGuard())
@@ -115,6 +124,8 @@ void GameWorld::Clear()
 	_events.clear();
 	_map = nullptr;
 	_brains.clear();
+	_patrolLinks.clear();
+	_patrolVisitMs.clear();
 	_thrown.clear();
 	_boxRespawns.clear();
 	_itemCells.clear();

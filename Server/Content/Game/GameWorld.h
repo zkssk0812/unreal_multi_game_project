@@ -200,6 +200,8 @@ struct GuardBrain
 
 	uint16_t patrolNode = 0;
 	uint16_t prevPatrolNode = 0xFFFF;
+	uint32_t alertUntilMs = 0;			// P-7 경계 순찰 끝 (탐색을 마친 뒤 30초)
+	Vec3 alertCenter;					// P-7 놓친 곳
 
 	AlertLevel alertLevel = AlertLevel::Patrol;	// 마지막으로 보낸 SC_GUARD_ALERT
 	uint16_t alertTarget = 0;
@@ -352,6 +354,8 @@ private:
 	void StartSpin(GuardBrain& brain, uint32_t ms);
 	void StartSweep(const Entity& guard, GuardBrain& brain, float center, float halfDeg);
 	bool UpdateLook(Entity& guard, GuardBrain& brain, uint32_t dtMs);					// 둘러보기가 끝났으면 true
+	void ArrivePatrolNode(Entity& guard, GuardBrain& brain);							// P-1·P-3·P-4·P-6
+	void PickPatrolNode(Entity& guard, GuardBrain& brain);								// P-1·P-2·P-5·P-7
 	GuardBrain* BrainFor(uint16_t guardId);
 
 	std::vector<Entity> _entities;
@@ -362,6 +366,8 @@ private:
 	bool _aiEnabled = true;
 	GuardFeatures _guardFeatures;
 	std::vector<GuardBrain> _brains;
+	std::vector<std::vector<uint16_t>> _patrolLinks;	// 순찰 지점마다 이어진 지점 (patrolEdges 순서)
+	std::vector<uint32_t> _patrolVisitMs;	// P-1 순찰 지점마다 경비원이 마지막으로 다녀간 시각 (3명 공유, 0 = 아직)
 	uint32_t _sightTests = 0;			// 이번 틱의 시야 검사 횟수 (Perf)
 	std::vector<WorldEvent> _events;
 	std::mt19937 _rng{ 7 };				// Setup에서 방의 rng로 다시 씨앗을 준다

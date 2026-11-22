@@ -517,6 +517,46 @@ TEST_CASE(AI_S5_AllyWithin20mComesToSearch)
 		CHECK(Content::WorldMath::Dist2D(world.BrainOf(closeAlly)->searchSpots.front(), FrontOfGuard) < 50.0f);
 }
 
+// ───────────────── 순찰 개선 (P-1~P-7) ─────────────────
+
+TEST_CASE(AI_P7_AfterSearch_AlertPatrolNearMissedSpot)
+{
+	uint16_t guard = 0;
+	Vec3 lastSeen;
+	GameWorld world = LoseRunningTarget(GuardFeatures::All(), guard, lastSeen);
+	const Vec3 missed = world.BrainOf(guard)->searchSpots.front();
+	CHECK(RunUntil(world, 30000, [&] { return StateOf(world, guard) == GuardState::Patrol; }));
+	CHECK(world.BrainOf(guard)->alertUntilMs > world.NowMs());
+	CHECK(world.BrainOf(guard)->alertUntilMs <= world.NowMs() + GameData::AlertPatrolMs);
+	CHECK(Content::WorldMath::Dist2D(world.BrainOf(guard)->alertCenter, missed) < 1.0f);
+}
+
+TEST_CASE(AI_P_PatrolKeepsPatrolling_OnWalkableCells)
+{
+	// 개선 후 3명이 2분 동안 순찰만 한다 (플레이어 없음): 계속 순찰 상태이고, 여러 지점을 돈다.
+	// 걸을 수 없는 칸에 서는 틱은 개선 전에도 있던 맵 가장자리 문제라 아주 드물기만 하면 된다 (순찰 범위 비교는 Bench_PatrolCoverage_P)
+	GameWorld world = MakeWorld(1, true);
+	Teleport(world, A, Parking);
+	const MapData& map = DefaultMap();
+	std::vector<bool> seen(map.patrolNodes.size(), false);
+	int offNav = 0, samples = 0;
+	for (int t = 0; t < 2400; ++t)
+	{
+		world.Update(0.05f);
+		for (size_t n = 0; n < 3; ++n)
+		{
+			const Entity& g = *world.Find(Nth(world, EntityKind::Guard, n));
+			CHECK(world.BrainOf(g.id)->state == GuardState::Patrol);
+			++samples;
+			if (!map.nav.IsWalkable(g.pos)) ++offNav;
+			for (size_t i = 0; i < map.patrolNodes.size(); ++i)
+				if (Content::WorldMath::Dist2D(g.pos, map.patrolNodes[i]) < 100.0f) seen[i] = true;
+		}
+	}
+	CHECK(offNav * 200 < samples);											// 0.5% 미만
+	CHECK(std::count(seen.begin(), seen.end(), true) >= 30);
+}
+
 TEST_CASE(AI_S6_AfterStun_SearchesWhereLastSeen)
 {
 	// 테이저로 경직시킨 플레이어가 경직 동안 사라진다 → 풀리면 제자리가 아니라 마지막으로 본(맞은) 곳으로

@@ -507,12 +507,16 @@ TEST_CASE(Bench_StunThenHide_S6)
 
 TEST_CASE(Bench_PatrolCoverage_P)
 {
-	for (const Mode& mode : Modes)
+	PatrolResult results[2];
+	for (size_t m = 0; m < 2; ++m)
 	{
+		const Mode& mode = Modes[m];
 		const PatrolResult r = PatrolTrial(mode.features, 6);
+		results[m] = r;
 		Report("④ 5분 순찰 {} | 들른 순찰 지점 {:.0f}%, 들른 방 {:.0f}% (가장 적을 때 {:.0f}%), 멈춰 있던 시간 {:.0f}%",
 			mode.name, r.nodesPct, r.roomsPct, r.worstRoomsPct, r.stoppedPct);
 	}
+	CHECK(results[1].nodesPct >= results[0].nodesPct + 5.0 && results[1].roomsPct >= results[0].roomsPct + 5.0);	// 개선 후: 더 넓게 돈다
 }
 
 TEST_CASE(Bench_TrailBehindGuard_P6)
@@ -539,3 +543,16 @@ TEST_CASE(Bench_AllyCall_S5)
 	CHECK(results[1].joined > results[0].joined && Pct(results[1].joined, results[1].tried) >= 80.0);
 }
 
+
+TEST_CASE(Bench_TrailAblation_P)
+{
+	const char* names[] = { "P-1 끔", "P-2 끔", "P-3 끔", "P-4 끔", "P-5 끔", "P-6 끔" };
+	for (int i = 0; i < 6; ++i)
+	{
+		GuardFeatures f = GuardFeatures::All();
+		bool* flags[] = { &f.leastVisited, &f.spreadOut, &f.passThrough, &f.sweepLook, &f.importantRooms, &f.lookBack };
+		*flags[i] = false;
+		const TrailResult r = TrailTrial(f, 12);
+		Report("⑤-2 뒤따라가기, 개선 후에서 하나만 끔: {} | {}회 중 들킴 {}회, 들키기까지 평균 {:.1f}초", names[i], r.tried, r.caught, Avg(r.caughtSec, r.caught));
+	}
+}
