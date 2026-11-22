@@ -49,7 +49,7 @@ enum class PacketId : uint16_t {
 	CS_LEAVE_ROOM = 2007,
 	SC_LEAVE_ROOM = 2008,
 	SC_ROOM_STATE = 2009,
-	CS_SELECT_CHARACTER = 2010,		// 캐릭터 1~5 (스킬은 캐릭터에 고정)
+	CS_SELECT_CHARACTER = 2010,		// 캐릭터 1~3 (도적1·2·3, 스킬은 캐릭터에 고정)
 	CS_SELECT_PERKS = 2011,			// 퍽 1~7, 최대 3개
 	CS_READY = 2012,
 	SC_ROOM_ERROR = 2013,

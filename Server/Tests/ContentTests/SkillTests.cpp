@@ -178,11 +178,11 @@ TEST_CASE(Skill_Cloak_BrokenByInteracting)
 	CHECK((world.ThiefOf(C)->state & StateBit::Cloaked) == 0);		// 상호작용하면 풀림
 }
 
-TEST_CASE(Skill_CharacterWithoutSkill_NotAvailable)
+TEST_CASE(Skill_EveryCharacterHasSkill)
 {
-	GameWorld world = MakeWorld(5);		// 도적4·5는 스킬 없음 (A-06)
-	const auto reject = Act(world, A + 3, ActionType::UseSkill);
-	CHECK(reject && *reject == RejectReason::NotAvailable);
+	// 도적1~3 모두 고유 스킬이 있다 (도적4·5는 2026-11-22에 없어짐)
+	for (uint16_t id = 1; id <= GameData::CharacterCount; ++id)
+		CHECK(GameData::SkillOf(id) != SkillId::None);
 }
 
 TEST_CASE(Skill_RespawnResetsCooldown)

@@ -16,7 +16,7 @@ constexpr size_t MaxRoomPlayers = 3;		// 방장 포함 (protocol.h MAX_ROOM_PLAY
 constexpr size_t MaxPerks = 3;				// 한 사람이 고를 수 있는 퍽 수
 constexpr size_t MaxRoomList = 20;			// 방 목록 한 번에 보내는 수
 
-constexpr uint16_t CharacterCount = 5;		// [명세 CH-01~05] 임시 캐릭터 도적1~5
+constexpr uint16_t CharacterCount = 3;		// 도적1·2·3 (2026-11-22 확정, 전에는 임시 5명 CH-01~05)
 constexpr uint16_t PerkCount = 7;			// [명세 K-01~07]
 
 constexpr size_t NicknameMaxChars = 12;		// 글자 수 (UTF-8 바이트 수가 아님)
@@ -33,7 +33,7 @@ constexpr uint16_t RobotSense = 6;		// 로봇탐지 (클라 표시)
 constexpr uint16_t BioSense = 7;		// 생체감지 (클라 표시)
 }
 
-// 캐릭터 → 고유 스킬 [가정 A-06]. 도적4·5는 스킬 없음. 기획이 정해지면 이 표만 바꾼다
+// 캐릭터 → 고유 스킬 [가정 A-06]. 캐릭터를 늘리면 이 표에 더한다 (없으면 스킬 없음)
 inline SkillId SkillOf(uint16_t characterId)
 {
 	switch (characterId)

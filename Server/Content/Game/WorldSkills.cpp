@@ -9,7 +9,7 @@
 
 // 스킬·소비 아이템·상태이상 (docs/psd.md M5·M6).
 //
-// 스킬은 캐릭터 고유 (F-02, A-06): 도적1 사제 테이저건(Q로 들고 공격 키로 발사) · 도적2 끈끈이 · 도적3 은신 · 도적4·5 없음.
+// 스킬은 캐릭터 고유 (F-02, A-06): 도적1 사제 테이저건(Q로 들고 공격 키로 발사) · 도적2 끈끈이 · 도적3 은신.
 // 이동 속도 효과(끈끈이 감속·은신 −80%·운동화)는 플레이어 이동이 클라 몫이라 클라가 적용하고(T-64),
 // 서버는 상태 비트(Slowed·Cloaked)만 알린다. 경비원 감속은 서버가 적용한다(GuardAI.cpp).
 
@@ -32,7 +32,7 @@ std::optional<RejectReason> GameWorld::UseSkill(Entity& thief)
 	switch (thief.skill)
 	{
 	case SkillId::None:
-		return RejectReason::NotAvailable;		// 스킬이 정해지지 않은 캐릭터 (도적4·5)
+		return RejectReason::NotAvailable;		// 스킬이 정해지지 않은 캐릭터 (지금은 없음)
 
 	case SkillId::Cloak:
 		if ((thief.state & StateBit::Cloaked) != 0)
