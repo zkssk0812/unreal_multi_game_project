@@ -33,7 +33,11 @@
 ## 작업 원칙
 1. 시작 시 프로젝트 상태, MCP 연결, 사용 가능한 도구부터 확인한다. 접근 못 하면 연결된 것처럼 말하지 않는다.
 2. 작은 플레이 가능한 단위부터 만들고, 기능 하나마다 실행 결과를 확인한다.
-3. 기존 작업 보존. **Git이 없으면 작업 전에 Git + Git LFS를 세팅하고 첫 커밋.** 기능 하나가 끝날 때마다 커밋. `git push`, `git reset --hard`, 강제 삭제 금지.
+3. 기존 작업 보존. **Git이 없으면 작업 전에 Git + Git LFS를 세팅하고 첫 커밋.** 기능 하나가 끝날 때마다 커밋. `git reset --hard`, 강제 삭제 금지.
+   - **올리는 방법(2026-11-22부터)**: 작업 커밋(MCPTest 로컬) → `powershell -ExecutionPolicy Bypass -File Tools\push_to_team_repo.ps1` 실행으로 **팀 통합 저장소** `zkssk0812/unreal_multi_game_project`의 `main`, `Client/` 폴더에 push. 작업은 계속 `C:\UnrealProjects\MCPTest`에서 하고, 팀 저장소 clone은 `C:\UnrealProjects\unreal_multi_game_project`.
+   - **원래 저장소(`LeeJuneWu/project_Unreal_Engine5.8`, `client/menu-ui`)에는 push 하지 않는다**(MCPTest 의 `git push`는 막아 둠, 올라가 있는 것은 그대로 둔다). MCPTest 커밋은 기록용.
+   - 스크립트가 하는 일: 팀 저장소 `main` pull → MCPTest의 Git 추적 파일 + 새 파일(.gitignore 제외)을 `Client/`로 복사(지운 파일은 `Client/` 안에서만 반영) → `Client/`만 커밋(메시지 = MCPTest 마지막 커밋 앞에 `[client] `) → push. 빼는 것: Binaries·Intermediate·Saved·DerivedDataCache·Build·.vs·*.sln(x)·`Config/DefaultEditor.ini`·`SourceArt/**/*.zip`·`Docs/ServerRef/`·MCPTest의 .gitignore/.gitattributes. 100MB 넘는 파일이나 LFS로 안 잡힌 에셋이 있으면 멈춘다. MCPTest에 커밋 안 한 변경이 있으면 멈춘다(`-DryRun`, `-NoPush`, `-AllowDirty`).
+   - 팀 저장소의 `Server/`·`Common/`·`Docs/`와 공용 `.gitignore`·`.gitattributes`·`README.md`는 건드리지 않는다. PR은 만들지 않는다. `Config/DefaultEditor.ini`는 올리지 않는다.
 4. **`.uasset`, `.umap`은 절대 텍스트로 수정하지 않는다.** 에셋은 MCP 도구나 에디터 기능으로만 다룬다.
 5. **삭제, 대규모 구조 변경, 유료 서비스는 사용자 확인 후.** 합의된 범위의 구현·오류 수정은 바로 진행한다.
 6. 핵심 로직은 **C++**, 조립·수치 조정은 C++을 상속한 **블루프린트**에서 하도록 설계한다.
@@ -70,6 +74,7 @@
   - 금고·상자·반납지점·시작 위치는 레벨에 놓지 않는다. 서버가 보낸 위치에 만든다(금고는 `SpawnServerSafe`).
   - 사용자 결정(2026-11-16): 탑뷰 **화면 위 = +X**(`TopViewYaw = 0`, 조작키 문서의 W = +X와 맞춤), 방 이름은 `Tools/MansionBuild/room_names.json`(객실·창고·서재·빈 방·닫힌 방 등), 펜던트 조명 14개는 **기구 모양만 게임에서 숨기고 빛은 유지**, 조명은 패키지의 낮 조명 그대로(채움광 277개 유지, 바닥 반사만 끔).
 - 시험용 서버: 서버 코드를 고치지 않고 사본 `C:\UnrealProjects\VaultHeistServerV3b\Project_Rob`(커밋 `1b53272`)에서 빌드·실행한다(`MSBuild Project_Rob.sln /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v145`). **맵 파일을 바꿔 넣지 않는다**(정상 시작 로그: `mansion_1f v2: 방 35(금고·아이템을 놓는 방 31)`). 기존 `VaultHeistServerV3`(옛 맵용)·`VaultHeistServerTest`·`VaultHeistServerLatest`는 그대로 둔다.
+  - 팀 저장소 `Server/`가 정호님의 최신 서버 코드다(읽기만, 수정 금지). 2026-11-22 비교: V3b와 C++ 코드·`protocol.h`(v3.0)·충돌 맵은 같고, `mansion_1f_server.json`의 맵 버전만 **2 → 10**(클라 `GameLevelMapVersion=2`라 팀 서버에 붙으면 "맵 버전 다름" 토스트만 뜸, 위치는 같음).
   - 옛 레벨 `L_Mansion_1F`로 시험할 때만: `VaultHeistServerV3` 사본 + 실행 파일 옆 `Data/Maps/mansion_1f_server.json`을 `Docs/ServerHandoff/mansion_1f_server.json`으로 교체.
   - `server_config.json`이 없으면 DB 없이 실행된다(최고 기록 저장 없음). 서버 콘솔 입력이 닫히면(빈 줄·EOF) 서버가 종료된다.
 - 서버에 묻거나 요청할 것, 기획과 서버의 차이는 `Docs/ServerHandoff/`에 정리한다(정호님께 보내는 글은 존댓말, 호칭 "정호님").
