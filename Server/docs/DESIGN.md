@@ -43,7 +43,7 @@
 │ ServerCore (lib) : IOCP, Session, SendBuffer, 메모리 풀, JobQueue, JobTimer, Logger │
 ├──────────────────────────────────────────────────────────────┤
 │ Common/Protocol (저장소 루트) : protocol.h (클라와 공유)              │
-│ Shared/Protocol : PacketBuilder, ProtocolUtil (서버 전용)             │
+│ Shared/Protocol : protocol.h (Common과 같은 사본), PacketBuilder, ProtocolUtil │
 └──────────────────────────────────────────────────────────────┘
 ```
 
