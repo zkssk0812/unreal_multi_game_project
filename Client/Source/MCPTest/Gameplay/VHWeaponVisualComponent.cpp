@@ -93,6 +93,11 @@ void UVHWeaponVisualComponent::SetWeapon(uint8 WeaponId)
 			WeaponId = static_cast<uint8>(DebugLocalWeapon);
 		}
 	}
+	RequestedWeapon = WeaponId;
+	if (HeldWeaponOverride >= 0)
+	{
+		WeaponId = static_cast<uint8>(HeldWeaponOverride);	// 레일건 충전·빔 동안은 레일건을 붙잡아 둔다
+	}
 	if (IsActionPlaying() && WeaponId != ActionWeapon)
 	{
 		// 동작(특히 던지기·설치) 중에 서버가 든 무기를 바꿨다(탄을 다 써서 삼단봉 등) → 동작이 끝난 뒤 바꾼다
@@ -112,6 +117,16 @@ void UVHWeaponVisualComponent::ApplyWeaponId(uint8 WeaponId)
 	CurrentWeapon = WeaponId;
 	ApplyWeapon();
 	OnWeaponChanged.Broadcast(WeaponId);
+}
+
+void UVHWeaponVisualComponent::SetHeldWeaponOverride(int32 WeaponId)
+{
+	if (HeldWeaponOverride == WeaponId)
+	{
+		return;
+	}
+	HeldWeaponOverride = WeaponId;
+	SetWeapon(static_cast<uint8>(RequestedWeapon));	// 붙잡기를 켜면 그 무기, 풀면 마지막 서버 무기
 }
 
 bool UVHWeaponVisualComponent::IsLocalPawn() const

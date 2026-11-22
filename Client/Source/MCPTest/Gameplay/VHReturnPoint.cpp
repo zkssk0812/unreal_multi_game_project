@@ -85,6 +85,24 @@ void AVHReturnPoint::BeginPlay()
 void AVHReturnPoint::InitPoint(double InSpawnTime)
 {
 	SpawnTime = InSpawnTime;
+	bServerDriven = true;	// InitPoint 는 서버 엔티티로 만들 때만 부른다 → 빨강은 서버 신호로만
+}
+
+void AVHReturnPoint::SetServerWarning(bool bWarning)
+{
+	bServerDriven = true;
+	if (bWarning == bServerWarning)
+	{
+		return;
+	}
+	bServerWarning = bWarning;
+	if (bWarning)
+	{
+		// 서버는 등장 55초에 경고를 켠다 → 화면의 남은 시간("곧 이동 N초")을 그 시각에 맞춘다
+		SpawnTime = GetNow() - UVHSettings::Get().GetGameplayConfig().ReturnPointRedSeconds;
+	}
+	UE_LOG(LogTemp, Log, TEXT("[반납지점] %s 서버 경고 %s: 남은 %.1f초"), *GetName(), bWarning ? TEXT("켜짐 → 빨강") : TEXT("꺼짐"), GetRemainingSeconds());
+	UpdateColor();
 }
 
 float AVHReturnPoint::GetAge() const
@@ -99,6 +117,10 @@ float AVHReturnPoint::GetRemainingSeconds() const
 
 bool AVHReturnPoint::IsRed() const
 {
+	if (bServerDriven)
+	{
+		return bServerWarning;	// 서버 신호 기준 (2026-11-22: 서버가 55초 = 남은 5초에 경고)
+	}
 	return GetAge() >= UVHSettings::Get().GetGameplayConfig().ReturnPointRedSeconds;
 }
 
@@ -123,7 +145,7 @@ void AVHReturnPoint::Tick(float DeltaSeconds)
 	if (IsRed() != bShownRed)
 	{
 		UE_LOG(LogTemp, Log, TEXT("[반납지점] %s %s: 등장 %.1f초, 남은 %.1f초"), *GetName(), IsRed() ? TEXT("빨강으로") : TEXT("초록으로"), GetAge(), GetRemainingSeconds());
-		UpdateColor();	// 등장 55초(남은 5초)가 지나면 빨간색 [사용자 요청 2026-11-21: 10초 → 5초]
+		UpdateColor();	// 서버 없이 놓인 반납지점: 등장 55초(남은 5초)가 지나면 빨간색 (서버 반납지점은 SetServerWarning)
 	}
 }
 

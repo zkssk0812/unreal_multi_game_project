@@ -7,7 +7,7 @@ $prj = 'C:\UnrealProjects\MCPTest\MCPTest.uproject'
 $log = "C:\UnrealProjects\MCPTest\Saved\V3Test\fps_$Tag.log"
 if (Test-Path $log) { Remove-Item $log }
 $net = if ($Mock) { '-VHMock' } else { '-VHServer=127.0.0.1:9000' }
-$level = if ($OldLevel) { '' } else { '-VHLevel=/Game/VaultHeist/Maps/Mansion/L_Mansion_Shell -VHMapVersion=2' }
+$level = if ($OldLevel) { '' } else { '-VHLevel=/Game/VaultHeist/Maps/Mansion/L_Mansion_Shell' }
 $args = "`"$prj`" -game -windowed -ResX=1600 -ResY=900 $net $level -VHBot=Fps$Tag -VHBotMin=1 -VHBotHeist -VHBotChar=$Char -log -abslog=$log $Extra"
 $p = Start-Process -FilePath $ue -ArgumentList $args -PassThru
 $started = $false

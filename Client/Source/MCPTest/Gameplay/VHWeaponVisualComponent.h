@@ -69,6 +69,12 @@ public:
 	/** 든 무기를 바꾼다 (서버의 무기 번호 0~10, 0 = 맨손) */
 	UFUNCTION(BlueprintCallable, Category = "VaultHeist|Weapon")
 	void SetWeapon(uint8 WeaponId);
+	/**
+	 * 서버 무기 대신 잠깐 붙잡아 둘 무기 (-1 = 없음). 레일건 충전·빔 동안: 마지막 탄이면 서버는 누른 순간 삼단봉으로 바꾸지만
+	 * 화면에서는 빔이 끝날 때까지 레일건을 들고 있게 한다 (UVHServerGameSubsystem 의 레일건 연출)
+	 */
+	void SetHeldWeaponOverride(int32 WeaponId);
+	int32 GetHeldWeaponOverride() const { return HeldWeaponOverride; }
 
 	/** 방에서 고른 캐릭터 번호 (1~5, 0 = 기본). 드는 방법과 보정 값이 이 번호의 칸에서 온다 */
 	UFUNCTION(BlueprintCallable, Category = "VaultHeist|Weapon")
@@ -101,10 +107,10 @@ public:
 	void PlayAttack(uint8 WeaponId);
 	/** 공격 키를 누르고 있는가 (ES_ATTACKING): 화염방사기 겨누기·레일건 충전 자세 */
 	void SetAttackHeld(bool bHeld);
-	/** 레일건 발사 잠금 1초 (ES_RAILGUN_LOCK): 버팀 자세 */
+	/** 레일건 충전·발사 잠금 2초 (ES_RAILGUN_LOCK): 버팀 자세 */
 	void SetRailgunLock(bool bLock);
 	/**
-	 * 레일건 충전 중 (2026-11-20, 내 캐릭터만 — 프로토콜에 충전 상태가 없어 다른 플레이어 표시는 켜지 않는다).
+	 * 레일건 충전 중 (2026-11-22: 서버 SC_FIRE 를 받은 순간부터 1초, 나·다른 플레이어 모두).
 	 * 충전 자세 + 총구에 모이는 빛·충전음(UVHWeaponFxSubsystem). Seconds = 충전 시간(진행도 계산용)
 	 */
 	void SetRailgunCharging(bool bCharging, float Seconds = 1.f);
@@ -250,6 +256,8 @@ protected:
 	bool bHiddenByRoll = false;		// 구르는 동안 (Roll Motion 의 Hide Weapon, 다시 쥐는 때까지)
 	void UpdateRollHide();
 	int32 PendingWeapon = -1;		// 동작이 끝나면 바꿀 무기
+	int32 RequestedWeapon = 0;		// 마지막으로 받은 서버 무기 (붙잡기를 풀면 이것으로)
+	int32 HeldWeaponOverride = -1;	// SetHeldWeaponOverride
 	bool bAttackHeld = false;
 	bool bRailgunLock = false;
 	float HoldAlpha = 0.f;

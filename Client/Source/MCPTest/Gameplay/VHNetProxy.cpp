@@ -286,7 +286,8 @@ void AVHNetProxy::PushSnapshot(double ClientSeconds, const FVector& Pos, float Y
 		Weapon = InWeapon;
 		if (Kind == static_cast<uint8>(EntityKind::Thief))
 		{
-			WeaponVisual->SetWeapon(Weapon);	// 다른 플레이어가 든 무기 (스냅샷의 weapon)
+			// 다른 플레이어가 든 무기 (스냅샷의 weapon). 사제 테이저건을 든 상태(ES_TASER_READY, 2026-11-22)면 테이저건 모델(무기 7번 모양)
+			WeaponVisual->SetWeapon((State & ES_TASER_READY) != 0 ? static_cast<uint8>(WeaponId::Taser) : Weapon);
 			WeaponVisual->SetAttackHeld((State & ES_ATTACKING) != 0 && (State & ES_DOWNED) == 0);	// 꾹 누르기 자세
 			WeaponVisual->SetRailgunLock((State & ES_RAILGUN_LOCK) != 0);						// 레일건 버팀 자세
 			// 몸 동작: 금고·상자 작업(무릎 꿇고 살피기), 경직(감전)

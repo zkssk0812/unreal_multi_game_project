@@ -67,6 +67,10 @@ namespace
 	constexpr float SmokeRadiusCm = 500.f;						// 연막 반경
 	constexpr float SkillTaserRangeCm = 300.f;					// 사제 테이저건 사거리
 	constexpr float StunSeconds = 2.f;							// 경직 (테이저·감전 지뢰)
+	// 레일건 시간 (서버 GameData.h RailgunChargeMs·RailgunBeamMs 와 같은 값. 충전 연출·빔을 서버 판정 시각에 맞춘다)
+	constexpr double RailgunChargeSeconds = 1.0;				// SC_FIRE(누른 순간) → 첫 판정
+	constexpr double RailgunBeamSeconds = 1.0;					// 첫 판정 → 마지막 판정 (200ms × 6)
+	constexpr double RailgunAwaitFireSeconds = 0.6;				// 내 공격 신호 뒤 이 시간 안에 SC_FIRE 가 없으면 끝
 	/**
 	 * 개발용(-VHBotPickTest) 연막탄 줍기 시험 단계. 게임(월드)이 바뀌어도 이어지도록 파일 전역
 	 * 0 = ① 빈손으로 연막탄 줍기, 1 = ② 다른 소비 아이템을 든 채 연막탄, 2 = ③ 연막탄을 든 채 연막탄(서버로 보냄),
@@ -164,7 +168,7 @@ namespace
 	}
 
 	/** 다른 플레이어의 이 상태가 바뀌면 로그로 남긴다 (시험 확인용) */
-	constexpr uint32 LoggedOtherBits = ES_STUNNED | ES_SLOWED | ES_CLOAKED | ES_IN_SMOKE | ES_FLASHED | ES_RAILGUN_LOCK | ES_JETPACK;
+	constexpr uint32 LoggedOtherBits = ES_STUNNED | ES_SLOWED | ES_CLOAKED | ES_IN_SMOKE | ES_FLASHED | ES_RAILGUN_LOCK | ES_JETPACK | ES_TASER_READY;
 
 	FVector ToVector(const Vec3& V) { return FVector(V.x, V.y, V.z); }
 
@@ -576,11 +580,11 @@ void UVHServerGameSubsystem::UpdateMyWeaponVisual()
 	{
 		Visual->SetCharacterId(Me->CharacterId);
 	}
-	// 사제 테이저건을 든 동안은 테이저건 모델(무기 7번 모양)을 손에 든다. 서버는 모르므로 다른 플레이어 화면에서는 원래 무기 그대로
+	// 사제 테이저건을 든 동안(서버 ES_TASER_READY)은 테이저건 모델(무기 7번 모양)을 손에 든다. 다른 플레이어 화면도 같은 비트로 든 모습을 보인다(AVHNetProxy)
 	Visual->SetWeapon(bSkillTaserHeld ? static_cast<uint8>(WeaponId::Taser)
 		: (MyStatus.bValid ? MyStatus.WeaponId[FMath::Clamp(MyStatus.ActiveSlot, 0, 1)] : 0));
-	// 꾹 누르기 자세(화염방사기 겨누기·레일건 충전): 내 캐릭터는 내가 보낸 공격 시작/끝으로 바로 (다른 플레이어는 스냅샷의 ES_ATTACKING)
-	Visual->SetAttackHeld(bAttackHeldSent && !HasSelfState(ES_DOWNED));
+	// 꾹 누르기 자세(화염방사기 겨누기): 내 캐릭터는 내가 보낸 공격 시작/끝으로 바로 (다른 플레이어는 스냅샷의 ES_ATTACKING)
+	ApplyMyAttackHeldVisual();
 }
 
 FString UVHServerGameSubsystem::NameOfEntity(uint16 Id) const
@@ -1309,6 +1313,7 @@ void UVHServerGameSubsystem::RemoveEntity(uint16 Id)
 		return;
 	}
 	UE_LOG(LogVHServerGame, Log, TEXT("엔티티 사라짐 %u: %s"), Id, KindName(E->Kind));
+	CancelRailgunShot(Id, TEXT("쏜 사람이 사라짐"));
 	if (Id == MyDroppedTreasureId)
 	{
 		// 바닥의 내 보물을 누가 주웠다 → 미니맵·방향 표시를 지운다 (누가 주웠는지는 SC_TREASURE_TAKEN 알림·배너가 이미 알림)
@@ -1545,11 +1550,8 @@ void UVHServerGameSubsystem::ApplyObjectState(FEntity& E, uint32 OldState)
 	}
 	else if (AVHReturnPoint* Point = Cast<AVHReturnPoint>(Object))
 	{
-		// Warning 비트 = 서버 기준 등장 50초(ReturnPointServerWarnSeconds). 로컬 시계를 그 시각에 맞춘다(빨강 시작은 ReturnPointRedSeconds = 55초, 표시만)
-		if ((E.State & ES_WARNING) && !(OldState & ES_WARNING))
-		{
-			Point->SetSpawnTime(Sub->GetNow() - UVHSettings::Get().GetGameplayConfig().ReturnPointServerWarnSeconds);
-		}
+		// 빨강(곧 사라짐) = 서버 Warning 비트 그대로 (2026-11-22 팀 서버: 등장 55초 = 사라지기 5초 전). 켜지는 순간 남은 시간도 서버에 맞춘다
+		Point->SetServerWarning((E.State & ES_WARNING) != 0);
 	}
 }
 
@@ -1636,7 +1638,12 @@ void UVHServerGameSubsystem::ApplySelfState(uint32 OldState, uint32 NewState)
 		FlashStartSeconds = FPlatformTime::Seconds();
 		UE_LOG(LogVHServerGame, Log, TEXT("[상태] 나: 섬광! 화면이 하얗게 → %.0f초에 걸쳐 회복"), UVHSettings::Get().GetGameplayConfig().FlashFadeSeconds);
 	}
-	// 레일건 발사 1초: 이동·회전 불가 (서버는 이 동안의 구르기·스킬·소비 아이템을 Locked 로 거절한다)
+	// 사제 테이저건을 든 상태 (서버 판정, 2026-11-22). 보통은 SC_SKILL 이 먼저 와서 이미 맞춰져 있다
+	if (Changed & ES_TASER_READY)
+	{
+		SetSkillTaserHeld((NewState & ES_TASER_READY) != 0, TEXT("서버 상태 비트 TaserReady"));
+	}
+	// 레일건 충전 1초 + 발사 1초: 이동·회전 불가 (서버는 이 동안의 구르기·스킬·소비 아이템·무기 교체를 Locked 로 거절한다)
 	if (Changed & ES_RAILGUN_LOCK)
 	{
 		const bool bLocked = (NewState & ES_RAILGUN_LOCK) != 0;
@@ -1746,8 +1753,8 @@ void UVHServerGameSubsystem::ApplySnapshot(const SC_Snapshot& P)
 		}
 		if (E->Kind == EntityKind::Thief && E->Id != SelfEntityId && ((OldState ^ S.state) & LoggedOtherBits))
 		{
-			UE_LOG(LogVHServerGame, Log, TEXT("[상태] %s: 0x%06x → 0x%06x (경직 %d, 감속 %d, 은신 %d, 연막 %d)%s"), *NameForPlayer(E->Owner), OldState, S.state,
-				(S.state & ES_STUNNED) ? 1 : 0, (S.state & ES_SLOWED) ? 1 : 0, (S.state & ES_CLOAKED) ? 1 : 0, (S.state & ES_IN_SMOKE) ? 1 : 0,
+			UE_LOG(LogVHServerGame, Log, TEXT("[상태] %s: 0x%06x → 0x%06x (경직 %d, 감속 %d, 은신 %d, 연막 %d, 레일건 잠금 %d, 테이저 듦 %d, 화면 손 무기 %d)%s"), *NameForPlayer(E->Owner), OldState, S.state,
+				(S.state & ES_STUNNED) ? 1 : 0, (S.state & ES_SLOWED) ? 1 : 0, (S.state & ES_CLOAKED) ? 1 : 0, (S.state & ES_IN_SMOKE) ? 1 : 0, (S.state & ES_RAILGUN_LOCK) ? 1 : 0, (S.state & ES_TASER_READY) ? 1 : 0, (E->Proxy.IsValid() && E->Proxy->GetWeaponVisual()) ? (int32)E->Proxy->GetWeaponVisual()->GetWeapon() : -1,
 				(E->Proxy.IsValid() && E->Proxy->IsHiddenByState()) ? TEXT(" → 화면에서 숨김") : TEXT(""));
 		}
 		if (E->Kind == EntityKind::Box)
@@ -2076,6 +2083,20 @@ void UVHServerGameSubsystem::OnSkill(const SC_Skill& P)
 	switch (P.skill)
 	{
 	case SkillId::Taser:
+		// 사제 테이저건 (2026-11-22 팀 서버): 들기 = Active, 발사 = Cast(쿨타임 시작), 쏘지 않고 집어넣음 = End. 내 손 모양은 바로 바꾼다(스냅샷의 ES_TASER_READY 도 같은 뜻)
+		if (bMe)
+		{
+			SetSkillTaserHeld(P.phase == SkillPhase::Active,
+				P.phase == SkillPhase::Active ? TEXT("서버 SC_SKILL 들기") : (P.phase == SkillPhase::Cast ? TEXT("서버 SC_SKILL 발사") : TEXT("서버 SC_SKILL 집어넣기")));
+		}
+		else if (UVHWeaponVisualComponent* Caster = VisualOfEntity(P.caster); Caster && P.phase != SkillPhase::Active)
+		{
+			// 다른 플레이어: 발사·집어넣기 순간 손 무기를 바로 원래대로 (다음 스냅샷을 기다리지 않음). 드는 모습은 스냅샷 비트로
+			if (const FEntity* E = Entities.Find(P.caster))
+			{
+				Caster->SetWeapon(static_cast<uint8>(E->Weapon));
+			}
+		}
 		if (P.phase == SkillPhase::Cast)
 		{
 			// 사제 테이저건: 시선 방향 3m 직선 (맞았는지는 SC_DAMAGE 와 대상의 경직 상태로 온다)
@@ -2403,14 +2424,12 @@ void UVHServerGameSubsystem::OnFire(const SC_Fire& P)
 		*NameOfEntity(P.shooter), WeaponName(P.weapon), P.yaw, *NameOfEntity(P.hit_entity));
 	++FiresSeen;
 
-	// 레일건 충전 뒤 신호를 보냈고, 서버가 발사했다 → 충전 표시를 끄고(발사음·빔이 같은 프레임에) 손을 뗀 것으로 알린다
-	if (P.shooter == SelfEntityId && P.weapon == WeaponId::Railgun && RailCharge == ERailCharge::AwaitFire)
+	// 내 레일건: 서버가 누른 순간 발사(SC_FIRE, 충전 시작)했다 → 클릭 한 번 = 한 발이므로 손을 뗀 것으로 알린다
+	if (P.shooter == SelfEntityId && P.weapon == WeaponId::Railgun && bRailAwaitFire)
 	{
 		const double Now = FPlatformTime::Seconds();
-		UE_LOG(LogVHServerGame, Log, TEXT("[레일건] 서버 발사 판정 SC_FIRE (신호 후 %.0fms, 클릭 후 %.0fms, 서버 yaw %.0f, 맞은 대상 %s)"),
-			(Now - RailSendTime) * 1000.0, (Now - RailClickTime) * 1000.0, P.yaw, *NameOfEntity(P.hit_entity));
-		RailCharge = ERailCharge::None;
-		SetMyRailgunChargeVisual(false);
+		UE_LOG(LogVHServerGame, Log, TEXT("[레일건] 서버 SC_FIRE (클릭 후 %.0fms, 서버 yaw %.0f) → 충전 1초 시작"), (Now - RailClickTime) * 1000.0, P.yaw);
+		bRailAwaitFire = false;
 		if (bAttackHeldSent)
 		{
 			bAttackHeldSent = false;
@@ -2434,6 +2453,31 @@ void UVHServerGameSubsystem::OnFire(const SC_Fire& P)
 		else if (const FEntity* Shooter = Entities.Find(P.shooter); Shooter && Shooter->Proxy.IsValid())
 		{
 			ShooterVisual = Shooter->Proxy->GetWeaponVisual();
+		}
+		// 레일건 (2026-11-22 팀 서버): SC_FIRE = 누른 순간(충전 시작). 1초 충전 연출(소리·빛) 뒤 서버 첫 판정 시각에 발사 동작·소리·빔 (TickRailgunShots).
+		// 나·다른 플레이어 모두 같은 방식이라 다른 사람의 충전도 보인다. 빔이 끝날 때까지 손에 레일건을 붙잡아 둔다(마지막 탄이면 서버 무기는 이미 삼단봉)
+		if (P.weapon == WeaponId::Railgun)
+		{
+			CancelRailgunShot(P.shooter, TEXT("새 발사"));	// (같은 사람의 이전 연출이 남아 있으면 정리)
+			FRailShot Shot;
+			Shot.Shooter = P.shooter;
+			Shot.Origin = ToVector(P.origin);
+			Shot.Yaw = P.yaw;
+			const double Now = FPlatformTime::Seconds();
+			Shot.FireAt = Now + RailgunChargeSeconds;
+			Shot.ReleaseAt = Shot.FireAt + RailgunBeamSeconds;
+			Shot.Visual = ShooterVisual;
+			if (ShooterVisual)
+			{
+				ShooterVisual->SetHeldWeaponOverride(static_cast<int32>(WeaponId::Railgun));
+				ShooterVisual->SetRailgunCharging(true, static_cast<float>(RailgunChargeSeconds));
+			}
+			PendingRailShots.Add(Shot);
+			if (P.shooter != SelfEntityId)
+			{
+				UE_LOG(LogVHServerGame, Log, TEXT("[레일건] %s SC_FIRE → 충전 연출 1초 (yaw %.0f)"), *NameOfEntity(P.shooter), P.yaw);
+			}
+			return;
 		}
 		if (ShooterVisual)
 		{
@@ -2511,6 +2555,7 @@ void UVHServerGameSubsystem::OnDowned(const SC_Downed& P)
 	{
 		UVHSoundConfig::Play(this, EVHSound::Downed, V->Pos);
 	}
+	CancelRailgunShot(P.victim, TEXT("충전 중 쓰러짐"));	// 충전 중이면 서버도 쏘지 않는다 (빔이 이미 나갔으면 빔만 정리)
 	const bool bByGuard = P.cause == DownCause::Guard;
 	UE_LOG(LogVHServerGame, Log, TEXT("[서버] 쓰러짐: %s ← %s (%s), 잃은 반납 금액 %u$, 리스폰 %ums"),
 		*NameOfEntity(P.victim), *NameOfEntity(P.attacker), bByGuard ? TEXT("경비원") : TEXT("플레이어"), P.lost_banked, P.respawn_ms);
@@ -2826,11 +2871,11 @@ void UVHServerGameSubsystem::OnReject(const SC_ActionReject& P)
 		break;
 	case ActionType::AttackStart:
 		bAttackHeldSent = false;
-		if (RailCharge == ERailCharge::AwaitFire)
+		bTaserShotPress = false;
+		if (bRailAwaitFire)
 		{
-			RailCharge = ERailCharge::None;
-			SetMyRailgunChargeVisual(false);
-			UE_LOG(LogVHServerGame, Log, TEXT("[레일건] 공격 신호 거절됨 (reason %d) → 충전 끝"), (int32)P.reason);
+			bRailAwaitFire = false;
+			UE_LOG(LogVHServerGame, Log, TEXT("[레일건] 공격 신호 거절됨 (reason %d) → 발사 없음"), (int32)P.reason);
 		}
 		ApplyMyAttackHeldVisual();
 		Sub->PostMessage(Detail.IsEmpty() ? LOCTEXT("AttackRejected", "지금은 공격할 수 없습니다") : Detail, true);
@@ -2965,93 +3010,51 @@ uint8 UVHServerGameSubsystem::MyActiveWeapon() const
 	return MyStatus.bValid ? MyStatus.WeaponId[FMath::Clamp(MyStatus.ActiveSlot, 0, 1)] : 0;
 }
 
-void UVHServerGameSubsystem::SetMyRailgunChargeVisual(bool bCharging)
+bool UVHServerGameSubsystem::IsRailgunCharging() const
 {
-	const APawn* Pawn = GetLocalPawn();
-	if (UVHWeaponVisualComponent* Visual = Pawn ? Pawn->FindComponentByClass<UVHWeaponVisualComponent>() : nullptr)
+	if (bRailAwaitFire)
 	{
-		Visual->SetRailgunCharging(bCharging, RailChargeSeconds);
+		return true;
 	}
+	return PendingRailShots.ContainsByPredicate([this](const FRailShot& S) { return S.Shooter == SelfEntityId && !S.bFired; });
 }
 
-void UVHServerGameSubsystem::StartRailgunCharge()
+void UVHServerGameSubsystem::CancelRailgunShot(uint16 Shooter, const TCHAR* Reason)
 {
-	RailCharge = ERailCharge::Charging;
-	RailClickTime = FPlatformTime::Seconds();
-	RailChargeSeconds = UVHSettings::Get().GetWeaponCatalog().RailgunChargeSeconds;
-	SetMyRailgunChargeVisual(true);
-	UE_LOG(LogVHServerGame, Log, TEXT("[레일건] 클릭 → 충전 시작 (%.2f초 뒤 공격 신호, 이동은 그대로)"), RailChargeSeconds);
-}
-
-void UVHServerGameSubsystem::CancelRailgunCharge(const TCHAR* Reason)
-{
-	if (RailCharge == ERailCharge::None)
+	for (int32 i = PendingRailShots.Num() - 1; i >= 0; --i)
 	{
-		return;
-	}
-	const ERailCharge Was = RailCharge;
-	RailCharge = ERailCharge::None;
-	RailLastCancel = Reason;
-	SetMyRailgunChargeVisual(false);
-	if (Was == ERailCharge::AwaitFire && bAttackHeldSent)
-	{
-		// 이미 공격 신호를 보냈다면 손을 뗀 것도 알린다 (서버가 계속 쏘지 않게)
-		bAttackHeldSent = false;
-		if (UVHNetSubsystem* N = Net.Get())
+		FRailShot& S = PendingRailShots[i];
+		if (S.Shooter != Shooter)
 		{
-			N->SendAction(ActionType::AttackStop, GetLookYaw(), 0);
+			continue;
 		}
+		const bool bWasCharging = !S.bFired;
+		if (UVHWeaponVisualComponent* V = S.Visual.Get())
+		{
+			V->SetRailgunCharging(false);
+			V->SetHeldWeaponOverride(-1);
+		}
+		if (bWasCharging)
+		{
+			UE_LOG(LogVHServerGame, Log, TEXT("[레일건] %s 충전 연출 취소: %s (SC_FIRE 후 %.0fms, 서버도 발사하지 않음)"), *NameOfEntity(Shooter), Reason,
+				(FPlatformTime::Seconds() - (S.FireAt - RailgunChargeSeconds)) * 1000.0);
+			if (Shooter == SelfEntityId)
+			{
+				RailLastCancel = Reason;
+			}
+		}
+		PendingRailShots.RemoveAt(i);
 	}
-	UE_LOG(LogVHServerGame, Log, TEXT("[레일건] 충전 취소: %s (클릭 후 %.0fms%s)"), Reason, (FPlatformTime::Seconds() - RailClickTime) * 1000.0,
-		Was == ERailCharge::AwaitFire ? TEXT(", 신호는 이미 보냄") : TEXT(", 신호 보내지 않음"));
 }
 
-void UVHServerGameSubsystem::TickRailgunCharge()
+void UVHServerGameSubsystem::TickRailgunShots()
 {
-	if (RailCharge == ERailCharge::None)
-	{
-		return;
-	}
 	const double Now = FPlatformTime::Seconds();
-	if (RailCharge == ERailCharge::Charging)
+	// 내 공격 신호를 보냈는데 0.6초 안에 서버 발사(SC_FIRE)가 없으면 끝낸다 (거절·가짜 서버 등)
+	if (bRailAwaitFire && Now - RailClickTime > RailgunAwaitFireSeconds)
 	{
-		// 취소: 무기 교체(서버 상태로 든 무기가 바뀜)·쓰러짐(사망)·경직(기절·감전). 이동·구르기는 그대로
-		// (쓰러지면 서버가 HP 0 과 빈 무기 칸을 같은 상태 패킷으로 보낸다 → 무기보다 먼저 본다)
-		if (HasSelfState(ES_DOWNED) || (MyStatus.bValid && MyStatus.Hp <= 0)) { CancelRailgunCharge(TEXT("쓰러짐(사망)")); return; }
-		if (MyActiveWeapon() != static_cast<uint8>(WeaponId::Railgun)) { CancelRailgunCharge(TEXT("무기 교체")); return; }
-		if (HasSelfState(ES_STUNNED)) { CancelRailgunCharge(TEXT("기절·감전(경직)")); return; }
-		if (Now - RailClickTime < RailChargeSeconds)
-		{
-			return;
-		}
-		// 충전 끝: 지금 커서 방향으로 공격 신호 (서버는 마지막 CS_MOVE 위치·이 yaw 로 판정한다)
-		UVHNetSubsystem* N = Net.Get();
-		if (!N || !bActive)
-		{
-			CancelRailgunCharge(TEXT("연결 없음"));
-			return;
-		}
-		SendCurrentPositionNow();
-		const float Yaw = GetLookYaw();
-		const uint16 Seq = N->SendAction(ActionType::AttackStart, Yaw, 0, GetAimPoint());
-		if (Seq == 0)
-		{
-			CancelRailgunCharge(TEXT("보내기 실패"));
-			return;
-		}
-		bAttackHeldSent = true;
-		LastOwnActionSentTime = Now;
-		RailCharge = ERailCharge::AwaitFire;
-		RailSendTime = Now;
-		UE_LOG(LogVHServerGame, Log, TEXT("[레일건] 충전 %.0fms → 공격 신호 전송 (AttackStart seq %u, yaw %.0f)"), (Now - RailClickTime) * 1000.0, Seq, Yaw);
-		return;
-	}
-	// 신호를 보냈는데 0.6초 안에 서버 발사(SC_FIRE)가 없으면 끝낸다 (가짜 서버 등)
-	if (Now - RailSendTime > 0.6)
-	{
-		UE_LOG(LogVHServerGame, Warning, TEXT("[레일건] 공격 신호 후 %.0fms 동안 서버 발사가 없음 → 공격 끝"), (Now - RailSendTime) * 1000.0);
-		RailCharge = ERailCharge::None;
-		SetMyRailgunChargeVisual(false);
+		UE_LOG(LogVHServerGame, Warning, TEXT("[레일건] 공격 신호 후 %.0fms 동안 서버 발사(SC_FIRE)가 없음 → 공격 끝"), (Now - RailClickTime) * 1000.0);
+		bRailAwaitFire = false;
 		if (bAttackHeldSent)
 		{
 			bAttackHeldSent = false;
@@ -3059,6 +3062,63 @@ void UVHServerGameSubsystem::TickRailgunCharge()
 			{
 				N->SendAction(ActionType::AttackStop, GetLookYaw(), 0);
 			}
+			ApplyMyAttackHeldVisual();
+		}
+	}
+	for (int32 i = PendingRailShots.Num() - 1; i >= 0; --i)
+	{
+		FRailShot& S = PendingRailShots[i];
+		const FEntity* Shooter = Entities.Find(S.Shooter);
+		if (!S.bFired)
+		{
+			// 충전 중 쏜 사람이 쓰러지면 서버는 발사하지 않는다 (서버 W-17)
+			if (!Shooter)
+			{
+				CancelRailgunShot(S.Shooter, TEXT("쏜 사람이 사라짐"));
+				continue;
+			}
+			if ((Shooter->State & ES_DOWNED) != 0 || (S.Shooter == SelfEntityId && HasSelfState(ES_DOWNED)))
+			{
+				CancelRailgunShot(S.Shooter, TEXT("충전 중 쓰러짐"));
+				continue;
+			}
+			if (Now < S.FireAt)
+			{
+				continue;
+			}
+			// 충전 끝 = 서버 첫 판정: 발사 동작·소리·빔 (빔은 서버가 판정하는 1초 동안)
+			S.bFired = true;
+			UVHWeaponVisualComponent* V = S.Visual.Get();
+			if (V)
+			{
+				V->SetRailgunCharging(false);
+				V->PlayAttack(static_cast<uint8>(WeaponId::Railgun));
+			}
+			const FVector At = V && V->GetOwner() ? V->GetOwner()->GetActorLocation() : S.Origin;
+			UVHSoundConfig::Play(this, UVHSoundConfig::FireSound(static_cast<uint8>(WeaponId::Railgun)), At);
+			if (UVHWeaponFxSubsystem* Fx = UVHWeaponFxSubsystem::Get(this))
+			{
+				Fx->OnFire(static_cast<uint8>(WeaponId::Railgun), S.Origin, S.Yaw, nullptr, V);
+			}
+			if (S.Shooter == SelfEntityId)
+			{
+				++RailBeamsSeen;
+				UE_LOG(LogVHServerGame, Log, TEXT("[레일건] 충전 끝 → 빔 (클릭 후 %.0fms, SC_FIRE 후 %.0fms, yaw %.0f)"), (Now - RailClickTime) * 1000.0,
+					(Now - (S.FireAt - RailgunChargeSeconds)) * 1000.0, S.Yaw);
+			}
+			else
+			{
+				UE_LOG(LogVHServerGame, Log, TEXT("[레일건] %s 충전 끝 → 빔 (yaw %.0f)"), *NameOfEntity(S.Shooter), S.Yaw);
+			}
+			continue;
+		}
+		if (Now >= S.ReleaseAt)
+		{
+			if (UVHWeaponVisualComponent* V = S.Visual.Get())
+			{
+				V->SetHeldWeaponOverride(-1);	// 빔 끝: 서버 무기로 (마지막 탄이었으면 이제 삼단봉)
+			}
+			PendingRailShots.RemoveAt(i);
 		}
 	}
 }
@@ -3070,36 +3130,53 @@ void UVHServerGameSubsystem::SendAttackHeld(bool bHeld)
 	{
 		return;
 	}
-	// 사제 테이저건을 든 동안: 좌클릭 = 테이저 발사(스킬 사용 신호). 다른 무기 공격(AttackStart)은 보내지 않는다
-	if (bSkillTaserHeld)
+	// 사제 테이저건을 든 동안: 공격 키 = 테이저 발사. 서버가 AttackStart 를 받으면 무기 대신 테이저를 쏘고(SC_SKILL Cast) 누름을 지운다.
+	// 이 누름은 무기 공격이 아니므로 꾹 누르기 자세는 보이지 않는다(bTaserShotPress). 손을 떼면 AttackStop 은 그대로 보낸다(서버에서는 아무 일 없음)
+	if (bHeld && bSkillTaserHeld)
+	{
+		SendCurrentPositionNow();	// 서버는 마지막 CS_MOVE 위치와 이 yaw 로 3m 판정한다
+		if (N->SendAction(ActionType::AttackStart, GetLookYaw(), 0, GetAimPoint()) != 0)
+		{
+			bAttackHeldSent = true;
+			bTaserShotPress = true;
+			LastOwnActionSentTime = FPlatformTime::Seconds();
+			UE_LOG(LogVHServerGame, Log, TEXT("[테이저] 든 채 공격 키 → AttackStart (서버가 테이저 발사) yaw %.0f"), GetLookYaw());
+		}
+		ApplyMyAttackHeldVisual();
+		return;
+	}
+	// 레일건: 클릭 한 번 = 한 발. 누르는 즉시 AttackStart → 서버가 바로 SC_FIRE(충전 시작). 내 SC_FIRE 를 받으면 AttackStop 을 보낸다(OnFire).
+	// SC_FIRE 를 기다리는 동안 손을 떼도 AttackStop 을 미룬다 (같은 틱에 누름·뗌이 모두 처리되면 서버가 쏘지 않으므로)
+	if (bRailAwaitFire)
 	{
 		if (bHeld)
 		{
-			FireSkillTaser();
+			UE_LOG(LogVHServerGame, Log, TEXT("[레일건] 서버 발사를 기다리는 중 클릭 → 무시"));
 		}
 		return;
 	}
-	// 레일건: 클릭 한 번 = 충전 1초 → 한 발. 충전·신호 대기 중에는 다시 누르기·손 떼기를 무시한다
-	if (RailCharge != ERailCharge::None)
-	{
-		if (bHeld)
-		{
-			UE_LOG(LogVHServerGame, Log, TEXT("[레일건] 충전 중 클릭 → 무시"));
-		}
-		return;
-	}
-	if (bHeld && MyActiveWeapon() == static_cast<uint8>(WeaponId::Railgun) && UVHSettings::Get().GetWeaponCatalog().RailgunChargeSeconds > 0.f)
+	if (bHeld && MyActiveWeapon() == static_cast<uint8>(WeaponId::Railgun))
 	{
 		if (HasSelfState(ES_RAILGUN_LOCK))
 		{
-			UE_LOG(LogVHServerGame, Log, TEXT("[레일건] 발사 잠금(1초) 중 클릭 → 무시"));
+			UE_LOG(LogVHServerGame, Log, TEXT("[레일건] 충전·발사 잠금(2초) 중 클릭 → 무시"));
 			return;
 		}
 		if (HasSelfState(ES_DOWNED) || HasSelfState(ES_STUNNED))
 		{
 			return;
 		}
-		StartRailgunCharge();
+		SendCurrentPositionNow();
+		const float Yaw = GetLookYaw();
+		const uint16 Seq = N->SendAction(ActionType::AttackStart, Yaw, 0, GetAimPoint());
+		if (Seq != 0)
+		{
+			bAttackHeldSent = true;
+			bRailAwaitFire = true;
+			RailClickTime = FPlatformTime::Seconds();
+			LastOwnActionSentTime = RailClickTime;
+			UE_LOG(LogVHServerGame, Log, TEXT("[레일건] 클릭 → 공격 신호 바로 전송 (AttackStart seq %u, yaw %.0f) — 충전은 서버 SC_FIRE 부터 1초"), Seq, Yaw);
+		}
 		return;
 	}
 	if (bHeld)
@@ -3119,7 +3196,11 @@ void UVHServerGameSubsystem::SendAttackHeld(bool bHeld)
 		N->SendAction(ActionType::AttackStop, GetLookYaw(), 0);
 		UE_LOG(LogVHServerGame, Log, TEXT("→ 공격 끝"));
 	}
-	// 꾹 누르기 표시(화염방사기 불꽃·레일건 충전)를 보낸 그 순간 바로 맞춘다.
+	if (!bHeld)
+	{
+		bTaserShotPress = false;
+	}
+	// 꾹 누르기 표시(화염방사기 불꽃)를 보낸 그 순간 바로 맞춘다.
 	// (예전에는 SC_PLAYER_STATUS 가 올 때만 맞춰서, 빠르게 연타하면 마지막 '공격 끝' 뒤에 상태 패킷이 오지 않아 불꽃이 켜진 채 남았다)
 	ApplyMyAttackHeldVisual();
 }
@@ -3204,7 +3285,8 @@ void UVHServerGameSubsystem::ApplyMyAttackHeldVisual()
 	const APawn* Pawn = GetLocalPawn();
 	if (UVHWeaponVisualComponent* Visual = Pawn ? Pawn->FindComponentByClass<UVHWeaponVisualComponent>() : nullptr)
 	{
-		Visual->SetAttackHeld(bAttackHeldSent && !HasSelfState(ES_DOWNED));
+		// 테이저건을 든 채 누른 공격 키는 테이저 한 발이라 무기의 꾹 누르기 자세(화염방사기 불꽃 등)를 보이지 않는다
+		Visual->SetAttackHeld(bAttackHeldSent && !bTaserShotPress && !HasSelfState(ES_DOWNED));
 	}
 }
 
@@ -3220,20 +3302,11 @@ void UVHServerGameSubsystem::SendDodge()
 
 void UVHServerGameSubsystem::SendSwitchWeapon()
 {
-	if (bSkillTaserHeld)
-	{
-		// 테이저건을 든 채 휠: 테이저건만 내려놓고 원래 무기로 (무기 칸은 바꾸지 않는다)
-		SetSkillTaserHeld(false, TEXT("마우스 휠 → 내려놓음 (쿨타임 안 돎)"));
-		return;
-	}
-	if (RailCharge == ERailCharge::Charging)
-	{
-		CancelRailgunCharge(TEXT("무기 교체"));	// 휠을 굴린 순간 바로 (서버 상태를 기다리지 않음)
-	}
+	// 테이저건을 든 채 휠: 서버가 무기를 바꾸고 테이저건을 집어넣는다(SC_SKILL End, 쿨타임 없음). 레일건 충전·발사 중이면 서버가 Locked 로 거절한다
 	if (UVHNetSubsystem* N = Net.Get(); N && bActive)
 	{
 		N->SendAction(ActionType::SwitchWeapon, GetLookYaw(), 0);
-		UE_LOG(LogVHServerGame, Log, TEXT("→ 무기 교체"));
+		UE_LOG(LogVHServerGame, Log, TEXT("→ 무기 교체%s"), bSkillTaserHeld ? TEXT(" (테이저건 든 상태 → 서버가 집어넣음)") : TEXT(""));
 	}
 }
 
@@ -3269,14 +3342,17 @@ void UVHServerGameSubsystem::PressSkillKey()
 		SendUseSkill();
 		return;
 	}
+	// 사제 테이저건: Q = UseSkill. 든 상태면 서버가 집어넣고(End), 아니면 든다(Active). 손에 드는 모습은 서버 응답(SC_SKILL·ES_TASER_READY)으로 바뀐다
 	if (bSkillTaserHeld)
 	{
-		SetSkillTaserHeld(false, TEXT("스킬 키 다시 누름 → 원래 무기 (신호 없음, 쿨타임 안 돎)"));
+		UE_LOG(LogVHServerGame, Log, TEXT("[테이저] 든 채 Q → UseSkill (서버가 집어넣음, 쿨타임 없음)"));
+		SendUseSkill();
 		return;
 	}
 	const float Cooldown = GetSkillCooldownRemaining();
 	if (Cooldown > 0.f)
 	{
+		// 서버도 Cooldown 으로 거절한다. 보내지 않고 남은 시간만 알린다 (서버가 알려 준 쿨타임 기준)
 		UE_LOG(LogVHServerGame, Log, TEXT("[테이저] 들기 안 됨: 쿨타임 %.1f초 남음"), Cooldown);
 		if (UVHMatchSubsystem* Match = GetMatch())
 		{
@@ -3284,20 +3360,13 @@ void UVHServerGameSubsystem::PressSkillKey()
 		}
 		return;
 	}
-	if (HasSelfState(ES_DOWNED | ES_STUNNED | ES_JETPACK | ES_RAILGUN_LOCK))
-	{
-		UE_LOG(LogVHServerGame, Log, TEXT("[테이저] 들기 안 됨: 내 상태 0x%06x (쓰러짐·경직·제트팩·레일건 잠금)"), SelfState);
-		return;
-	}
-	if (RailCharge == ERailCharge::Charging)
-	{
-		CancelRailgunCharge(TEXT("사제 테이저건 들기"));
-	}
 	if (bAttackHeldSent)
 	{
-		SendAttackHeld(false);	// 들고 있던 무기 공격을 멈춘다 (테이저 상태로 바꾸기 전에)
+		// 서버는 든 순간 공격 키가 눌려 있으면 바로 테이저를 쏜다 → 들고 있던 무기 공격을 먼저 멈춘다
+		SendAttackHeld(false);
 	}
-	SetSkillTaserHeld(true, TEXT("스킬 키 → 사제 테이저건 들기 (쏘지 않음, 신호 없음)"));
+	UE_LOG(LogVHServerGame, Log, TEXT("[테이저] Q → UseSkill (서버가 들기)"));
+	SendUseSkill();
 }
 
 void UVHServerGameSubsystem::SetSkillTaserHeld(bool bHeld, const TCHAR* Why)
@@ -3307,29 +3376,8 @@ void UVHServerGameSubsystem::SetSkillTaserHeld(bool bHeld, const TCHAR* Why)
 		return;
 	}
 	bSkillTaserHeld = bHeld;
-	UE_LOG(LogVHServerGame, Log, TEXT("[테이저] %s | 쿨타임 남음 %.1f초"), Why, GetSkillCooldownRemaining());
+	UE_LOG(LogVHServerGame, Log, TEXT("[테이저] %s → %s | 쿨타임 남음 %.1f초"), Why, bHeld ? TEXT("손에 듦") : TEXT("집어넣음"), GetSkillCooldownRemaining());
 	UpdateMyWeaponVisual();
-}
-
-void UVHServerGameSubsystem::FireSkillTaser()
-{
-	const float Yaw = GetLookYaw();
-	// 원래 무기로 먼저 돌린 뒤 스킬 사용 신호 (SendUseSkill 이 바로 앞에 CS_MOVE 로 지금 커서 방향을 보낸다 → 서버는 그 yaw 로 3m 판정, 그때부터 쿨타임)
-	SetSkillTaserHeld(false, TEXT("좌클릭 → 발사, 원래 무기로"));
-	UE_LOG(LogVHServerGame, Log, TEXT("[테이저] 발사 신호 yaw %.0f"), Yaw);
-	SendUseSkill();
-}
-
-void UVHServerGameSubsystem::TickSkillTaser()
-{
-	if (!bSkillTaserHeld)
-	{
-		return;
-	}
-	if (HasSelfState(ES_DOWNED) || (MyStatus.bValid && MyStatus.Hp <= 0)) { SetSkillTaserHeld(false, TEXT("쓰러짐 → 내려놓음")); return; }
-	if (HasSelfState(ES_STUNNED)) { SetSkillTaserHeld(false, TEXT("경직 → 내려놓음")); return; }
-	if (HasSelfState(ES_JETPACK | ES_RAILGUN_LOCK)) { SetSkillTaserHeld(false, TEXT("제트팩·레일건 잠금 → 내려놓음")); return; }
-	if (MyStatus.Skill != static_cast<uint8>(SkillId::Taser)) { SetSkillTaserHeld(false, TEXT("스킬이 테이저가 아님 → 내려놓음")); return; }
 }
 
 void UVHServerGameSubsystem::SendUseConsumable()
@@ -3386,8 +3434,7 @@ void UVHServerGameSubsystem::Tick(float DeltaTime)
 				HasMyPerk(VHPerk::Sneakers) ? UVHSettings::Get().GetGameplayConfig().SneakersRunScale : 1.f, GetMyWorkSpeed());
 		}
 	}
-	TickRailgunCharge();
-	TickSkillTaser();
+	TickRailgunShots();
 	TickBotWalk(DeltaTime);
 	SendMoveIfNeeded();
 	// 개발용 흉내로 만든 엔티티(지뢰·연막·끈끈이)는 시간이 지나면 지운다
@@ -3935,12 +3982,104 @@ void UVHServerGameSubsystem::TickBotHunt(float DeltaTime)
 	}
 }
 
+void UVHServerGameSubsystem::TickBotTaserTest(float DeltaTime)
+{
+	// 실서버에서 사제 테이저건(2026-11-22 팀 서버 판정)을 사람 손 없이 시험한다. 로그 [테이저 시험]
+	//  서 있는 다른 플레이어(-VHBotStill) 2m 앞 → 1초 Q 들기 → 2초 Q 넣기(쿨타임 0이어야) → 3초 Q 들기 → 4초 공격 키(0.1초) → 5초 결과(쿨타임 ~29초, 대상 경직)
+	APawn* Pawn = GetLocalPawn();
+	if (!Pawn || !MyStatus.bValid)
+	{
+		return;
+	}
+	const double Now = FPlatformTime::Seconds();
+	const float T = static_cast<float>(Now - TaserTestT0);
+	const FEntity* Target = TaserTestTarget ? Entities.Find(TaserTestTarget) : nullptr;
+	auto Face = [&]()
+	{
+		if (!Target)
+		{
+			return;
+		}
+		const float Half = GetPawnHalfHeight(Pawn);
+		const FVector Foot = Pawn->GetActorLocation() - FVector(0.f, 0.f, Half);
+		const float Yaw = (Target->Pos - Foot).Rotation().Yaw;
+		if (UVHAimComponent* Aim = Pawn->FindComponentByClass<UVHAimComponent>())
+		{
+			Aim->SnapLookYaw(Yaw);
+		}
+		Pawn->SetActorRotation(FRotator(0.f, Yaw, 0.f));
+		SendCurrentPositionNow();
+	};
+	auto Report = [&](const TCHAR* What)
+	{
+		UE_LOG(LogVHServerGame, Log, TEXT("[테이저 시험] %s: 든 상태 %d (내 비트 TaserReady %d), 쿨타임 %.1f초, 대상 %s HP %d 경직 %d"), What,
+			bSkillTaserHeld ? 1 : 0, HasSelfState(ES_TASER_READY) ? 1 : 0, GetSkillCooldownRemaining(),
+			*NameForPlayer(Target ? Target->Owner : 0), Target ? (int32)Target->Hp : -1, (Target && (Target->State & ES_STUNNED)) ? 1 : 0);
+	};
+	switch (TaserTestStage)
+	{
+	case 0:
+	{
+		if (MyStatus.Skill != static_cast<uint8>(SkillId::Taser))
+		{
+			return;	// 도적1이 아님 (-VHBotChar=1)
+		}
+		const FEntity* Best = nullptr;
+		for (const TPair<uint16, FEntity>& Pair : Entities)
+		{
+			if (Pair.Value.Kind == EntityKind::Thief && Pair.Value.Id != SelfEntityId && !(Pair.Value.State & (ES_DOWNED | ES_LEFT_GAME)))
+			{
+				Best = &Pair.Value;
+			}
+		}
+		if (!Best || HasSelfState(ES_DOWNED))
+		{
+			return;
+		}
+		TaserTestTarget = Best->Id;
+		Target = Best;
+		const float Half = GetPawnHalfHeight(Pawn);
+		for (int32 Try = 0; Try < 8; ++Try)
+		{
+			const FVector Cand = Best->Pos + FRotator(0.f, 45.f * Try, 0.f).Vector() * 200.f;
+			if (Pawn->TeleportTo(Cand + FVector(0.f, 0.f, Half + 2.f), Pawn->GetActorRotation()))
+			{
+				break;
+			}
+		}
+		Face();
+		TaserTestT0 = Now;
+		TaserTestStage = 1;
+		Report(TEXT("0) 대상 2m 앞"));
+		return;
+	}
+	case 1: if (T >= 1.f) { Report(TEXT("1) Q 누르기 전")); PressSkillKey(); TaserTestStage = 2; } return;
+	case 2: if (T >= 2.f) { Report(TEXT("2) Q 들기 1초 뒤 (든 상태 1이어야) → Q 다시")); PressSkillKey(); TaserTestStage = 3; } return;
+	case 3: if (T >= 3.f) { Report(TEXT("3) Q 넣기 1초 뒤 (든 상태 0, 쿨타임 0이어야) → Q 들기")); PressSkillKey(); TaserTestStage = 4; } return;
+	case 4:
+		if (T >= 4.f)
+		{
+			Face();
+			Report(TEXT("4) 들고 1초 (든 상태 1) → 공격 키"));
+			SendAttackHeld(true);
+			TaserTestStage = 5;
+		}
+		return;
+	case 5: if (T >= 4.1f) { SendAttackHeld(false); TaserTestStage = 6; } return;
+	case 6: if (T >= 4.6f) { Report(TEXT("5) 발사 0.5초 뒤 (든 상태 0, 쿨타임 약 29.5초, 대상 경직 1이어야)")); TaserTestStage = 7; } return;
+	case 7: if (T >= 5.f) { Report(TEXT("6) 쿨타임 중 Q (서버에 보내지 않고 알림만)")); PressSkillKey(); TaserTestStage = 8; } return;
+	case 8: if (T >= 7.f) { Report(TEXT("7) 끝 (대상 경직 2초가 풀렸어야)")); TaserTestStage = 9; } return;
+	default:
+		return;
+	}
+}
+
 void UVHServerGameSubsystem::TickBotRailTest(float DeltaTime)
 {
 	// 실서버에서 레일건 충전 발사를 사람 손 없이 시험한다 (서버는 클라 위치를 검사하지 않으므로 순간 이동을 쓴다).
 	//  0) 레일건 얻기: 바닥의 레일건 → 없으면 가까운 상자를 연다 (상자 하나에 약 3.9%: 무기 35% × 9종 중 1)
-	//  1) 서 있는 다른 플레이어(-VHBotStill) 5m 앞에서 일부러 35° 비껴 클릭 → 0.1초 손 뗌·0.4초 다시 클릭(무시돼야 함) → 0.6초에 대상 쪽으로 조준 → 1초에 발사 → 피해 확인
-	//  2) 클릭 → 0.5초에 무기 교체 → 충전 취소 (신호 보내지 않음)
+	//  1) 서 있는 다른 플레이어(-VHBotStill) 5m 앞에서 대상 쪽으로 클릭 → 0.1초 손 뗌·0.4초 다시 클릭(무시돼야 함) → 0.6초에 35° 돌림(회전 잠금·서버는 누른 순간 방향) → 1초에 빔 → 피해 확인 (2026-11-22 팀 서버)
+	//  2) 클릭 → 0.5초에 무기 교체 → 서버가 잠금(Locked)으로 거절, 발사는 그대로 (탄이 줄어야 함)
 	//  3) 경비원(기관총 10 × 0.1초) 앞에서 HP 60 이하가 되면 클릭 → 충전 중 쓰러짐 → 취소
 	APawn* Pawn = GetLocalPawn();
 	UVHInteractionComponent* I = GetMyInteraction();
@@ -4068,14 +4207,14 @@ void UVHServerGameSubsystem::TickBotRailTest(float DeltaTime)
 			RailTestTarget = Target->Id;
 			RailTestTargetHp = Target->Hp;
 			const FVector Me = TeleportNear(Target->Pos, 500.f);
-			FaceYaw((Target->Pos - Me).Rotation().Yaw + 35.f);	// 일부러 비껴 겨눈다 (충전 중에 대상 쪽으로 돌린다)
+			FaceYaw((Target->Pos - Me).Rotation().Yaw);	// 대상 쪽으로 겨눈다 (충전 중에 돌려도 서버는 누른 순간 방향)
 			RailTestNext = Now + 1.0;
 			RailTestSub = 1;
 			return;
 		}
 		if (RailTestSub == 1 && Now >= RailTestNext)
 		{
-			UE_LOG(LogVHServerGame, Log, TEXT("[레일건 시험] 1) 클릭 (대상 %s 거리 %.0fcm HP %d, 조준은 35° 비낌)"), *NameForPlayer(Target ? Target->Owner : 0),
+			UE_LOG(LogVHServerGame, Log, TEXT("[레일건 시험] 1) 클릭 (대상 %s 거리 %.0fcm HP %d, 대상 쪽 조준)"), *NameForPlayer(Target ? Target->Owner : 0),
 				Target ? FVector::Dist2D(Foot, Target->Pos) : 0.f, RailTestTargetHp);
 			SendAttackHeld(true);
 			RailTestT0 = Now;
@@ -4083,14 +4222,14 @@ void UVHServerGameSubsystem::TickBotRailTest(float DeltaTime)
 			Shot(TEXT("1_click"));
 			return;
 		}
-		if (RailTestSub == 2 && T >= 0.1f) { SendAttackHeld(false); RailTestSub = 3; return; }		// 손 떼기 → 충전은 계속
+		if (RailTestSub == 2 && T >= 0.1f) { SendAttackHeld(false); RailTestSub = 3; return; }		// 손 떼기 → 서버 SC_FIRE 를 기다리거나 이미 충전 중
 		if (RailTestSub == 3 && T >= 0.4f) { SendAttackHeld(true); Shot(TEXT("2_charge04")); RailTestSub = 4; return; }	// 다시 클릭 → 무시
 		if (RailTestSub == 4 && T >= 0.6f)
 		{
 			if (Target)
 			{
-				FaceYaw((Target->Pos - Foot).Rotation().Yaw);
-				UE_LOG(LogVHServerGame, Log, TEXT("[레일건 시험] 0.6초: 조준을 대상 쪽으로 돌림 (yaw %.0f)"), GetLookYaw());
+				FaceYaw((Target->Pos - Foot).Rotation().Yaw + 35.f);
+				UE_LOG(LogVHServerGame, Log, TEXT("[레일건 시험] 0.6초: 조준을 35° 돌림 → 회전 잠금이라 그대로여야 함 (지금 yaw %.0f)"), GetLookYaw());
 			}
 			RailTestSub = 5;
 			return;
@@ -4100,7 +4239,7 @@ void UVHServerGameSubsystem::TickBotRailTest(float DeltaTime)
 		if (RailTestSub == 7 && T >= 3.f)
 		{
 			UE_LOG(LogVHServerGame, Log, TEXT("[레일건 시험] 1) 결과: 대상 HP %d → %d"), RailTestTargetHp, Target ? (int32)Target->Hp : -1);
-			RailTestStage = 2;
+			RailTestStage = 3;	// (2026-11-22: 탄 2발이라 쓰러짐 시험을 먼저, 무기 교체 시험은 남은 탄이 있을 때만)
 			RailTestSub = 0;
 		}
 		return;
@@ -4116,10 +4255,10 @@ void UVHServerGameSubsystem::TickBotRailTest(float DeltaTime)
 			if (RailSlot < 0)
 			{
 				UE_LOG(LogVHServerGame, Log, TEXT("[레일건 시험] 2) 레일건이 없음(탄 다 씀) → 건너뜀"));
-				RailTestStage = 3;
+				RailTestStage = 4;
 				return;
 			}
-			UE_LOG(LogVHServerGame, Log, TEXT("[레일건 시험] 2) 클릭 → 0.5초에 무기 교체 (탄 %d)"), MyStatus.WeaponAmmo[RailSlot]);
+			UE_LOG(LogVHServerGame, Log, TEXT("[레일건 시험] 2) 클릭 → 0.5초에 무기 교체 시도(서버 잠금 거절 예상) (탄 %d)"), MyStatus.WeaponAmmo[RailSlot]);
 			SendAttackHeld(true);
 			RailTestT0 = Now;
 			RailTestSub = 1;
@@ -4132,14 +4271,14 @@ void UVHServerGameSubsystem::TickBotRailTest(float DeltaTime)
 			if (RailSlot >= 0 && MyStatus.ActiveSlot != RailSlot)
 			{
 				SendSwitchWeapon();
-				UE_LOG(LogVHServerGame, Log, TEXT("[레일건 시험] 2) 레일건으로 다시 바꿈 (탄 %d — 줄지 않았으면 신호를 보내지 않은 것)"), MyStatus.WeaponAmmo[RailSlot]);
+				UE_LOG(LogVHServerGame, Log, TEXT("[레일건 시험] 2) 레일건으로 다시 바꿈 (탄 %d — 1 줄었으면 교체 시도와 상관없이 발사된 것)"), MyStatus.WeaponAmmo[RailSlot]);
 			}
 			RailTestSub = 4;
 			return;
 		}
 		if (RailTestSub == 4 && T >= 3.5f)
 		{
-			RailTestStage = 3;
+			RailTestStage = 4;
 			RailTestSub = 0;
 		}
 		return;
@@ -4155,7 +4294,7 @@ void UVHServerGameSubsystem::TickBotRailTest(float DeltaTime)
 			if (RailSlot < 0 || MyStatus.ActiveSlot != RailSlot)
 			{
 				if (RailSlot >= 0) { SendSwitchWeapon(); }
-				RailTestStage = RailSlot < 0 ? 4 : 3;
+				RailTestStage = RailSlot < 0 ? 2 : 3;
 				RailTestNext = Now + 1.0;
 				return;
 			}
@@ -4176,7 +4315,8 @@ void UVHServerGameSubsystem::TickBotRailTest(float DeltaTime)
 			if (HasSelfState(ES_DOWNED))
 			{
 				UE_LOG(LogVHServerGame, Log, TEXT("[레일건 시험] 3) 클릭 전에 쓰러짐 → 다시 (리스폰 뒤 레일건이 없으면 끝)"));
-				RailTestStage = 4;
+				RailTestStage = 2;
+				RailTestSub = 0;
 				return;
 			}
 			if (MyStatus.Hp <= 60 || T > 10.f)
@@ -4200,8 +4340,9 @@ void UVHServerGameSubsystem::TickBotRailTest(float DeltaTime)
 		}
 		if (RailTestSub == 3 && (!IsRailgunCharging() || T > 3.f))
 		{
-			UE_LOG(LogVHServerGame, Log, TEXT("[레일건 시험] 3) 충전 끝: 취소 이유 \"%s\" (봇은 쓰러져 있는 동안 멈추므로 이 줄은 리스폰 뒤에 찍힐 수 있다)"), *RailLastCancel);
-			RailTestStage = 4;
+			UE_LOG(LogVHServerGame, Log, TEXT("[레일건 시험] 3) 충전 끝: 취소 이유 \"%s\" (내 빔 수 %d. 봇은 쓰러져 있는 동안 멈추므로 이 줄은 리스폰 뒤에 찍힐 수 있다)"), *RailLastCancel, RailBeamsSeen);
+			RailTestStage = 2;
+			RailTestSub = 0;
 		}
 		return;
 	}
@@ -4295,6 +4436,14 @@ void UVHServerGameSubsystem::TickBotWalk(float DeltaTime)
 			DebugFake(FakeNames[FakeIndex], FakeSeconds[FakeIndex]);
 			FakeIndex = (FakeIndex + 1) % FakeCount;
 		}
+	}
+
+	// 실행 옵션 -VHBotTaserTest: 사제 테이저건 시험 (2026-11-22, 로그 [테이저 시험])
+	static const bool bTaserTest = FParse::Param(FCommandLine::Get(), TEXT("VHBotTaserTest"));
+	if (bTaserTest)
+	{
+		TickBotTaserTest(DeltaTime);
+		return;
 	}
 
 	// 실행 옵션 -VHBotRailTest: 레일건 충전 발사 시험 (2026-11-20, 로그 [레일건 시험])

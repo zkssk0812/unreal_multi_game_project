@@ -415,8 +415,8 @@ public:
 	TMap<EVHWeaponId, FVHWeaponFxSet> WeaponFx;
 
 	/**
-	 * 레일건 충전 시간 (초, 2026-11-20). 좌클릭 → 이 시간 동안 충전음·총구에 모이는 빛 → 공격 신호(CS_ACTION AttackStart).
-	 * 서버에는 충전 시간이 없어(누르는 순간 발사) 클라가 기다렸다가 보낸다. 0 = 충전 없이 바로 (예전 방식)
+	 * 레일건 충전 시간 (초) — 개발 명령 vh.WeaponTest 의 충전 연출에만 쓴다.
+	 * 2026-11-22부터 실제 게임은 서버가 충전한다(누른 순간 SC_FIRE → 1초 충전 → 판정, 서버 GameData RailgunChargeMs). 클라는 그 시각에 맞춰 연출하므로 이 값은 바꿔도 게임에 영향 없음
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fx|Railgun", meta = (ClampMin = 0, ClampMax = 3, Units = "s"))
 	float RailgunChargeSeconds = 1.f;

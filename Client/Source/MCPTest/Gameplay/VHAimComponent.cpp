@@ -143,7 +143,7 @@ bool UVHAimComponent::CanTurn() const
 {
 	if (bTurnLocked)
 	{
-		return false;	// 레일건 발사 1초: 회전 불가 (서버 ES_RAILGUN_LOCK)
+		return false;	// 레일건 충전 1초 + 발사 1초: 회전 불가 (서버 ES_RAILGUN_LOCK)
 	}
 	const AActor* Owner = GetOwner();
 	if (const UVHStatusEffectComponent* Status = Owner->FindComponentByClass<UVHStatusEffectComponent>(); Status && Status->IsStunned())

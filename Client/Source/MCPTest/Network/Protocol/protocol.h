@@ -132,7 +132,7 @@ enum class ActionType : uint8_t {
 	Dodge = 3,
 	InteractBegin = 4, InteractCancel = 5,	// target_entity_id = 대상
 	SwitchWeapon = 6,					// 무기1 ↔ 무기2 (마우스 휠)
-	UseSkill = 7,						// Q (은신 중 다시 누르면 해제)
+	UseSkill = 7,						// Q (은신 중 다시 누르면 해제, 사제 테이저건은 들기/집어넣기)
 	UseConsumable = 8,					// E
 };
 
@@ -171,7 +171,7 @@ enum EntityStateBit : uint32_t {
 	ES_CLOAKED           = 1u << 9,		// 은신 (다른 클라는 화면에서 숨김)
 	ES_IN_SMOKE          = 1u << 10,	// 연막 안
 	ES_FLASHED           = 1u << 11,	// 섬광 3초
-	ES_RAILGUN_LOCK      = 1u << 12,	// 레일건 발사 1초 (이동·회전 불가)
+	ES_RAILGUN_LOCK      = 1u << 12,	// 레일건 충전 1초 + 발사 1초 (이동·회전 불가)
 	ES_JETPACK           = 1u << 13,	// 제트팩 3초
 	ES_REPAIRING         = 1u << 14,	// 경비원 자가 수리
 	ES_LEFT_GAME         = 1u << 15,	// 접속 끊김
@@ -180,6 +180,7 @@ enum EntityStateBit : uint32_t {
 	ES_ARMED             = 1u << 18,	// 지뢰: 작동 중
 	ES_TRIGGERED         = 1u << 19,	// 지뢰: 감지됨 (0.5초 경고)
 	ES_CARRYING_TREASURE = 1u << 20,	// 플레이어: 보물을 들고 있음
+	ES_TASER_READY       = 1u << 21,	// 플레이어: 사제 테이저건을 든 상태 (Q로 들기, 공격 키로 발사)
 };
 
 // CS_Move::flags

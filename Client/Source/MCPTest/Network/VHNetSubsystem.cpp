@@ -1211,7 +1211,7 @@ void UVHNetSubsystem::HandleGameLoad(const SC_GameLoad& P)
 	GameStartInfo = FVHGameStartInfo();
 	UE_LOG(LogVHNet, Log, TEXT("게임 로드: match %llu, 맵 %u v%u, 플레이어 %d명, 로딩 제한 %ums"),
 		P.match_id, P.map_id, P.map_version, P.spawn_count, P.load_timeout_ms);
-	// 게임 레벨이 맞춰진 서버 맵 버전 (설정 GameLevelMapVersion: 옛 레벨 3, 새 맵 L_Mansion_Shell 2)
+	// 게임 레벨이 맞춰진 서버 맵 버전 (설정 GameLevelMapVersion: 옛 레벨 3, 새 맵 L_Mansion_Shell 10 — 예전 V3b 서버는 2)
 	const uint32 ExpectedServerMapVersion = UVHSettings::Get().GetGameLevelMapVersion();
 	if (!bUsingMock && P.map_version != ExpectedServerMapVersion)
 	{

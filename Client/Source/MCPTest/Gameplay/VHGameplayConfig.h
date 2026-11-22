@@ -361,16 +361,13 @@ public:
 
 	// ── 반납지점 (서버가 만들고 없앤다. 아래는 표시용) ──
 
-	/** 등장 후 이 시간이 지나면 빨간색. 화면 표시만 (55초 = 남은 5초부터) [사용자 요청 2026-11-21: 10초 → 5초] */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ReturnPoint", meta = (Units = "s"))
-	float ReturnPointRedSeconds = 55.f;
-
 	/**
-	 * 서버가 반납지점에 Warning 비트를 켜는 시각(등장 후 초, 서버 GameData ReturnPointWarnMs = 50000).
-	 * 그 비트가 오면 로컬 시계를 서버에 맞추는 기준으로만 쓴다(빨강 시작은 위 ReturnPointRedSeconds)
+	 * 서버가 반납지점에 경고(Warning 비트)를 켜는 시각 = 등장 후 55초, 남은 5초 (서버 GameData ReturnPointWarnMs = 55000, 2026-11-22).
+	 * 서버가 만든 반납지점은 빨강을 서버 신호(ES_WARNING)로만 켜고, 이 값은 그 순간 화면의 남은 시간을 서버에 맞추는 데 쓴다.
+	 * 서버 없이 놓인 반납지점(시험 레벨)은 이 시각에 스스로 빨개진다 [사용자 요청 2026-11-21: 경고 5초]
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ReturnPoint", meta = (Units = "s"))
-	float ReturnPointServerWarnSeconds = 50.f;
+	float ReturnPointRedSeconds = 55.f;
 
 	/** 반납지점 수명 60초 (서버 값과 같게). 서버가 알려 준 남은 수명으로 "언제 빨개지는가"를 계산할 때 쓴다 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ReturnPoint", meta = (Units = "s"))

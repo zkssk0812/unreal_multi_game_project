@@ -19,6 +19,7 @@ class UVHThiefStateComponent;
 class UVHTreasureCarrierComponent;
 class UVHMatchSubsystem;
 class UVHServerGameSubsystem;
+class UVHWeaponVisualComponent;
 class APawn;
 class UMaterialInterface;
 struct FVHItemData;
@@ -155,13 +156,13 @@ public:
 	/** 공격 키를 누름/뗌 (AttackStart / AttackStop). 누르는 동안 서버가 무기 간격마다 공격한다 */
 	void SendAttackHeld(bool bHeld);
 	/**
-	 * 레일건 충전 (2026-11-20): 서버에는 충전 시간이 없다(AttackStart 를 받은 다음 틱에 바로 발사, 쿨다운 1초는 발사 순간부터).
-	 * 그래서 클라가 클릭 → DA_VHWeaponCatalog.RailgunChargeSeconds(1초) 동안 충전 연출 → 그때의 커서 방향으로 AttackStart → SC_FIRE 를 받으면 AttackStop.
-	 * 충전 중 다시 클릭·손 떼기는 무시, 무기 교체·쓰러짐·경직이면 취소. 프로토콜에 충전 상태가 없어 다른 플레이어 화면에는 충전이 보이지 않는다
+	 * 레일건 (2026-11-22 팀 서버): 서버가 누른 순간 SC_FIRE·탄약 → 1초 충전(판정 없음) → 200ms마다 6번 판정, 이동·회전 잠금 2초(ES_RAILGUN_LOCK), 충전 중 쓰러지면 발사 안 됨.
+	 * 클라는 클릭 즉시 AttackStart(클릭 한 번 = 한 발: 내 SC_FIRE 를 받으면 AttackStop). 충전 연출(소리·빛 1초)과 빔은 SC_FIRE 기준이라
+	 * 다른 플레이어의 레일건도 똑같이 보인다(PendingRailShots). 충전 중 쏜 사람이 쓰러지면 연출을 끊는다(서버도 쏘지 않음)
 	 */
-	bool IsRailgunCharging() const { return RailCharge != ERailCharge::None; }
-	/** 충전을 취소한다 (소리·이펙트도 끊는다). Reason = 로그용 */
-	void CancelRailgunCharge(const TCHAR* Reason);
+	bool IsRailgunCharging() const;
+	/** 쏜 사람의 레일건 충전 연출을 끊는다 (서버 기준: 충전 중 쓰러짐·사라짐). Reason = 로그용 */
+	void CancelRailgunShot(uint16 Shooter, const TCHAR* Reason);
 	/** 내 캐릭터의 꾹 누르기 표시를 지금 보낸 공격 상태에 맞춘다 (보낼 때·거절·쓰러짐 즉시) */
 	void ApplyMyAttackHeldVisual();
 	void SendDodge();
@@ -169,11 +170,12 @@ public:
 	void SendUseSkill();
 	void SendUseConsumable();
 	/**
-	 * Q 키 [사용자 요청 2026-11-21]: 도적1(사제 테이저건)은 누르면 테이저건을 손에 들고(아무것도 보내지 않음), 다시 누르면 원래 무기로(쿨타임 없음).
-	 * 든 채로 좌클릭하면 그때 CS_ACTION UseSkill(바로 앞에 CS_MOVE 로 커서 방향)을 보내 쏘고 원래 무기로 돌아온다 → 서버가 그 순간부터 쿨타임.
-	 * 들고 있는 동안 다른 무기 공격(AttackStart)은 보내지 않는다. 다른 스킬(끈끈이·은신)은 예전처럼 바로 사용
+	 * Q 키. 도적1(사제 테이저건, 2026-11-22 팀 서버가 판정): Q = UseSkill → 서버가 들기(SC_SKILL Active, 상태 비트 ES_TASER_READY),
+	 * 든 채로 Q 다시 = 집어넣기(SC_SKILL End, 쿨타임 없음). 든 채로 공격 키 = AttackStart → 서버가 무기 대신 테이저 발사(SC_SKILL Cast, 쿨타임 시작).
+	 * 무기 교체·경직·쓰러짐·제트팩이면 서버가 집어넣는다. 다른 스킬(끈끈이·은신)은 예전처럼 바로 사용
 	 */
 	void PressSkillKey();
+	/** 사제 테이저건을 든 상태 (서버 상태: 내 ES_TASER_READY 비트 / 내 SC_SKILL Active·End·Cast) */
 	bool IsSkillTaserHeld() const { return bSkillTaserHeld; }
 	/** 스킬 쿨타임 남은 초 (서버 상태 기준, 받은 뒤 흐른 시간을 뺌) */
 	float GetSkillCooldownRemaining() const;
@@ -323,22 +325,28 @@ protected:
 	FPending Pending;
 	bool bAttackHeldSent = false;
 
-	// 레일건 충전 (클릭 → 충전 → 공격 신호 → 서버 발사 판정)
-	enum class ERailCharge : uint8 { None, Charging, AwaitFire };
-	ERailCharge RailCharge = ERailCharge::None;
+	// 레일건: 내 클릭 → AttackStart → 내 SC_FIRE 를 기다림 (받으면 AttackStop, 0.6초 안에 없으면 끝)
+	bool bRailAwaitFire = false;
 	double RailClickTime = 0.0;		// FPlatformTime (로그의 ms 계산)
-	double RailSendTime = 0.0;
-	float RailChargeSeconds = 1.f;
-	uint8 MyActiveWeapon() const;
-	void StartRailgunCharge();
-	void TickRailgunCharge();
-	/** 사제 테이저건을 손에 든 상태 (서버는 모른다, 내 화면 표시·입력만) */
+	/** SC_FIRE(레일건)를 받은 쏜 사람별 충전 연출 → 1초 뒤 빔. 빔 1초 동안은 손에 레일건을 붙잡아 둔다(마지막 탄이면 서버 무기는 이미 삼단봉) */
+	struct FRailShot
+	{
+		uint16 Shooter = 0;
+		FVector Origin = FVector::ZeroVector;
+		float Yaw = 0.f;
+		double FireAt = 0.0;		// FPlatformTime: 빔(서버 첫 판정)
+		double ReleaseAt = 0.0;		// FPlatformTime: 빔 끝 → 손 무기 붙잡기 풀기
+		bool bFired = false;
+		TWeakObjectPtr<UVHWeaponVisualComponent> Visual;
+	};
+	TArray<FRailShot> PendingRailShots;
+	void TickRailgunShots();
+	/** 사제 테이저건을 든 상태 (서버 상태를 따른다) */
 	bool bSkillTaserHeld = false;
+	/** 테이저건을 든 채 누른 공격 키 (이 누름은 테이저 한 발이라 꾹 누르기 자세를 보이지 않는다) */
+	bool bTaserShotPress = false;
 	void SetSkillTaserHeld(bool bHeld, const TCHAR* Why);
-	void FireSkillTaser();
-	/** 쓰러짐·경직·제트팩·레일건 잠금이면 테이저건을 내려놓는다 */
-	void TickSkillTaser();
-	void SetMyRailgunChargeVisual(bool bCharging);
+	uint8 MyActiveWeapon() const;
 
 	// 연출
 	struct FProjectileFx
@@ -386,6 +394,11 @@ protected:
 	float BotHeistTimer = 0.f;
 	// 개발용 봇 -VHBotRailTest (2026-11-20): 상자를 열어 레일건 획득 → 충전 발사 → 무기 교체 취소 → 경비원 앞에서 쓰러짐 취소
 	void TickBotRailTest(float DeltaTime);
+	// 개발용 봇 -VHBotTaserTest (2026-11-22): 다른 플레이어 앞에서 Q 들기 → Q 넣기(쿨타임 없음) → Q 들기 → 공격 키 발사(쿨타임 시작)
+	void TickBotTaserTest(float DeltaTime);
+	int32 TaserTestStage = 0;
+	double TaserTestT0 = 0.0;
+	uint16 TaserTestTarget = 0;
 	int32 RailTestStage = 0;
 	int32 RailTestSub = 0;
 	double RailTestT0 = 0.0;
@@ -395,6 +408,7 @@ protected:
 	int32 RailTestBoxes = 0;
 	TMap<uint16, int32> RailTestTries;
 	FString RailLastCancel;
+	int32 RailBeamsSeen = 0;		// 내 레일건 빔 수 (시험 로그)
 	float BotHuntTimer = 0.f;
 	float BotHuntAge = 0.f;			// 게임 시작 뒤 흐른 시간 (-VHBotHuntDelay)
 	uint16 BotHuntTarget = 0;
