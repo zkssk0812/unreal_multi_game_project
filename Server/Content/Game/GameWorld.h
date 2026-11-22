@@ -352,7 +352,7 @@ private:
 	void AddSearchSpots(GuardBrain& brain, const Vec3& from, const Vec3* flee);			// S-4
 	void CallAllies(const Entity& caller, const Vec3& where);							// S-5
 	void StartSpin(GuardBrain& brain, uint32_t ms);
-	void StartSweep(const Entity& guard, GuardBrain& brain, float center, float halfDeg);
+	void StartSweep(GuardBrain& brain, float center, float halfDeg, bool backToCenter);	// 좌우 훑기
 	bool UpdateLook(Entity& guard, GuardBrain& brain, uint32_t dtMs);					// 둘러보기가 끝났으면 true
 	void ArrivePatrolNode(Entity& guard, GuardBrain& brain);							// P-1·P-3·P-4·P-6
 	void PickPatrolNode(Entity& guard, GuardBrain& brain);								// P-1·P-2·P-5·P-7

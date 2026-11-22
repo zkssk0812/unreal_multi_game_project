@@ -521,12 +521,18 @@ TEST_CASE(Bench_PatrolCoverage_P)
 
 TEST_CASE(Bench_TrailBehindGuard_P6)
 {
-	for (const Mode& mode : Modes)
+	TrailResult results[2];
+	for (size_t m = 0; m < 2; ++m)
 	{
+		const Mode& mode = Modes[m];
 		const TrailResult r = TrailTrial(mode.features, 12);
+		results[m] = r;
 		Report("⑤ 경비원 뒤따라가기 {} | {}회 중 60초 안에 들킴 {}회 ({:.0f}%), 들키기까지 평균 {:.1f}초",
 			mode.name, r.tried, r.caught, Pct(r.caught, r.tried), Avg(r.caughtSec, r.caught));
 	}
+	// 개선 후에도 뒤따라오는 플레이어를 개선 전만큼은 알아챈다 (P-4를 가운데로 돌아오게 했을 때 23.9초로 늦어졌던 문제)
+	CHECK(results[1].caught >= results[0].caught);
+	CHECK(Avg(results[1].caughtSec, results[1].caught) <= Avg(results[0].caughtSec, results[0].caught) + 3.0);
 }
 
 TEST_CASE(Bench_AllyCall_S5)

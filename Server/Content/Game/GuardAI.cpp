@@ -27,7 +27,7 @@
 //   탐색: S-1 도망 방향 1초 앞(최대 3m)부터 · S-3 첫 지점 한 바퀴(4초) · S-4 주변 3~7m 최대 2곳 좌우 60° 훑기 ·
 //         S-5 발견하면 20m 안 동료가 탐색하러 옴 · S-6 경직·수리 뒤 최근 6초 안에 본 곳부터
 //   순찰: P-1 오래 안 간 곳 우선(3명 공유 기록) · P-2 동료와 겹치지 않기 · P-3 연결 2개 지점은 통과 ·
-//         P-4 좌우 45° 훑기(문에서는 방 안쪽) · P-5 금고·반납 지점 방 가중치 · P-6 가끔 뒤돌아보기 · P-7 탐색 뒤 30초 경계 순찰
+//         P-4 왼쪽 → 오른쪽 45° 훑기(문에서는 방 안쪽, 가운데로 돌아오지 않음) · P-5 금고·반납 지점 방 가중치 · P-6 가끔 뒤돌아보기 · P-7 탐색 뒤 30초 경계 순찰
 //
 // 타겟 규칙 (N-13~N-16)
 //   처음 발견한 플레이어를 유지 · 동시에 보이면 가까운 쪽 · 다른 플레이어가 공격하면 그 사람으로 바꾸고,
@@ -260,7 +260,7 @@ void GameWorld::ThinkGuard(Entity& guard, GuardBrain& brain, uint32_t dtMs)
 				if (brain.searchIndex == 0)
 					StartSpin(brain, _guardFeatures.fullSpin ? GameData::SearchSpinMs : GameData::SearchLookMs);
 				else
-					StartSweep(guard, brain, guard.yaw, GameData::SearchSweepDeg);
+					StartSweep(brain, guard.yaw, GameData::SearchSweepDeg, true);	// S-4: 왼쪽 → 오른쪽 → 가운데
 			}
 			else if (brain.pathIndex < brain.path.size())
 			{
@@ -510,7 +510,9 @@ void GameWorld::ArrivePatrolNode(Entity& guard, GuardBrain& brain)
 			if (room != nullptr)
 				center = YawTo(_map->patrolNodes[node], _map->patrolNodes[*room]);
 		}
-		StartSweep(guard, brain, center, GameData::PatrolSweepDeg);
+		// 가운데로 돌아오지 않고 한쪽에서 끝낸다: 다음 지점 쪽으로 돌아서면서 등 뒤를 한 번 스친다
+		// (가운데로 돌아오면 늘 앞을 보고 끝나서 뒤따라오는 플레이어를 못 봄, 경비원AI_개선_검증.md 5장)
+		StartSweep(brain, center, GameData::PatrolSweepDeg, false);
 	}
 
 	// P-6: 가끔 왔던 쪽을 돌아본다 (경계 순찰 중이면 더 자주)
@@ -608,13 +610,15 @@ void GameWorld::StartSpin(GuardBrain& brain, uint32_t ms)
 	brain.waitUntilMs = _nowMs + ms;
 }
 
-void GameWorld::StartSweep(const Entity& guard, GuardBrain& brain, float center, float halfDeg)
+void GameWorld::StartSweep(GuardBrain& brain, float center, float halfDeg, bool backToCenter)
 {
-	// 왼쪽 → 오른쪽 → 가운데. 90°/s로 4 × halfDeg 만큼 돈다 (±60°면 약 2.7초)
-	(void)guard;
-	brain.lookYaws = { AngleDiff(center + halfDeg, 0.0f), AngleDiff(center - halfDeg, 0.0f), AngleDiff(center, 0.0f) };
+	// 왼쪽 → 오른쪽 (→ 가운데). 90°/s로 3 × halfDeg (가운데까지면 4 × halfDeg) 만큼 돈다
+	brain.lookYaws = { AngleDiff(center + halfDeg, 0.0f), AngleDiff(center - halfDeg, 0.0f) };
+	if (backToCenter)
+		brain.lookYaws.push_back(AngleDiff(center, 0.0f));
 	brain.lookIndex = 0;
-	brain.waitUntilMs = _nowMs + static_cast<uint32_t>(halfDeg * 4.0f / GameData::GuardTurnDegPerSec * 1000.0f) + 500;
+	const float turnDeg = halfDeg * (backToCenter ? 4.0f : 3.0f);
+	brain.waitUntilMs = _nowMs + static_cast<uint32_t>(turnDeg / GameData::GuardTurnDegPerSec * 1000.0f) + 500;
 }
 
 bool GameWorld::UpdateLook(Entity& guard, GuardBrain& brain, uint32_t dtMs)
