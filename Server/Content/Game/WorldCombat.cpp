@@ -205,15 +205,15 @@ void GameWorld::FireWeapon(Entity& thief)
 	}
 
 	case GameData::WeaponHit::Beam:
-		// 레일건: 1초 동안 0·200·…·1000ms에 판정, 그동안 이동·회전 잠금 (W-17)
+		// 레일건: 1초 충전 → 1000·1200·…·2000ms에 판정, 2초 동안 이동·회전 잠금 (W-17).
+		// SC_FIRE·탄약은 누른 순간(충전 시작). 다른 클라도 이때부터 충전 연출을 1초 보여 준다
 		_events.push_back(fire);
 		thief.railgunYaw = yaw;
 		thief.railgunLeft = GameData::RailgunHits;
-		thief.railgunNextMs = _nowMs;
+		thief.railgunNextMs = _nowMs + GameData::RailgunChargeMs;
 		thief.railgunUntilMs = _nowMs + GameData::RailgunLockMs;
 		thief.state |= StateBit::RailgunLock;
 		UseAmmo(thief);
-		UpdateRailgun(thief);		// 쏜 직후 판정
 		return;
 
 	case GameData::WeaponHit::Thrown:

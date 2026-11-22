@@ -114,11 +114,14 @@ inline const WeaponType* WeaponOf(WeaponId id)
 }
 constexpr size_t MaxShotsPerTick = 4;				// 간격이 틱(50ms)보다 짧은 무기(화염방사기)는 한 틱에 여러 번
 
-// 레일건 [명세 W-17]: 폭 50cm, 벽 무시, 쏜 직후 + 200ms마다 (6번), 1초 이동·회전 잠금
+// 레일건 [명세 W-17]: 폭 50cm, 벽 무시. 누르면 1초 충전(판정 없음) → 충전 끝 + 200ms마다 (6번, 1초).
+// 충전·발사 2초 동안 이동·회전 잠금 (클라 2026-11: 1초 충전 후 발사)
 constexpr float RailgunHalfWidthCm = 25.0f;
+constexpr uint32_t RailgunChargeMs = 1000;
 constexpr uint32_t RailgunEveryMs = 200;
 constexpr uint8_t RailgunHits = 6;
-constexpr uint32_t RailgunLockMs = 1000;
+constexpr uint32_t RailgunBeamMs = 1000;			// 첫 판정 ~ 마지막 판정
+constexpr uint32_t RailgunLockMs = RailgunChargeMs + RailgunBeamMs;
 
 // 투척 [가정 A-14]: 커서 쪽으로 최대 6m, 1초 동안 날아감
 constexpr uint32_t ThrowFlightMs = 1000;

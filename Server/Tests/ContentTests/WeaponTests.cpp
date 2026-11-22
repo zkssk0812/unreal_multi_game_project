@@ -156,10 +156,35 @@ TEST_CASE(Weapon_Railgun_SixHits_IgnoresWalls_LocksMovement)
 	CHECK((world.ThiefOf(A)->state & StateBit::RailgunLock) != 0);
 	Teleport(world, A, { 0, 0, 0 }, 90.0f);					// 잠금 중 이동·회전 무시 (E-10)
 	CHECK(world.ThiefOf(A)->pos.x == 3300.0f && world.ThiefOf(A)->yaw == 0.0f);
-	Run(world, 1100);
+	CHECK_EQ(world.ThiefOf(A)->weapons[1].ammo, uint16_t{ 1 });		// 탄약은 누른 순간
+	Run(world, 900);
+	CHECK_EQ(world.ThiefOf(B)->hp, 1000);					// 충전 1초 동안은 판정 없음
+	CHECK((world.ThiefOf(A)->state & StateBit::RailgunLock) != 0);
+	Run(world, 600);
+	CHECK((world.ThiefOf(A)->state & StateBit::RailgunLock) != 0);	// 발사 중에도 잠금 (충전+발사 2초)
+	Run(world, 600);
 	CHECK_EQ(world.ThiefOf(B)->hp, 1000 - 120);				// 20 × 6 (W-17)
 	CHECK((world.ThiefOf(A)->state & StateBit::RailgunLock) == 0);
-	CHECK_EQ(world.ThiefOf(A)->weapons[1].ammo, uint16_t{ 1 });
+}
+
+TEST_CASE(Weapon_Railgun_DownedWhileCharging_NoShot)
+{
+	GameWorld world = MakeWorld(2);
+	ClearArena(world);
+	Teleport(world, A, { 3300.0f, -4000.0f, 0.0f }, 0.0f);
+	Teleport(world, B, { 3400.0f, -4000.0f, 0.0f }, 180.0f);	// A 바로 앞, A를 봄
+	world.ThiefOf(B)->hp = 1000;
+	Give(world, A, WeaponId::Railgun);
+	Act(world, A, ActionType::AttackStart, 0, 0.0f);
+	world.Update(0.05f);
+	Act(world, A, ActionType::AttackStop);
+	Run(world, 500);
+	world.ThiefOf(A)->shield = 0;
+	world.ThiefOf(A)->hp = 1;
+	Attack(world, B, 180.0f);								// 충전 중 삼단봉에 쓰러짐
+	CHECK((world.ThiefOf(A)->state & StateBit::Downed) != 0);
+	Run(world, 2000);
+	CHECK_EQ(world.ThiefOf(B)->hp, 1000);					// 발사되지 않음
 }
 
 TEST_CASE(Weapon_Grenade_FalloffAndThrowerImmune)

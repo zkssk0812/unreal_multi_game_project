@@ -171,7 +171,7 @@ enum EntityStateBit : uint32_t {
 	ES_CLOAKED           = 1u << 9,		// 은신 (다른 클라는 화면에서 숨김)
 	ES_IN_SMOKE          = 1u << 10,	// 연막 안
 	ES_FLASHED           = 1u << 11,	// 섬광 3초
-	ES_RAILGUN_LOCK      = 1u << 12,	// 레일건 발사 1초 (이동·회전 불가)
+	ES_RAILGUN_LOCK      = 1u << 12,	// 레일건 충전 1초 + 발사 1초 (이동·회전 불가)
 	ES_JETPACK           = 1u << 13,	// 제트팩 3초
 	ES_REPAIRING         = 1u << 14,	// 경비원 자가 수리
 	ES_LEFT_GAME         = 1u << 15,	// 접속 끊김

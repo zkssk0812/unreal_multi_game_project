@@ -244,7 +244,7 @@ void GameWorld::ApplyMove(uint64_t playerId, const InputCmd& input)
 	if (thief == nullptr || (thief->state & (StateBit::Downed | StateBit::LeftGame)) != 0)
 		return;
 	if ((thief->state & StateBit::RailgunLock) != 0)
-		return;		// 레일건을 쏘는 1초는 이동·회전 불가 (E-10)
+		return;		// 레일건 충전·발사 2초는 이동·회전 불가 (E-10)
 
 	// 위치는 클라가 정한 값을 그대로 쓴다(이동은 검증하지 않음). 움직인 방향은 끈끈이를 뒤에 놓을 때 쓴다
 	if (Dist2D(thief->pos, input.pos) > 1.0f)
