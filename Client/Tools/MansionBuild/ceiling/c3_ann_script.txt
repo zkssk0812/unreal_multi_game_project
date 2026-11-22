@@ -1,0 +1,18 @@
+# 2026-11-21 ceiling compare 3: wider camera, Bob near GuestRoom4 door, guard check right after teleport
+1.0 vh.CeilingGo -3480 -2050
+1.5 vh.Cam 2200 -65 0 0
+3.0 vh.CeilingInfo
+3.3 vh.Shot c3_ann_01_corridor_on
+4.0 vh.Ceiling 0
+4.8 vh.Shot c3_ann_02_corridor_off
+5.0 vh.CeilingInfo
+5.6 vh.Ceiling 1
+6.2 vh.CeilingGo -3950 -2300
+7.6 vh.CeilingInfo
+7.8 vh.Shot c3_ann_03_room
+8.5 vh.Cam off
+10.0 vh.CeilingGo guard 150
+11.0 vh.CeilingInfo
+11.2 vh.Shot c3_ann_04_guard
+13.0 vh.CeilingGo -3480 -2050
+14.5 vh.CeilingInfo

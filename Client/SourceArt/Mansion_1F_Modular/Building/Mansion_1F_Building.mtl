@@ -1,0 +1,171 @@
+newmtl M_Ceiling_OakSlat
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.05 0.05 0.05
+Ns 35
+d 1.0
+illum 2
+map_Kd T_Ceiling_OakSlat.png
+
+newmtl M_Ceiling_White
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.00 0.00 0.00
+Ns 20
+d 1.0
+illum 2
+map_Kd T_Ceiling_White.png
+
+newmtl M_Column
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.05 0.05 0.05
+Ns 35
+d 1.0
+illum 2
+map_Kd T_Column.png
+
+newmtl M_Column_Hall
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.05 0.05 0.05
+Ns 35
+d 1.0
+illum 2
+map_Kd T_Column.png
+
+newmtl M_Column_Round
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.05 0.05 0.05
+Ns 35
+d 1.0
+illum 2
+map_Kd T_Column.png
+
+newmtl M_Floor_Concrete
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.30 0.30 0.30
+Ns 110
+d 1.0
+illum 2
+map_Kd T_Floor_Concrete.png
+
+newmtl M_Floor_Porcelain
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.45 0.45 0.45
+Ns 155
+d 1.0
+illum 2
+map_Kd T_Floor_Porcelain.png
+
+newmtl M_Floor_SmokedOak
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.15 0.15 0.15
+Ns 65
+d 1.0
+illum 2
+map_Kd T_Floor_SmokedOak.png
+
+newmtl M_Floor_WhiteOak
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.15 0.15 0.15
+Ns 65
+d 1.0
+illum 2
+map_Kd T_Floor_WhiteOak.png
+
+newmtl M_Glass
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.90 0.90 0.90
+Ns 290
+d 0.3
+illum 2
+map_Kd T_Glass.png
+
+newmtl M_Metal_Black
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.40 0.40 0.40
+Ns 140
+d 1.0
+illum 2
+map_Kd T_Metal_Black.png
+
+newmtl M_Wall_Concrete
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.05 0.05 0.05
+Ns 35
+d 1.0
+illum 2
+map_Kd T_Wall_Concrete.png
+
+newmtl M_Wall_Gallery
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.02 0.02 0.02
+Ns 26
+d 1.0
+illum 2
+map_Kd T_Wall_Gallery.png
+
+newmtl M_Wall_Greige
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.05 0.05 0.05
+Ns 35
+d 1.0
+illum 2
+map_Kd T_Wall_Greige.png
+
+newmtl M_Wall_Microcement
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.05 0.05 0.05
+Ns 35
+d 1.0
+illum 2
+map_Kd T_Wall_Microcement.png
+
+newmtl M_Wall_OakSlat
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.10 0.10 0.10
+Ns 50
+d 1.0
+illum 2
+map_Kd T_Wall_OakSlat.png
+
+newmtl M_Wall_Service
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.02 0.02 0.02
+Ns 26
+d 1.0
+illum 2
+map_Kd T_Wall_Service.png
+
+newmtl M_Wall_SmokedOak
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.10 0.10 0.10
+Ns 50
+d 1.0
+illum 2
+map_Kd T_Wall_SmokedOak.png
+
+newmtl M_Wall_StonePanel
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.10 0.10 0.10
+Ns 50
+d 1.0
+illum 2
+map_Kd T_Wall_StonePanel.png
+

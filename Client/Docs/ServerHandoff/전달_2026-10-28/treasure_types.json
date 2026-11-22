@@ -1,0 +1,12 @@
+[
+  { "id": 1,  "name": "은 촛대",              "weightKg": 4.0,  "value": 2000 },
+  { "id": 2,  "name": "진주 목걸이",          "weightKg": 1.0,  "value": 2100 },
+  { "id": 3,  "name": "금화 주머니",          "weightKg": 5.0,  "value": 2200 },
+  { "id": 4,  "name": "에메랄드 브로치",      "weightKg": 1.0,  "value": 2300 },
+  { "id": 5,  "name": "루비 반지",            "weightKg": 1.0,  "value": 2400 },
+  { "id": 6,  "name": "황금 회중시계",        "weightKg": 3.0,  "value": 2600 },
+  { "id": 7,  "name": "사파이어 왕관",        "weightKg": 6.0,  "value": 2800 },
+  { "id": 8,  "name": "황금 카피바라 조각상", "weightKg": 8.0,  "value": 3000 },
+  { "id": 9,  "name": "금괴",                 "weightKg": 10.0, "value": 3200 },
+  { "id": 10, "name": "바바라의 다이아몬드",  "weightKg": 2.0,  "value": 3500 }
+]

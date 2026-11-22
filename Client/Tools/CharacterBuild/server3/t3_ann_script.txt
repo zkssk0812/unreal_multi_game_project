@@ -1,0 +1,8 @@
+# 2026-11-21 thief3: Ann(thief1) stays at spawn (Bob·Cat walk away from her), shots within spawn protection 5s
+1.1 vh.Aim 90
+2.6 vh.Shot t3e_ann_02
+2.8 vh.Cam 750 -65 0 0
+3.2 vh.Shot t3e_ann_03_close
+3.6 vh.Cam 1400 -70 0 0
+4.1 vh.Shot t3e_ann_04_wide
+4.6 vh.Cam off

@@ -1,0 +1,18 @@
+newmtl M_Metal_Black
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.40 0.40 0.40
+Ns 140
+d 1.0
+illum 2
+map_Kd T_Metal_Black.png
+
+newmtl M_Sheer
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.02 0.02 0.02
+Ns 26
+d 0.75
+illum 2
+map_Kd T_Sheer.png
+

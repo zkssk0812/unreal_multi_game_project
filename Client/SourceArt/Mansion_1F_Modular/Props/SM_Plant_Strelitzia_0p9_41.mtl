@@ -1,0 +1,27 @@
+newmtl M_Leaf_Strelitzia
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.25 0.25 0.25
+Ns 95
+d 1.0
+illum 2
+map_Kd T_Leaf_Strelitzia.png
+
+newmtl M_Pot_Charcoal
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.15 0.15 0.15
+Ns 65
+d 1.0
+illum 2
+map_Kd T_Pot_Charcoal.png
+
+newmtl M_Soil
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.00 0.00 0.00
+Ns 20
+d 1.0
+illum 2
+map_Kd T_Soil.png
+

@@ -1,0 +1,29 @@
+# 2026-11-21 ceiling: Ann (perks 5,6,7 = treasure/robot/bio sense) observes. Bob stands in GuestRoom4, Ann goes corridor -> GuestRoom4
+1.0 vh.CeilingGo -3450 -2050
+2.2 vh.CeilingInfo
+2.4 vh.Shot c1_ann_01_corridor
+2.9 vh.Ceiling 0
+3.3 vh.Shot c1_ann_02_corridor_off
+3.6 vh.Ceiling 1
+3.9 vh.CeilingGo -3950 -2250
+4.5 vh.CeilingInfo
+4.7 vh.Shot c1_ann_03_room
+8.0 vh.Cam 3600 -65 0 0
+9.0 vh.CeilingInfo
+9.3 vh.Shot c1_ann_04_wide
+10.0 vh.Cam off
+10.5 vh.CeilingGo -1400 1000
+20 vh.CeilingInfo
+20.2 vh.Shot c1_ann_05_t20
+45 vh.CeilingInfo
+45.2 vh.Shot c1_ann_06_t45
+80 vh.CeilingInfo
+80.2 vh.Shot c1_ann_07_t80
+120 vh.CeilingInfo
+120.2 vh.Shot c1_ann_08_t120
+170 vh.CeilingInfo
+170.2 vh.Shot c1_ann_09_t170
+230 vh.CeilingInfo
+230.2 vh.Shot c1_ann_10_t230
+280 vh.CeilingInfo
+280.2 vh.Shot c1_ann_11_t280

@@ -1,0 +1,27 @@
+newmtl M_Fabric_Oat
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.08 0.08 0.08
+Ns 44
+d 1.0
+illum 2
+map_Kd T_Fabric_Oat.png
+
+newmtl M_Fabric_Rust
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.08 0.08 0.08
+Ns 44
+d 1.0
+illum 2
+map_Kd T_Fabric_Rust.png
+
+newmtl M_Metal_Black
+Ka 0 0 0
+Kd 1 1 1
+Ks 0.40 0.40 0.40
+Ns 140
+d 1.0
+illum 2
+map_Kd T_Metal_Black.png
+
