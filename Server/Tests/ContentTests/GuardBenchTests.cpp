@@ -84,7 +84,8 @@ Vec3 RandomAround(std::mt19937& rng, const Vec3& center, float minCm, float maxC
 }
 
 // ─────────────── ① 등 뒤 돌며 때리기 (A-2) ───────────────
-// 삼단봉(사거리 2m)을 든 봇이 경비원 등 뒤 1.5m를 달리기 속도(6m/s)로 계속 따라 돌며 때린다 (최적으로 움직이는 플레이어).
+// 삼단봉(사거리 2m)을 든 봇이 경비원 등 뒤 1.5m를 계속 따라 돌며 때린다 (경비원이 보는 방향을 아는, 최적으로 움직이는 플레이어).
+// 스테미나 규칙대로 처음 10초는 달리기(6m/s), 탈진하면 걷기(3m/s).
 // 경비원이 봇에게 준 대미지와, 봇이 경비원 공격 범위(정면 60°) 안에 있던 시간 비율을 잰다.
 
 struct CircleResult
@@ -94,7 +95,7 @@ struct CircleResult
 	double inConePct = 0;		// 봇이 경비원 정면 60° 안에 있던 시간 비율
 };
 
-CircleResult CircleTrial(const GuardFeatures& features, uint32_t seed, float startDeg)
+CircleResult CircleTrial(const GuardFeatures& features, uint32_t seed, float startDeg, int delayTicks)
 {
 	const Vec3 arena{ 400.0f, -3400.0f, 0.0f };		// Gallery1 서쪽 가운데: 사방으로 4m 넘게 트임
 	GameWorld world = BenchWorld(1, seed, features);
@@ -109,12 +110,19 @@ CircleResult CircleTrial(const GuardFeatures& features, uint32_t seed, float sta
 
 	CircleResult r;
 	int inCone = 0;
+	std::deque<float> seenYaw;
 	constexpr int Ticks = 300;		// 15초
 	for (int t = 0; t < Ticks; ++t)
 	{
+		// 봇은 delayTicks 틱 전의 경비원 방향을 보고 움직인다 (0 = 완벽한 봇, 5 = 사람 반응 0.25초)
 		const Entity& g = *world.Find(guard);
-		const Vec3 behind = Ahead(g.pos, g.yaw + 180.0f, 150.0f);
-		MoveBot(world, A, behind, TickStepCm, 0.0f);
+		seenYaw.push_back(g.yaw);
+		if (static_cast<int>(seenYaw.size()) > delayTicks + 1)
+			seenYaw.pop_front();
+		const Vec3 behind = Ahead(g.pos, seenYaw.front() + 180.0f, 150.0f);
+		// 스테미나 규칙 그대로: 달릴 수 있으면 6m/s, 탈진하면 걷기 3m/s (P-02, P-03)
+		const bool running = (world.ThiefOf(A)->state & StateBit::Running) != 0 || t == 0;
+		MoveBot(world, A, behind, running ? TickStepCm : TickStepCm * 0.5f, 0.0f);
 		Teleport(world, A, world.ThiefOf(A)->pos, YawTo(world.ThiefOf(A)->pos, world.Find(guard)->pos), static_cast<uint8_t>(MoveFlag::Moving | MoveFlag::Running));
 		world.Update(0.05f);
 		for (const WorldEvent& e : world.TakeEvents())
@@ -440,19 +448,27 @@ double Avg(double sum, int count) { return count == 0 ? 0.0 : sum / count; }
 
 TEST_CASE(Bench_CircleBehind_A2)
 {
-	for (const Mode& mode : Modes)
+	const struct { const char* name; int delayTicks; } bots[] = { { "완벽한 봇", 0 }, { "반응 0.25초 봇", 5 } };
+	for (const auto& bot : bots)
 	{
-		CircleResult sum;
-		constexpr int Trials = 8;
-		for (int i = 0; i < Trials; ++i)
+		double damage[2] = {};
+		for (size_t m = 0; m < 2; ++m)
 		{
-			const CircleResult one = CircleTrial(mode.features, 100 + static_cast<uint32_t>(i), 45.0f * static_cast<float>(i));
-			sum.damageToPlayer += one.damageToPlayer / Trials;
-			sum.hitsOnGuard += one.hitsOnGuard / Trials;
-			sum.inConePct += one.inConePct / Trials;
+			const Mode& mode = Modes[m];
+			CircleResult sum;
+			constexpr int Trials = 8;
+			for (int i = 0; i < Trials; ++i)
+			{
+				const CircleResult one = CircleTrial(mode.features, 100 + static_cast<uint32_t>(i), 45.0f * static_cast<float>(i), bot.delayTicks);
+				sum.damageToPlayer += one.damageToPlayer / Trials;
+				sum.hitsOnGuard += one.hitsOnGuard / Trials;
+				sum.inConePct += one.inConePct / Trials;
+			}
+			Report("① 등 뒤 돌며 때리기 ({}) {} | 15초 동안 경비원이 준 대미지 {:.0f}, 봇의 타격 {:.1f}회, 봇이 공격 범위 안에 있던 시간 {:.1f}%",
+				bot.name, mode.name, sum.damageToPlayer, sum.hitsOnGuard, sum.inConePct);
+			damage[m] = sum.damageToPlayer;
 		}
-		Report("① 등 뒤 돌며 때리기 {} | 15초 동안 경비원이 준 대미지 {:.0f}, 봇의 타격 {:.1f}회, 봇이 공격 범위 안에 있던 시간 {:.1f}%",
-			mode.name, sum.damageToPlayer, sum.hitsOnGuard, sum.inConePct);
+		CHECK(damage[1] >= damage[0] + 30.0);		// 개선 후: 등 뒤를 도는 플레이어에게 반격한다
 	}
 }
 
@@ -509,3 +525,4 @@ TEST_CASE(Bench_AllyCall_S5)
 			mode.name, r.tried, r.joined, Pct(r.joined, r.tried), Avg(r.joinedSec, r.joined));
 	}
 }
+

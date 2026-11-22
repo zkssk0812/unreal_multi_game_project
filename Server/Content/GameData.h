@@ -221,6 +221,16 @@ constexpr uint32_t SearchLookMs = 2000;				// 놓친 곳에서 둘러보는 시�
 constexpr uint32_t PatrolLookMs = 1000;				// 순찰 갈림길에서 둘러보는 시간
 constexpr uint32_t RepathMs = 500;					// 추격 중 경로를 다시 찾는 간격
 
+// ── 경비원 AI 개선 (docs/경비원AI_공격탐색_개선안.md) ──
+// 위의 기본 수치(이동·회전 속도, 시야, 공격 범위)는 바꾸지 않는다. 아래는 행동 방식의 조정값.
+constexpr float EvadeRangeCm = 400.0f;				// A-2 이 거리 안에서 타겟이 정면 60° 밖이면 물러나며 돌아섬. 정면에 두고 이보다 벌어지면 끝
+constexpr float EvadeDiagonalDeg = 45.0f;			// A-2 물러나는 방향을 타겟이 도는 쪽으로 비트는 각도
+constexpr uint32_t EvadeMs = 2000;					// A-2 마지막으로 시작 조건이 생긴 뒤 이만큼 지나면 끝
+constexpr float EvadeSideMinSpeed = 100.0f;			// A-2 타겟이 이보다 느리게 돌면 대각선이 아니라 바로 뒤로
+constexpr float EvadeLookAheadCm = 60.0f;			// A-2 물러날 자리 너머 이만큼도 걸을 수 있어야 그쪽으로 감 (벽에 붙지 않게)
+constexpr uint32_t TargetVelGapMs = 1000;			// 타겟 속도 추정: 두 관측 사이가 이보다 길면 속도를 모름
+constexpr float TargetVelMaxCm = 800.0f;			// 타겟 속도 추정의 상한 (순간이동 등 튀는 값)
+
 // ── 시간 ──
 // 게임 시간은 시험에서 줄여야 하므로 상수가 아니라 바꿀 수 있는 값으로 둔다.
 struct Timing

@@ -21,6 +21,10 @@
 // 범위 (기획 그림): 탐지 범위 반지름 15m, 시야각 정면 90°(좌우 45°), 공격 범위 정면 60°(좌우 30°)
 // 몸은 초당 90°로만 돈다 (N-04): 타겟이 시야 안이어도 공격 범위 밖이면 돌아서 맞춘 뒤 쏜다 → 옆·뒤로 돌면 피할 수 있다.
 //
+// 개선 (docs/경비원AI_공격탐색_개선안.md, 항목마다 GuardFeatures로 끌 수 있음. 기본 수치는 그대로)
+//   A-2 물러나며 돌아서기: 정면 60° 밖에서 맞거나(지금 타겟 포함) 4m 안의 타겟이 정면 밖이면,
+//       타겟 쪽으로 90°/s로 돌면서 대각선 뒤로 달린다. 정면에 들어오면 바로 쏘고, 정면에 둔 채 4m 넘게 벌어지거나 2초 지나면 끝
+//
 // 타겟 규칙 (N-13~N-16)
 //   처음 발견한 플레이어를 유지 · 동시에 보이면 가까운 쪽 · 다른 플레이어가 공격하면 그 사람으로 바꾸고,
 //   공격 때문에 바뀐 타겟은 시야에서 벗어나기 전까지 고정 · 은신·연막 안·쓰러짐·리스폰 무적은 감지 못 함
@@ -131,23 +135,18 @@ void GameWorld::ThinkGuard(Entity& guard, GuardBrain& brain, uint32_t dtMs)
 		const bool valid = target != nullptr && Detectable(*target);
 		const bool visible = valid && CanSee(guard, *target);
 		if (visible)
-		{
-			brain.lastSeenPos = target->pos;
-			brain.lastSeenMs = _nowMs;
-		}
+			NoteTargetPos(brain, target->pos);
 		else
-		{
 			brain.lockedByAttack = false;		// 시야에서 벗어나면 고정이 풀림 (N-16)
-		}
 
 		if (!valid || (!visible && _nowMs - brain.lastSeenMs > GameData::ChaseLoseMs))
 		{
 			// 놓침(3초) 또는 타겟이 쓰러짐·은신·연막 → 다른 사람이 보이면 그쪽, 아니면 마지막으로 본 곳 탐색
 			if (Entity* other = NearestVisibleThief(guard))
 			{
-				brain.lastSeenPos = other->pos;
-				brain.lastSeenMs = _nowMs;
-				return SetGuardState(guard, brain, GuardState::Chase, other->id);
+				SetGuardState(guard, brain, GuardState::Chase, other->id);
+				NoteTargetPos(brain, other->pos);
+				return;
 			}
 			brain.searchPos = brain.lastSeenPos;
 			return SetGuardState(guard, brain, GuardState::Search);
@@ -157,8 +156,17 @@ void GameWorld::ThinkGuard(Entity& guard, GuardBrain& brain, uint32_t dtMs)
 		{
 			const float toTarget = YawTo(guard.pos, target->pos);
 			TurnToward(guard, toTarget, dtMs);	// 초당 90°
+			const float dist = Dist2D(guard.pos, target->pos);
 			const bool inAttackCone = std::fabs(AngleDiff(toTarget, guard.yaw)) <= GameData::GuardAttackHalfAngleDeg &&
-				Dist2D(guard.pos, target->pos) <= GameData::GuardSightRangeCm;
+				dist <= GameData::GuardSightRangeCm;
+			if (_guardFeatures.evade)
+			{
+				// A-2: 가까운(4m) 타겟이 정면 밖이면 물러나며 돌아서기 시작·연장. 정면에 두고 4m 넘게 벌어지면 끝
+				if (!inAttackCone && dist <= GameData::EvadeRangeCm)
+					brain.evadeUntilMs = _nowMs + GameData::EvadeMs;
+				else if (inAttackCone && dist > GameData::EvadeRangeCm)
+					brain.evadeUntilMs = 0;
+			}
 			if (inAttackCone)
 			{
 				// 공격 범위 안: 0.1초마다 단일 사격하고, 멈추지 않고 아래에서 계속 쫓아간다 (12.2 이동, A-18)
@@ -181,6 +189,18 @@ void GameWorld::ThinkGuard(Entity& guard, GuardBrain& brain, uint32_t dtMs)
 				SetGuardState(guard, brain, GuardState::Chase, target->id);
 				brain.lockedByAttack = locked;
 			}
+		}
+
+		// A-2 물러나며 돌아서기: 다가가는 대신 타겟(안 보이면 짐작한 위치) 쪽으로 돌면서 대각선 뒤로 달린다.
+		// 정면 60°에 들어오면 위에서 이미 쐈다. 경로를 따르지 않으므로 끝나면 경로를 새로 찾는다
+		if (_guardFeatures.evade && _nowMs < brain.evadeUntilMs)
+		{
+			const Vec3 threat = visible ? target->pos : GuessTargetPos(brain);
+			if (!visible)
+				TurnToward(guard, YawTo(guard.pos, threat), dtMs);
+			EvadeStep(guard, brain, threat, GameData::GuardRunSpeed * slow, dtMs);
+			brain.path.clear();
+			return;
 		}
 
 		// 쏘는 중이든 아니든: 보이면 지금 위치로, 안 보이면 마지막으로 본 곳으로 달린다 (경로는 0.5초마다)
@@ -218,9 +238,9 @@ void GameWorld::ThinkGuard(Entity& guard, GuardBrain& brain, uint32_t dtMs)
 	// ── 순찰·탐색: 보이면 추격 ──
 	if (Entity* seen = NearestVisibleThief(guard))
 	{
-		brain.lastSeenPos = seen->pos;
-		brain.lastSeenMs = _nowMs;
-		return SetGuardState(guard, brain, GuardState::Chase, seen->id);
+		SetGuardState(guard, brain, GuardState::Chase, seen->id);
+		NoteTargetPos(brain, seen->pos);
+		return;
 	}
 
 	if (brain.state == GuardState::Search)
@@ -305,21 +325,105 @@ void GameWorld::GuardShoot(Entity& guard, Entity& target)
 void GameWorld::OnGuardAttacked(Entity& guard, Entity& attacker)
 {
 	// N-15: 타겟이 아닌 플레이어가 공격하면 즉시 그 사람으로. N-16: 공격 때문에 바뀐 타겟은 고정
+	// A-2: 정면 60° 밖에서 맞으면 물러나며 돌아서기. 지금 타겟이 때려도 위치를 알고 반응한다
 	GuardBrain* brain = BrainFor(guard.id);
-	if (brain == nullptr || (guard.state & StateBit::Repairing) != 0 || brain->target == attacker.id)
+	if (brain == nullptr || (guard.state & StateBit::Repairing) != 0)
 		return;
+	const bool stunned = (guard.state & StateBit::Stunned) != 0;
+	const bool fromOutsideCone = std::fabs(AngleDiff(YawTo(guard.pos, attacker.pos), guard.yaw)) > GameData::GuardAttackHalfAngleDeg;
+	if (brain->target == attacker.id)
+	{
+		if (!_guardFeatures.evade)
+			return;						// 개선 전: 지금 타겟이 때리면 반응 없음
+		NoteTargetPos(*brain, attacker.pos);
+		if (stunned)
+			return;
+		if (brain->state != GuardState::Chase && brain->state != GuardState::Attack)
+			SetGuardState(guard, *brain, GuardState::Chase, attacker.id);
+		if (fromOutsideCone)
+			brain->evadeUntilMs = _nowMs + GameData::EvadeMs;
+		return;
+	}
 	if (brain->lockedByAttack)
 		return;			// 이미 공격자에게 고정된 타겟이 시야 안에 있음
-	brain->lastSeenPos = attacker.pos;
-	brain->lastSeenMs = _nowMs;
-	if ((guard.state & StateBit::Stunned) != 0)
+	if (stunned)
 	{
 		brain->target = attacker.id;	// 경직이 풀리면 그 사람부터 본다
 		brain->lockedByAttack = true;
+		brain->velSampleMs = 0;
+		NoteTargetPos(*brain, attacker.pos);
 		return;
 	}
 	SetGuardState(guard, *brain, GuardState::Chase, attacker.id);
 	brain->lockedByAttack = true;
+	NoteTargetPos(*brain, attacker.pos);
+	if (_guardFeatures.evade && fromOutsideCone)
+		brain->evadeUntilMs = _nowMs + GameData::EvadeMs;
+}
+
+void GameWorld::NoteTargetPos(GuardBrain& brain, const Vec3& pos)
+{
+	// 두 관측(본 위치·맞은 위치) 사이의 이동으로 속도를 짐작한다. 반씩 섞어 튀는 값을 줄임
+	if (brain.velSampleMs != 0 && _nowMs > brain.velSampleMs && _nowMs - brain.velSampleMs <= GameData::TargetVelGapMs)
+	{
+		const float dt = static_cast<float>(_nowMs - brain.velSampleMs) / 1000.0f;
+		float vx = (pos.x - brain.velSamplePos.x) / dt, vy = (pos.y - brain.velSamplePos.y) / dt;
+		const float speed = std::sqrt(vx * vx + vy * vy);
+		if (speed > GameData::TargetVelMaxCm)
+		{
+			vx *= GameData::TargetVelMaxCm / speed;
+			vy *= GameData::TargetVelMaxCm / speed;
+		}
+		brain.seenVel = { (brain.seenVel.x + vx) * 0.5f, (brain.seenVel.y + vy) * 0.5f, 0.0f };
+	}
+	else if (brain.velSampleMs == 0 || _nowMs - brain.velSampleMs > GameData::TargetVelGapMs)
+	{
+		brain.seenVel = {};
+	}
+	if (_nowMs != brain.velSampleMs || brain.velSampleMs == 0)
+	{
+		brain.velSamplePos = pos;
+		brain.velSampleMs = _nowMs;
+	}
+	brain.lastSeenPos = pos;
+	brain.lastSeenMs = _nowMs;
+}
+
+Vec3 GameWorld::GuessTargetPos(const GuardBrain& brain) const
+{
+	const float sec = std::min(static_cast<float>(_nowMs - brain.lastSeenMs), 1000.0f) / 1000.0f;
+	return { brain.lastSeenPos.x + brain.seenVel.x * sec, brain.lastSeenPos.y + brain.seenVel.y * sec, brain.lastSeenPos.z };
+}
+
+void GameWorld::EvadeStep(Entity& guard, const GuardBrain& brain, const Vec3& threat, float speed, uint32_t dtMs)
+{
+	// A-2: 타겟에게서 멀어지는 방향을, 타겟이 경비원 주위를 도는 쪽으로 45° 비튼 대각선으로 달린다.
+	// 같은 쪽으로 비켜서면 타겟이 경비원 등 뒤에 붙어 있기 어렵다 (상대 각속도가 줄어듦, 개선안 2.1).
+	// 막히면 반대쪽 대각선 → 바로 뒤 → 그래도 막히면 제자리에서 돌기만 한다
+	const float away = YawTo(threat, guard.pos);
+	const float rx = threat.x - guard.pos.x, ry = threat.y - guard.pos.y;
+	const float r = std::max(std::sqrt(rx * rx + ry * ry), 1.0f);
+	const float circling = (rx * brain.seenVel.y - ry * brain.seenVel.x) / r;	// 반시계(+)·시계(−)로 도는 속도
+	const float side = circling >= 0.0f ? 1.0f : -1.0f;
+	const float bend = GameData::EvadeDiagonalDeg;
+	float tries[3] = { away - bend * side, away + bend * side, away };
+	if (std::fabs(circling) < GameData::EvadeSideMinSpeed)
+	{
+		tries[0] = away;
+		tries[1] = away - bend;
+		tries[2] = away + bend;
+	}
+	const float step = speed * static_cast<float>(dtMs) / 1000.0f;
+	for (const float yaw : tries)
+	{
+		const Vec3 to = Ahead(guard.pos, yaw, step);
+		if (!_map->nav.IsWalkable(to) || !_map->nav.IsWalkable(Ahead(guard.pos, yaw, step + GameData::EvadeLookAheadCm)))
+			continue;
+		guard.pos.x = to.x;
+		guard.pos.y = to.y;
+		guard.state |= StateBit::Running;
+		return;
+	}
 }
 
 // ───────────────── 도우미 ─────────────────
@@ -327,7 +431,13 @@ void GameWorld::OnGuardAttacked(Entity& guard, Entity& attacker)
 void GameWorld::SetGuardState(Entity& guard, GuardBrain& brain, GuardState state, uint16_t target)
 {
 	if (target != brain.target)
+	{
 		brain.lockedByAttack = false;
+		brain.velSampleMs = 0;			// 다른 사람의 속도는 새로 잰다
+		brain.seenVel = {};
+	}
+	if (state != GuardState::Chase && state != GuardState::Attack)
+		brain.evadeUntilMs = 0;
 	brain.state = state;
 	brain.target = target;
 	brain.path.clear();

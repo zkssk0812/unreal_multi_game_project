@@ -181,6 +181,10 @@ struct GuardBrain
 	bool lockedByAttack = false;		// N-16: 공격 때문에 바뀐 타겟은 시야에서 벗어나기 전까지 고정
 	Vec3 lastSeenPos;
 	uint32_t lastSeenMs = 0;
+	Vec3 seenVel;						// 타겟의 추정 속도 (cm/s, 본 위치·맞은 위치로 계산)
+	Vec3 velSamplePos;
+	uint32_t velSampleMs = 0;			// 0 = 아직 관측 없음
+	uint32_t evadeUntilMs = 0;			// A-2 물러나며 돌아서기 중 (이 시각까지)
 	Vec3 searchPos;
 	bool looking = false;				// 도착해서 둘러보는 중
 	uint32_t waitUntilMs = 0;
@@ -335,6 +339,9 @@ private:
 	void LookAround(Entity& guard, uint32_t dtMs);
 	void StartPatrol(Entity& guard, GuardBrain& brain);
 	void GuardShoot(Entity& guard, Entity& target);
+	void NoteTargetPos(GuardBrain& brain, const Vec3& pos);		// 타겟을 본·맞은 위치 기록 (속도 추정)
+	Vec3 GuessTargetPos(const GuardBrain& brain) const;			// 마지막 위치 + 속도로 지금 있을 곳 (최대 1초 앞)
+	void EvadeStep(Entity& guard, const GuardBrain& brain, const Vec3& threat, float speed, uint32_t dtMs);	// A-2
 	GuardBrain* BrainFor(uint16_t guardId);
 
 	std::vector<Entity> _entities;

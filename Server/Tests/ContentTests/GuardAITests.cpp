@@ -354,6 +354,61 @@ TEST_CASE(AI_AttackedByOther_SwitchesTarget_AndLocks)
 	CHECK_EQ(world.BrainOf(guard)->target, world.ThiefOf(B)->id);
 }
 
+// ───────────────── A-2 물러나며 돌아서기 ─────────────────
+
+// 사격 중인 경비원의 등 뒤 1.5m에서 지금 타겟(A)이 삼단봉으로 때린다
+GameWorld HitFromBehind(const GuardFeatures& features, uint16_t& guard)
+{
+	GameWorld world = GuardArena();
+	world.SetGuardFeatures(features);
+	guard = Nth(world, EntityKind::Guard);
+	PlaceGuard(world, { 400.0f, -3400.0f, 0.0f }, 90.0f);		// Gallery1 서쪽 가운데 (사방 4m 넘게 트임)
+	Teleport(world, A, { 400.0f, -2800.0f, 0.0f }, -90.0f);		// 정면 6m
+	world.ThiefOf(A)->hp = 100000;
+	RunUntil(world, 500, [&] { return StateOf(world, guard) == GuardState::Attack; });
+	world.Find(guard)->pos = { 400.0f, -3400.0f, 0.0f };
+	world.Find(guard)->yaw = 90.0f;
+	Teleport(world, A, { 400.0f, -3550.0f, 0.0f }, 90.0f);		// 등 뒤 1.5m
+	Give(world, A, WeaponId::Baton);
+	Attack(world, A, 90.0f);
+	return world;
+}
+
+TEST_CASE(AI_A2_HitFromBehindByTarget_BacksOffWhileTurning)
+{
+	uint16_t guard = 0;
+	GameWorld world = HitFromBehind(GuardFeatures::All(), guard);
+	CHECK(world.Find(guard)->hp < GameData::GuardMaxHp);
+	CHECK(world.BrainOf(guard)->evadeUntilMs > world.NowMs());		// 지금 타겟이 때려도 반응
+	const float yaw0 = world.Find(guard)->yaw;
+	Run(world, 500);
+	const Entity& g = *world.Find(guard);
+	CHECK(Content::WorldMath::Dist2D(g.pos, world.ThiefOf(A)->pos) > 150.0f + 150.0f);	// 0.5초에 1.5m 넘게 멀어짐 (달리기 4.2m/s)
+	CHECK(std::fabs(Content::WorldMath::AngleDiff(g.yaw, yaw0)) <= 45.0f + 0.01f);		// 회전은 그대로 90°/s
+	CHECK(std::fabs(Content::WorldMath::AngleDiff(g.yaw, yaw0)) >= 40.0f);				// 공격자 쪽으로 돌고 있음
+	CHECK(DefaultMap().nav.IsWalkable(g.pos));
+	CHECK(StateOf(world, guard) == GuardState::Chase || StateOf(world, guard) == GuardState::Attack);
+}
+
+TEST_CASE(AI_A2_TurnsAroundAndShoots)
+{
+	uint16_t guard = 0;
+	GameWorld world = HitFromBehind(GuardFeatures::All(), guard);
+	const auto events = RunCollect(world, 2500);								// 180° 도는 데 2초
+	CHECK(ShotsBy(events, guard) > 0);
+	CHECK(Content::WorldMath::Dist2D(world.Find(guard)->pos, world.ThiefOf(A)->pos) > GameData::EvadeRangeCm - 50.0f);
+}
+
+TEST_CASE(AI_A2_Disabled_TargetHitIgnored)
+{
+	// 개선 전: 지금 타겟이 뒤에서 때리면 반응이 없다 (그대로 마지막으로 본 쪽을 향함)
+	uint16_t guard = 0;
+	GameWorld world = HitFromBehind(GuardFeatures::None(), guard);
+	CHECK_EQ(world.BrainOf(guard)->evadeUntilMs, 0u);
+	Run(world, 500);
+	CHECK(std::fabs(Content::WorldMath::AngleDiff(world.Find(guard)->yaw, 90.0f)) < 5.0f);	// 공격자 쪽으로 돌지 않음
+}
+
 TEST_CASE(AI_LosesTarget_Searches_ThenPatrols)
 {
 	GameWorld world = GuardArena();
