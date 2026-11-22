@@ -1,6 +1,6 @@
 # 경비원 AI: 공격·탐색·순찰 현재 방식과 개선안
 
-> 상태: **코드 반영** (A-2, S-1·S-3~S-6, P-1~P-7. 브랜치 `guard-ai/*`). 효과 측정은 [경비원AI_개선_검증.md](경비원AI_개선_검증.md)
+> 상태: **코드 반영** (A-2, S-1·S-3~S-6, P-1~P-7. 브랜치 `guard-ai-improvement`). 효과 측정은 [경비원AI_개선_검증.md](경비원AI_개선_검증.md)
 > 대상 코드: `Content/Game/GuardAI.cpp`, 수치: `Content/GameData.h`
 > 전제: **경비원 회전 속도는 항상 초당 90°로 고정** (기획 N-04). 순찰·추격·사격·탐색 모두 같은 속도로 돕니다.
 > 순찰 데이터: `Data/Maps/mansion_1f_server.json` (`tools/collision_to_map.py`가 생성)
