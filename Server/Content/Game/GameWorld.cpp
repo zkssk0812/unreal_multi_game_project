@@ -352,7 +352,10 @@ std::optional<RejectReason> GameWorld::ApplyAction(uint64_t playerId, const Inpu
 		else if ((thief->state & StateBit::RailgunLock) != 0)
 			result = RejectReason::Locked;
 		else
+		{
 			thief->activeSlot = other;
+			HolsterTaser(*thief);					// 무기를 바꾸면 든 테이저건은 집어넣음
+		}
 		break;
 	}
 

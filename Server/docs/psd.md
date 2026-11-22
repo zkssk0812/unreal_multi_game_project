@@ -158,7 +158,8 @@ enum class ExplosionKind  : uint8_t { Grenade, BlastMine, ShockMine, Flashbang }
 | 18 | Armed | 지뢰 (설치 3초 뒤 작동) |
 | 19 | Triggered | 지뢰 (감지, 0.5초 경고) |
 | 20 | CarryingTreasure | 플레이어 |
-| 21~31 | 예비 | |
+| 21 | TaserReady | 플레이어: 사제 테이저건을 든 상태 (Q로 들기, 공격 키로 발사. 2026-11-22 추가) |
+| 22~31 | 예비 | |
 
 ### 3.3 구조체
 
@@ -203,7 +204,7 @@ struct EntitySnapshot {         // SC_SNAPSHOT
 | 4011 | `SC_GUARD_ALERT` | S→C | guard, level, target | 유지 (enum만 바뀜) |
 | 4012 | `SC_KNOCKBACK` | S→C | target, dir, distance — 제트팩 밀려남 (A-19) | 새로 |
 | 4013 | `SC_PLAYER_STATUS` | S→C (본인) | hp, shield, sp, weapons[2]{id, ammo}, active_slot, consumable, skill_id, skill_cooldown_ms, skill_active_ms, death_save_left | 새로 (U-01, U-03) |
-| 4014 | `SC_SKILL` | S→C | caster, skill_id, state(Cast/Active/End), pos | 새로 |
+| 4014 | `SC_SKILL` | S→C | caster, skill_id, state(Cast/Active/End), pos. 사제 테이저건: 들기 = Active, 발사 = Cast, 쏘지 않고 집어넣음 = End | 새로 |
 | 4015 | `SC_PICKUP` | S→C | thief, kind, type_id, param (연출용) | 새로 |
 
 삭제: `SC_JAILED`, `SC_ESCAPED`, `SC_EXIT_OPENED`, `CS_SELECT_SKILL`(스킬은 캐릭터 고정).
@@ -261,7 +262,7 @@ struct BoxDrop        { enum Kind { Weapon, FieldItem, Nothing, Consumable, Comm
 | 소비 아이템 | 회복 키트 +30 · 연막 반지름 500cm·10초 · 섬광탄 최대 600cm·반지름 300cm·플레이어 3초·경비원 경직 2초·사용자 제외 · 제트팩 3초·1,000cm/s·밀어냄 300cm·경비원 경직 1초. 1개만 | I-31~34 |
 | 경비원 | 3명, HP 200, 자가 수리 5초(무적·정지), 탐색 210cm/s, 추격 420cm/s, 회전 90°/s, 탐지 1,500cm, 시야 좌우 45° | N-02~06, N-11, Q-17 |
 | 기관총 | 10 대미지, 100ms 간격, 공격 범위 좌우 30°·1,500cm, 난사(타겟 방향 ±30° 무작위, 발마다 단일 히트 박스), 쏘면서 추격 속도로 이동 | 12.2 |
-| 스킬 | 테이저 30s 쿨·300cm 단일·경직 2초 · 끈끈이 30s 쿨·1초 뒤·뒤 100cm·반경 300cm·10초·감속 50%(설치자 포함) · 은신 30s 쿨(해제 시)·20초·감속 80% | S-01~03 |
+| 스킬 | 테이저 Q로 들기 → 공격 키로 발사·30s 쿨(발사 때)·300cm 단일·경직 2초 · 끈끈이 30s 쿨·1초 뒤·뒤 100cm·반경 300cm·10초·감속 50%(설치자 포함) · 은신 30s 쿨(해제 시)·20초·감속 80% | S-01~03 |
 | 퍽 | 방탄조끼 보호막 20 · 가시회생 1회 · 유용한 도구 ×1.1 · 운동화 달리기 ×1.2 (리스폰 때 다시 충전) | K-01~04 |
 | 히트 박스 | 반지름 40cm, 높이 180cm. 상자 50cm | A-10 |
 
@@ -417,7 +418,7 @@ CREATE TABLE dbo.PlayerRecord (
 | 작업 | 내용 | 명세 | 상태 |
 |---|---|---|---|
 | T-60 | 캐릭터 고유 스킬, 쿨타임(발동 직후 / 은신은 해제 때)·리스폰 초기화, `SC_SKILL` | F-02, §9, A-06 | ✅ |
-| T-61 | 사제 테이저건(3m 단일, 2초 경직) · 끈끈이(1초 뒤 뒤 1m, 반경 3m, 10초, 설치자 포함 감속 50%) | S-01, S-02, E-01, E-02 | ✅ |
+| T-61 | 사제 테이저건(Q로 들기 → 공격 키로 발사, 3m 단일, 2초 경직) · 끈끈이(1초 뒤 뒤 1m, 반경 3m, 10초, 설치자 포함 감속 50%) | S-01, S-02, E-01, E-02 | ✅ |
 | T-62 | 은신: 20초, 다시 누르면 해제, 이동 80% 감속, 특수 동작 불가, 공격받음·공격·상호작용 시 해제, 경비원 감지 제외 | S-03, E-03, Q-30 | ✅ |
 | T-63 | 퍽 7종: 방탄조끼·가시회생(리스폰 때 다시 충전)·유용한 도구·운동화. 정보 퍽 3종은 클라 표시(서버는 퍽 목록과 위치를 모두 보냄) | K-01~07, U-05, Q-15 | ✅ |
 | T-64 | 이동 속도 효과: 플레이어 이동은 클라가 하므로 감속·은신·운동화는 **클라가 적용**, 서버는 상태 비트만. 경비원 감속(끈끈이)은 서버가 적용 | E-02, E-03, K-04 | ✅ |

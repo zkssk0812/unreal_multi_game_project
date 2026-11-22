@@ -151,6 +151,14 @@ void GameWorld::UpdateFiring(Entity& thief)
 {
 	if (!thief.attackHeld || !CanAct(thief) || (thief.state & (StateBit::RailgunLock | StateBit::Jetpack)) != 0)
 		return;
+	// 사제 테이저건을 들고 있으면 무기 대신 테이저건 한 발. 계속 누르고 있어도 무기가 이어서 나가지 않게
+	// 공격 키를 뗀 것으로 친다 (다시 누르면 무기)
+	if (FireTaser(thief))
+	{
+		thief.attackHeld = false;
+		ClearBits(thief.state, StateBit::Attacking);
+		return;
+	}
 	// 오래 멈췄다가(경직 등) 다시 쏠 때 밀린 공격을 한꺼번에 쏘지 않게
 	thief.nextFireMs = std::max(thief.nextFireMs, _nowMs > 50 ? _nowMs - 50 : 0);
 
@@ -301,6 +309,8 @@ void GameWorld::Stun(Entity& target, uint32_t ms)
 	target.state |= StateBit::Stunned;
 	if (target.IsThief() && target.interactTarget != 0)
 		CancelInteract(target);
+	if (target.IsThief())
+		HolsterTaser(target);
 }
 
 void GameWorld::ApplyDamage(Entity& target, Entity* attacker, WeaponId weapon, int32_t amount, uint32_t stunMs)
@@ -384,6 +394,7 @@ void GameWorld::Down(Entity& thief, Entity* attacker, DownCause cause)
 {
 	if (thief.interactTarget != 0)
 		CancelInteract(thief);
+	HolsterTaser(thief);
 
 	// 반납 금액 손실: 플레이어에게 10%, 경비원에게 40%. 잃은 금액은 그냥 사라짐 (D-04, Q-03)
 	const uint32_t pct = cause == DownCause::Guard ? GameData::LossPctByGuard : GameData::LossPctByPlayer;

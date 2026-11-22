@@ -132,7 +132,7 @@ enum class ActionType : uint8_t {
 	Dodge = 3,
 	InteractBegin = 4, InteractCancel = 5,	// target_entity_id = 대상
 	SwitchWeapon = 6,					// 무기1 ↔ 무기2 (마우스 휠)
-	UseSkill = 7,						// Q (은신 중 다시 누르면 해제)
+	UseSkill = 7,						// Q (은신 중 다시 누르면 해제, 사제 테이저건은 들기/집어넣기)
 	UseConsumable = 8,					// E
 };
 
@@ -180,6 +180,7 @@ enum EntityStateBit : uint32_t {
 	ES_ARMED             = 1u << 18,	// 지뢰: 작동 중
 	ES_TRIGGERED         = 1u << 19,	// 지뢰: 감지됨 (0.5초 경고)
 	ES_CARRYING_TREASURE = 1u << 20,	// 플레이어: 보물을 들고 있음
+	ES_TASER_READY       = 1u << 21,	// 플레이어: 사제 테이저건을 든 상태 (Q로 들기, 공격 키로 발사)
 };
 
 // CS_Move::flags

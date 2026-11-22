@@ -23,16 +23,68 @@ GameWorld Arena()
 
 } // namespace
 
-TEST_CASE(Skill_Taser_Stuns2s_CooldownFromUse)
+TEST_CASE(Skill_Taser_QDraws_AttackFires_Stuns2s_CooldownFromFire)
 {
 	GameWorld world = Arena();
-	CHECK(!Act(world, A, ActionType::UseSkill).has_value());
+	CHECK(!Act(world, A, ActionType::UseSkill).has_value());			// Q: 들기만 (쏘지 않음)
+	CHECK((world.ThiefOf(A)->state & StateBit::TaserReady) != 0);
+	CHECK((world.ThiefOf(B)->state & StateBit::Stunned) == 0);
+	const auto drawn = First<Msg::Skill>(world.TakeEvents());
+	CHECK(drawn && drawn->phase == SkillPhase::Active && drawn->skill == SkillId::Taser);
+
+	Attack(world, A, 0.0f);											// 공격 키: 무기 대신 테이저건
 	CHECK((world.ThiefOf(B)->state & StateBit::Stunned) != 0);		// 3m 단일, 2초 경직 (S-01)
-	CHECK_EQ(world.ThiefOf(B)->hp, 100);
+	CHECK_EQ(world.ThiefOf(B)->hp, 100);							// 삼단봉은 나가지 않음
+	CHECK((world.ThiefOf(A)->state & StateBit::TaserReady) == 0);	// 쏘면 집어넣음
+	const auto events = world.TakeEvents();
+	const auto cast = First<Msg::Skill>(events);
+	CHECK(cast && cast->phase == SkillPhase::Cast);
+	CHECK(!First<Msg::Fire>(events));
+
 	const auto again = Act(world, A, ActionType::UseSkill);
 	CHECK(again && *again == RejectReason::Cooldown);
 	Run(world, 30000);
-	CHECK(!Act(world, A, ActionType::UseSkill).has_value());			// 쓴 직후부터 30초
+	CHECK(!Act(world, A, ActionType::UseSkill).has_value());			// 쏜 직후부터 30초
+}
+
+TEST_CASE(Skill_Taser_HoldingAttack_FiresOnce_ThenWeaponNeedsNewPress)
+{
+	GameWorld world = Arena();
+	Act(world, A, ActionType::UseSkill);
+	Act(world, A, ActionType::AttackStart, 0, 0.0f);
+	Run(world, 1000);												// 누른 채로 1초
+	CHECK_EQ(world.ThiefOf(B)->hp, 100);							// 테이저 뒤 삼단봉이 이어서 나가지 않음
+	Attack(world, A, 0.0f);											// 다시 누르면 무기
+	CHECK_EQ(world.ThiefOf(B)->hp, 90);
+}
+
+TEST_CASE(Skill_Taser_QAgain_Holsters_NoCooldown)
+{
+	GameWorld world = Arena();
+	Act(world, A, ActionType::UseSkill);
+	world.TakeEvents();
+	CHECK(!Act(world, A, ActionType::UseSkill).has_value());			// 다시 Q: 집어넣음
+	CHECK((world.ThiefOf(A)->state & StateBit::TaserReady) == 0);
+	const auto end = First<Msg::Skill>(world.TakeEvents());
+	CHECK(end && end->phase == SkillPhase::End);
+	CHECK(!Act(world, A, ActionType::UseSkill).has_value());			// 쿨타임 없이 바로 다시 들 수 있음
+	Attack(world, A, 0.0f);
+	CHECK((world.ThiefOf(B)->state & StateBit::Stunned) != 0);
+}
+
+TEST_CASE(Skill_Taser_SwitchWeaponOrStun_Holsters)
+{
+	GameWorld world = Arena();
+	Give(world, A, WeaponId::Pistol);
+	Act(world, A, ActionType::UseSkill);
+	CHECK(!Act(world, A, ActionType::SwitchWeapon).has_value());
+	CHECK((world.ThiefOf(A)->state & StateBit::TaserReady) == 0);	// 무기 교체 → 집어넣음
+
+	Act(world, A, ActionType::UseSkill);
+	Give(world, B, WeaponId::Taser);								// 줍는 무기 테이저건 (W-12)
+	Attack(world, B, 180.0f);
+	CHECK((world.ThiefOf(A)->state & StateBit::Stunned) != 0);
+	CHECK((world.ThiefOf(A)->state & StateBit::TaserReady) == 0);	// 경직 → 집어넣음
 }
 
 TEST_CASE(Skill_Taser_OutOfRange_Misses)
@@ -40,7 +92,9 @@ TEST_CASE(Skill_Taser_OutOfRange_Misses)
 	GameWorld world = Arena();
 	Teleport(world, B, Offset(HallW, 400, 0));
 	Act(world, A, ActionType::UseSkill);
+	Attack(world, A, 0.0f);
 	CHECK((world.ThiefOf(B)->state & StateBit::Stunned) == 0);
+	CHECK((world.ThiefOf(A)->state & StateBit::TaserReady) == 0);	// 빗나가도 쏜 것 (쿨타임 시작)
 }
 
 TEST_CASE(Skill_Sticky_AfterOneSecond_BehindMovement_SlowsOwner)

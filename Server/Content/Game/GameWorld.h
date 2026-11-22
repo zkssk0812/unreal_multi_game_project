@@ -329,6 +329,8 @@ private:
 	std::optional<RejectReason> UseConsumable(Entity& thief, const InputCmd& input);
 	void UpdateSkill(Entity& thief);
 	void EndCloak(Entity& thief);
+	bool FireTaser(Entity& thief);									// 든 테이저건을 쏨 (든 상태가 아니면 false)
+	void HolsterTaser(Entity& thief);								// 든 테이저건을 쏘지 않고 집어넣음
 	void UpdateEffects();											// 끈끈이·연막 범위, 만료
 	void UpdateJetpack(Entity& thief);
 	void SetSkillEvent(const Entity& caster, SkillPhase phase, const Vec3& pos);

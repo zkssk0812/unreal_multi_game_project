@@ -143,7 +143,8 @@ static_assert(Content::StateBit::Running == ES_RUNNING && Content::StateBit::Dod
 	&& Content::StateBit::Repairing == ES_REPAIRING && Content::StateBit::LeftGame == ES_LEFT_GAME
 	&& Content::StateBit::Opened == ES_OPENED && Content::StateBit::Warning == ES_WARNING
 	&& Content::StateBit::Armed == ES_ARMED && Content::StateBit::Triggered == ES_TRIGGERED
-	&& Content::StateBit::CarryingTreasure == ES_CARRYING_TREASURE, "상태 비트 값이 다름");
+	&& Content::StateBit::CarryingTreasure == ES_CARRYING_TREASURE
+	&& Content::StateBit::TaserReady == ES_TASER_READY, "상태 비트 값이 다름");
 static_assert(Content::MoveFlag::Moving == MF_MOVING && Content::MoveFlag::Running == MF_RUNNING, "이동 플래그 값이 다름");
 
 // ───────────────── 도우미 ─────────────────

@@ -94,6 +94,7 @@ constexpr uint32_t Warning          = 1u << 17;	// 반납 지점: 곧 사라짐 
 constexpr uint32_t Armed            = 1u << 18;	// 지뢰: 작동 중
 constexpr uint32_t Triggered        = 1u << 19;	// 지뢰: 감지됨 (0.5초 경고)
 constexpr uint32_t CarryingTreasure = 1u << 20;	// 플레이어: 보물을 들고 있음
+constexpr uint32_t TaserReady       = 1u << 21;	// 플레이어: 사제 테이저건을 든 상태 (Q, 공격 키로 발사)
 }
 
 // CS_MOVE의 flags (protocol.h의 MoveFlag과 같은 값)

@@ -9,7 +9,7 @@
 
 // 스킬·소비 아이템·상태이상 (docs/psd.md M5·M6).
 //
-// 스킬은 캐릭터 고유 (F-02, A-06): 도적1 사제 테이저건 · 도적2 끈끈이 · 도적3 은신 · 도적4·5 없음.
+// 스킬은 캐릭터 고유 (F-02, A-06): 도적1 사제 테이저건(Q로 들고 공격 키로 발사) · 도적2 끈끈이 · 도적3 은신 · 도적4·5 없음.
 // 이동 속도 효과(끈끈이 감속·은신 −80%·운동화)는 플레이어 이동이 클라 몫이라 클라가 적용하고(T-64),
 // 서버는 상태 비트(Slowed·Cloaked)만 알린다. 경비원 감속은 서버가 적용한다(GuardAI.cpp).
 
@@ -51,17 +51,18 @@ std::optional<RejectReason> GameWorld::UseSkill(Entity& thief)
 		return std::nullopt;
 
 	case SkillId::Taser:
-	{
-		// 사제 테이저건: 3m 단일(히트 박스), 맞으면 2초 경직. 쿨타임은 쓴 직후부터 (S-01)
+		// 사제 테이저건: Q로 들고(TaserReady, SC_SKILL Active) → 공격 키로 발사(FireTaser).
+		// 든 채로 Q를 다시 누르면 집어넣는다(SC_SKILL End, 쿨타임 없음) (S-01, 클라 2026-11)
+		if ((thief.state & StateBit::TaserReady) != 0)
+		{
+			HolsterTaser(thief);
+			return std::nullopt;
+		}
 		if (_nowMs < thief.skillReadyMs)
 			return RejectReason::Cooldown;
-		thief.skillReadyMs = _nowMs + GameData::SkillCooldownMs;
-		SetSkillEvent(thief, SkillPhase::Cast, thief.pos);
-		const HitResult hit = RayHit(thief, thief.yaw, GameData::SkillTaserRangeCm, false);
-		if (hit.target != nullptr)
-			ApplyDamage(*hit.target, &thief, WeaponId::Taser, 0, GameData::StunMs);
+		thief.state |= StateBit::TaserReady;
+		SetSkillEvent(thief, SkillPhase::Active, thief.pos);
 		return std::nullopt;
-	}
 
 	case SkillId::Sticky:
 		// 끈끈이: 1초 동안 던지는 동작 → 이동 방향 반대쪽 1m 뒤에 함정 (S-02)
@@ -73,6 +74,29 @@ std::optional<RejectReason> GameWorld::UseSkill(Entity& thief)
 		return std::nullopt;
 	}
 	return RejectReason::NotAvailable;
+}
+
+bool GameWorld::FireTaser(Entity& thief)
+{
+	// 3m 단일(히트 박스), 맞으면 2초 경직. 쿨타임은 쏜 직후부터 (S-01). 쏘면 집어넣는다
+	if ((thief.state & StateBit::TaserReady) == 0)
+		return false;
+	ClearBits(thief.state, StateBit::TaserReady);
+	thief.skillReadyMs = _nowMs + GameData::SkillCooldownMs;
+	SetSkillEvent(thief, SkillPhase::Cast, thief.pos);
+	const HitResult hit = RayHit(thief, thief.yaw, GameData::SkillTaserRangeCm, false);
+	if (hit.target != nullptr)
+		ApplyDamage(*hit.target, &thief, WeaponId::Taser, 0, GameData::StunMs);
+	return true;
+}
+
+void GameWorld::HolsterTaser(Entity& thief)
+{
+	// 무기 교체·경직·쓰러짐·제트팩·Q 다시 누름 → 쏘지 않고 집어넣음 (쿨타임 없음)
+	if ((thief.state & StateBit::TaserReady) == 0)
+		return;
+	ClearBits(thief.state, StateBit::TaserReady);
+	SetSkillEvent(thief, SkillPhase::End, thief.pos);
 }
 
 void GameWorld::UpdateSkill(Entity& thief)
@@ -135,6 +159,7 @@ std::optional<RejectReason> GameWorld::UseConsumable(Entity& thief, const InputC
 		// 3초 동안 마우스 방향 10m/s. 이동은 클라가, 부딪침은 서버가 (I-34, A-19)
 		thief.jetpackUntilMs = _nowMs + GameData::JetpackMs;
 		thief.jetpackHit.clear();
+		HolsterTaser(thief);
 		thief.state |= StateBit::Jetpack;
 		if (thief.interactTarget != 0)
 			CancelInteract(thief);
