@@ -399,7 +399,8 @@ TrailResult TrailTrial(const GuardFeatures& features, int trials)
 }
 
 // ─────────────── ⑥ 동료 호출 (S-5) ───────────────
-// 경비원 하나가 플레이어를 발견했을 때, 그 플레이어를 직접 볼 수 없는 10~19m 거리의 다른 경비원이 20초 안에 합류(플레이어를 봄)한 비율.
+// 경비원 하나가 플레이어를 발견했을 때, 발견한 경비원에게서 10~19m 떨어져 있고 플레이어를 직접 볼 수 없는
+// 다른 경비원이 20초 안에 합류(플레이어를 봄)한 비율. 플레이어는 그 자리에서 버틴다.
 
 struct CallResult
 {
@@ -413,11 +414,11 @@ CallResult CallTrial(const GuardFeatures& features)
 	const Vec3 spotter{ 900.0f, -4200.0f, 0.0f }, player{ 900.0f, -3400.0f, 0.0f };	// Gallery1
 	CallResult r;
 	uint32_t seed = 4000;
-	for (size_t n = 0; n < map.patrolNodes.size(); ++n)
+	std::mt19937 rng(41);
+	for (int attempt = 0; attempt < 5000 && r.tried < 20; ++attempt)
 	{
-		const Vec3 helper = map.patrolNodes[n];
-		const float d = Dist2D(helper, player);
-		if (d < 1000.0f || d > 1900.0f || !map.nav.Connected(helper, player) || Sees(helper, player))
+		const Vec3 helper = RandomAround(rng, spotter, 1000.0f, 1900.0f);
+		if (!map.nav.IsWalkable(helper) || !map.nav.Connected(helper, player) || Sees(helper, player))
 			continue;
 		GameWorld world = BenchWorld(1, ++seed, features);
 		ClearArena(world);
@@ -476,24 +477,32 @@ TEST_CASE(Bench_HideAfterChase_Search)
 {
 	const auto cases = HideCases(40, 77, 500.0f, 800.0f);
 	CHECK(cases.size() >= 30);
-	for (const Mode& mode : Modes)
+	SearchResult results[2];
+	for (size_t m = 0; m < 2; ++m)
 	{
+		const Mode& mode = Modes[m];
 		const SearchResult r = HideTrial(mode.features, cases);
+		results[m] = r;
 		Report("② 쫓기다 숨기 {} | 탐색까지 간 시도 {}회 중 다시 찾음 {}회 ({:.0f}%), 찾는 데 평균 {:.1f}초",
 			mode.name, r.tried, r.found, Pct(r.found, r.tried), Avg(r.foundSec, r.found));
 	}
+	CHECK(Pct(results[1].found, results[1].tried) >= Pct(results[0].found, results[0].tried) + 15.0);	// 개선 후: 숨은 플레이어를 더 많이 찾는다
 }
 
 TEST_CASE(Bench_StunThenHide_S6)
 {
 	const auto cases = HideCases(40, 99, 180.0f, 200.0f);
 	CHECK(cases.size() >= 30);
-	for (const Mode& mode : Modes)
+	SearchResult results[2];
+	for (size_t m = 0; m < 2; ++m)
 	{
+		const Mode& mode = Modes[m];
 		const SearchResult r = StunTrial(mode.features, cases);
+		results[m] = r;
 		Report("③ 경직시키고 숨기 {} | {}회 중 다시 찾음 {}회 ({:.0f}%), 찾는 데 평균 {:.1f}초",
 			mode.name, r.tried, r.found, Pct(r.found, r.tried), Avg(r.foundSec, r.found));
 	}
+	CHECK(Pct(results[1].found, results[1].tried) >= Pct(results[0].found, results[0].tried) + 15.0);
 }
 
 TEST_CASE(Bench_PatrolCoverage_P)
@@ -518,11 +527,15 @@ TEST_CASE(Bench_TrailBehindGuard_P6)
 
 TEST_CASE(Bench_AllyCall_S5)
 {
-	for (const Mode& mode : Modes)
+	CallResult results[2];
+	for (size_t m = 0; m < 2; ++m)
 	{
+		const Mode& mode = Modes[m];
 		const CallResult r = CallTrial(mode.features);
-		Report("⑥ 동료 호출 {} | 10~19m 떨어진 동료 {}명 중 20초 안에 합류 {}명 ({:.0f}%), 합류까지 평균 {:.1f}초",
+		results[m] = r;
+		Report("⑥ 동료 호출 {} | 발견한 경비원에게서 10~19m 떨어진 동료 {}명 중 20초 안에 합류 {}명 ({:.0f}%), 합류까지 평균 {:.1f}초",
 			mode.name, r.tried, r.joined, Pct(r.joined, r.tried), Avg(r.joinedSec, r.joined));
 	}
+	CHECK(results[1].joined > results[0].joined && Pct(results[1].joined, results[1].tried) >= 80.0);
 }
 

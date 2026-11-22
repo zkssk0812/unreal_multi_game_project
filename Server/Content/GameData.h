@@ -228,6 +228,19 @@ constexpr float EvadeDiagonalDeg = 45.0f;			// A-2 물러나는 방향을 타겟
 constexpr uint32_t EvadeMs = 2000;					// A-2 마지막으로 시작 조건이 생긴 뒤 이만큼 지나면 끝
 constexpr float EvadeSideMinSpeed = 100.0f;			// A-2 타겟이 이보다 느리게 돌면 대각선이 아니라 바로 뒤로
 constexpr float EvadeLookAheadCm = 60.0f;			// A-2 물러날 자리 너머 이만큼도 걸을 수 있어야 그쪽으로 감 (벽에 붙지 않게)
+constexpr uint32_t PredictAheadMs = 1000;			// S-1 놓친 플레이어가 움직이던 방향으로 이 시간만큼 앞
+constexpr float PredictMaxCm = 300.0f;				// S-1 최대 3m
+constexpr float PredictMinSpeedCm = 50.0f;			// S-1 이보다 느리면 놓친 곳 그대로
+constexpr uint32_t SearchSpinMs = 4000;				// S-3 첫 지점에서 한 바퀴 (90°/s × 4초 = 360°). 끄면 SearchLookMs(2초, N-19)
+constexpr size_t SearchExtraSpots = 2;				// S-4 주변 지점 수
+constexpr float SearchSpotMinCm = 300.0f;			// S-4 첫 지점에서 3~7m
+constexpr float SearchSpotMaxCm = 700.0f;
+constexpr float SearchSpotGapCm = 300.0f;			// S-4 지점끼리 이만큼은 떨어지게
+constexpr float SearchDetourMax = 2.0f;				// S-4 걸어서 직선 거리의 2배를 넘게 돌아가면 뺀다
+constexpr size_t SearchPathTries = 8;				// S-4 경로 찾기 최대 횟수 (탐색을 시작할 때만)
+constexpr float SearchSweepDeg = 60.0f;				// S-4 주변 지점에서 좌우 60° 훑기 (약 2.7초)
+constexpr float AllyCallRangeCm = 2000.0f;			// S-5 이 거리 안의 순찰·탐색 중인 동료를 부른다
+constexpr uint32_t StunMemoryMs = 6000;				// S-6 경직·수리가 풀렸을 때 이 시간 안에 본(맞은) 곳을 탐색
 constexpr uint32_t TargetVelGapMs = 1000;			// 타겟 속도 추정: 두 관측 사이가 이보다 길면 속도를 모름
 constexpr float TargetVelMaxCm = 800.0f;			// 타겟 속도 추정의 상한 (순간이동 등 튀는 값)
 

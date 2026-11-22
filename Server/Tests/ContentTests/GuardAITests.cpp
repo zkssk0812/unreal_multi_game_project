@@ -418,7 +418,119 @@ TEST_CASE(AI_LosesTarget_Searches_ThenPatrols)
 	RunUntil(world, 500, [&] { return StateOf(world, guard) == GuardState::Attack; });
 	Teleport(world, A, FarAway);
 	CHECK(RunUntil(world, 4000, [&] { return StateOf(world, guard) == GuardState::Search; }));	// 3초 못 보면 놓침
-	CHECK(RunUntil(world, 15000, [&] { return StateOf(world, guard) == GuardState::Patrol; }));
+	CHECK(RunUntil(world, 30000, [&] { return StateOf(world, guard) == GuardState::Patrol; }));	// 탐색 지점을 모두 보면 순찰
+}
+
+// ───────────────── 탐색 개선 (S-1·S-3·S-4·S-5·S-6) ─────────────────
+
+// 정면에서 사격 중인 타겟이 +Y(경비원에게서 멀어지는 쪽, 벤치 서쪽의 트인 곳)로 0.5초 달리다 사라진다 → 3초 뒤 탐색 시작
+GameWorld LoseRunningTarget(const GuardFeatures& features, uint16_t& guard, Vec3& lastSeen)
+{
+	GameWorld world = GuardArena();
+	world.SetGuardFeatures(features);
+	guard = Nth(world, EntityKind::Guard);
+	PlaceGuard(world, { 400.0f, -4200.0f, 0.0f }, 90.0f);
+	Teleport(world, A, { 400.0f, -3500.0f, 0.0f });
+	world.ThiefOf(A)->hp = 100000;
+	RunUntil(world, 500, [&] { return StateOf(world, guard) == GuardState::Attack; });
+	for (int t = 0; t < 10; ++t)
+	{
+		const Vec3 p = world.ThiefOf(A)->pos;
+		Teleport(world, A, { p.x, p.y + 30.0f, p.z }, 90.0f, MoveFlag::Moving);	// 6m/s
+		Run(world, 50);
+	}
+	lastSeen = world.BrainOf(guard)->lastSeenPos;
+	Teleport(world, A, FarAway);
+	RunUntil(world, 4000, [&] { return StateOf(world, guard) == GuardState::Search; });
+	return world;
+}
+
+TEST_CASE(AI_S1_SearchStartsAheadOfFleeDirection)
+{
+	uint16_t guard = 0;
+	Vec3 lastSeen;
+	GameWorld world = LoseRunningTarget(GuardFeatures::All(), guard, lastSeen);
+	CHECK(StateOf(world, guard) == GuardState::Search);
+	const Vec3 first = world.BrainOf(guard)->searchSpots.front();
+	CHECK(first.y - lastSeen.y > 200.0f);											// 도망 방향(+Y)으로 앞
+	CHECK(Content::WorldMath::Dist2D(first, lastSeen) <= GameData::PredictMaxCm + 1.0f);	// 최대 3m
+
+	GameWorld old = LoseRunningTarget(GuardFeatures::None(), guard, lastSeen);
+	CHECK_EQ(old.BrainOf(guard)->searchSpots.size(), size_t{ 1 });					// 개선 전: 놓친 곳 한 곳
+	CHECK(Content::WorldMath::Dist2D(old.BrainOf(guard)->searchSpots.front(), lastSeen) < 1.0f);
+}
+
+TEST_CASE(AI_S4_ExtraSpotsNearbyAndReachable)
+{
+	uint16_t guard = 0;
+	Vec3 lastSeen;
+	GameWorld world = LoseRunningTarget(GuardFeatures::All(), guard, lastSeen);
+	const auto& spots = world.BrainOf(guard)->searchSpots;
+	CHECK(spots.size() >= 2 && spots.size() <= 1 + GameData::SearchExtraSpots);
+	for (size_t i = 1; i < spots.size(); ++i)
+	{
+		const float d = Content::WorldMath::Dist2D(spots[i], spots[0]);
+		CHECK(d >= GameData::SearchSpotMinCm - 1.0f && d <= GameData::SearchSpotMaxCm + 1.0f);
+		CHECK(DefaultMap().nav.IsWalkable(spots[i]));
+		CHECK(DefaultMap().nav.Connected(spots[i], spots[0]));
+	}
+}
+
+TEST_CASE(AI_S3_FirstSpotFullTurn_ThenVisitsEverySpot)
+{
+	uint16_t guard = 0;
+	Vec3 lastSeen;
+	GameWorld world = LoseRunningTarget(GuardFeatures::All(), guard, lastSeen);
+	CHECK(RunUntil(world, 10000, [&] { return world.BrainOf(guard)->looking; }));
+	// 첫 지점: 90°/s로 4초 = 360° 돈다
+	float turned = 0.0f;
+	float prev = world.Find(guard)->yaw;
+	int ticks = 0;
+	while (world.BrainOf(guard)->looking && world.BrainOf(guard)->searchIndex == 0 && ticks < 200)
+	{
+		Run(world, 50);
+		turned += std::fabs(Content::WorldMath::AngleDiff(world.Find(guard)->yaw, prev));
+		prev = world.Find(guard)->yaw;
+		++ticks;
+	}
+	CHECK(turned >= 350.0f && turned <= 370.0f);
+	// 주변 지점을 하나씩 들른 뒤 순찰로
+	const size_t spots = world.BrainOf(guard)->searchSpots.size();
+	CHECK(RunUntil(world, 30000, [&] { return StateOf(world, guard) == GuardState::Patrol; }));
+	(void)spots;
+}
+
+TEST_CASE(AI_S5_AllyWithin20mComesToSearch)
+{
+	GameWorld world = GuardArena();
+	const uint16_t spotter = Nth(world, EntityKind::Guard, 0);
+	const uint16_t closeAlly = PlaceGuard(world, { 1400.0f, -2700.0f, 0.0f }, -90.0f, 1);	// Gallery1 북동쪽, 18m 안
+	const uint16_t farAlly = PlaceGuard(world, FarAway, 0.0f, 2);							// 20m 밖
+	Teleport(world, A, FrontOfGuard);
+	world.ThiefOf(A)->hp = 100000;
+	world.Find(closeAlly)->yaw = 0.0f;			// 플레이어를 보지 않는 방향
+	Run(world, 100);
+	CHECK(StateOf(world, spotter) == GuardState::Chase || StateOf(world, spotter) == GuardState::Attack);
+	CHECK(StateOf(world, closeAlly) == GuardState::Search || StateOf(world, closeAlly) == GuardState::Chase || StateOf(world, closeAlly) == GuardState::Attack);
+	CHECK(StateOf(world, farAlly) == GuardState::Patrol);
+	if (StateOf(world, closeAlly) == GuardState::Search)
+		CHECK(Content::WorldMath::Dist2D(world.BrainOf(closeAlly)->searchSpots.front(), FrontOfGuard) < 50.0f);
+}
+
+TEST_CASE(AI_S6_AfterStun_SearchesWhereLastSeen)
+{
+	// 테이저로 경직시킨 플레이어가 경직 동안 사라진다 → 풀리면 제자리가 아니라 마지막으로 본(맞은) 곳으로
+	GameWorld world = GuardArena();
+	const uint16_t guard = Nth(world, EntityKind::Guard);
+	const Vec3 shooter = Offset(GuardSpot, 0, 200);
+	Teleport(world, A, shooter, -90.0f);
+	world.ThiefOf(A)->hp = 100000;
+	Give(world, A, WeaponId::Taser);
+	Attack(world, A, -90.0f);
+	CHECK(StateOf(world, guard) == GuardState::Stunned || (world.Find(guard)->state & StateBit::Stunned) != 0);
+	Teleport(world, A, FarAway);
+	CHECK(RunUntil(world, 3000, [&] { return StateOf(world, guard) == GuardState::Search; }));
+	CHECK(Content::WorldMath::Dist2D(world.BrainOf(guard)->searchSpots.front(), shooter) < 50.0f);
 }
 
 TEST_CASE(AI_Repairing_StopsFiveSeconds)

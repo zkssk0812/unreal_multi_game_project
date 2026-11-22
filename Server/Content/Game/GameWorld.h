@@ -185,9 +185,13 @@ struct GuardBrain
 	Vec3 velSamplePos;
 	uint32_t velSampleMs = 0;			// 0 = 아직 관측 없음
 	uint32_t evadeUntilMs = 0;			// A-2 물러나며 돌아서기 중 (이 시각까지)
-	Vec3 searchPos;
+	Vec3 searchPos;						// 지금 가는 탐색 지점
+	std::vector<Vec3> searchSpots;		// 탐색할 지점들: [0] 놓친 곳(S-1 예측), 나머지 주변 지점(S-4)
+	size_t searchIndex = 0;
 	bool looking = false;				// 도착해서 둘러보는 중
-	uint32_t waitUntilMs = 0;
+	uint32_t waitUntilMs = 0;			// 둘러보기 끝 (한 바퀴는 이 시각까지, 훑기는 안전장치)
+	std::vector<float> lookYaws;		// 훑기: 차례로 돌아볼 방향. 비어 있으면 한쪽으로 계속 돈다
+	size_t lookIndex = 0;
 
 	std::vector<Vec3> path;				// 다음 점부터 목적지까지
 	size_t pathIndex = 0;
@@ -342,6 +346,12 @@ private:
 	void NoteTargetPos(GuardBrain& brain, const Vec3& pos);		// 타겟을 본·맞은 위치 기록 (속도 추정)
 	Vec3 GuessTargetPos(const GuardBrain& brain) const;			// 마지막 위치 + 속도로 지금 있을 곳 (최대 1초 앞)
 	void EvadeStep(Entity& guard, const GuardBrain& brain, const Vec3& threat, float speed, uint32_t dtMs);	// A-2
+	void StartSearch(Entity& guard, GuardBrain& brain, const Vec3& center, bool useFlee);	// S-1·S-4
+	void AddSearchSpots(GuardBrain& brain, const Vec3& from, const Vec3* flee);			// S-4
+	void CallAllies(const Entity& caller, const Vec3& where);							// S-5
+	void StartSpin(GuardBrain& brain, uint32_t ms);
+	void StartSweep(const Entity& guard, GuardBrain& brain, float center, float halfDeg);
+	bool UpdateLook(Entity& guard, GuardBrain& brain, uint32_t dtMs);					// 둘러보기가 끝났으면 true
 	GuardBrain* BrainFor(uint16_t guardId);
 
 	std::vector<Entity> _entities;
