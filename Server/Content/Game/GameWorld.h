@@ -148,6 +148,31 @@ enum class GuardState : uint8_t
 	Stunned,		// 경직
 };
 
+// 경비원 AI 개선 항목 켜고 끄기 (docs/경비원AI_공격탐색_개선안.md). 기본은 모두 켬.
+// 모두 끄면(None) 개선 전과 같이 움직인다 → 비교 측정(GuardBenchTests)과 문제가 생겼을 때 하나씩 끄는 데 쓴다.
+struct GuardFeatures
+{
+	bool evade = true;				// A-2 물러나며 돌아서기
+	bool predictFlee = true;		// S-1 도망 방향 예측
+	bool fullSpin = true;			// S-3 한 바퀴 둘러보기
+	bool extraSpots = true;			// S-4 주변 지점 추가 확인
+	bool callAllies = true;			// S-5 동료 호출
+	bool stunMemory = true;			// S-6 경직·수리 후 최근 본 곳 탐색
+	bool leastVisited = true;		// P-1 오래 안 간 곳 우선
+	bool spreadOut = true;			// P-2 동료와 겹치지 않기
+	bool passThrough = true;		// P-3 지나가는 지점은 통과
+	bool sweepLook = true;			// P-4 둘러보기 개선 (±45°, 문에서는 방 안쪽)
+	bool importantRooms = true;		// P-5 중요한 방 가중치
+	bool lookBack = true;			// P-6 가끔 뒤돌아보기
+	bool alertPatrol = true;		// P-7 탐색 후 경계 순찰
+
+	static GuardFeatures All() { return {}; }
+	static GuardFeatures None()
+	{
+		return { false, false, false, false, false, false, false, false, false, false, false, false, false };
+	}
+};
+
 struct GuardBrain
 {
 	uint16_t guardId = 0;
@@ -191,6 +216,8 @@ public:
 
 	// ── 경비원 AI ──
 	void SetAIEnabled(bool enabled) { _aiEnabled = enabled; }	// 규칙 시험은 끄고 경비원을 직접 둔다
+	void SetGuardFeatures(const GuardFeatures& features) { _guardFeatures = features; }
+	const GuardFeatures& Features() const { return _guardFeatures; }
 	const GuardBrain* BrainOf(uint16_t guardId) const;
 	bool CanSee(const Entity& guard, const Entity& thief);		// 시야 부채꼴 + 벽 검사
 
@@ -316,6 +343,7 @@ private:
 	uint32_t _nowMs = 0;
 	const MapData* _map = nullptr;		// 서버가 끝날 때까지 사는 맵 (DefaultMap)
 	bool _aiEnabled = true;
+	GuardFeatures _guardFeatures;
 	std::vector<GuardBrain> _brains;
 	uint32_t _sightTests = 0;			// 이번 틱의 시야 검사 횟수 (Perf)
 	std::vector<WorldEvent> _events;

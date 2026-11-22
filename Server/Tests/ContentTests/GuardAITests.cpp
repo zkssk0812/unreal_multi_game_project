@@ -125,6 +125,24 @@ TEST_CASE(Path_SeparatedRegions_FailFast)
 	CHECK(FindPath(nav, left, nav.ToWorld(4, 0), path));	// 같은 구역은 찾음
 }
 
+TEST_CASE(Map_PatrolNodeKinds_Loaded)
+{
+	// 순찰 지점 종류 (P-4 문에서 방 안쪽 보기, P-5 중요한 방): 문 37개, 방 안 80개, 나머지 복도
+	const MapData& map = DefaultMap();
+	CHECK_EQ(map.patrolKinds.size(), map.patrolNodes.size());
+	CHECK_EQ(map.patrolRooms.size(), map.patrolNodes.size());
+	size_t doors = 0, rooms = 0;
+	for (size_t i = 0; i < map.patrolKinds.size(); ++i)
+	{
+		if (map.patrolKinds[i] == PatrolNodeKind::Door) ++doors;
+		if (map.patrolKinds[i] != PatrolNodeKind::Room) continue;
+		++rooms;
+		CHECK(map.patrolRooms[i] >= 0 && map.rooms[static_cast<size_t>(map.patrolRooms[i])].Contains(map.patrolNodes[i]));
+	}
+	CHECK_EQ(doors, size_t{ 37 });
+	CHECK_EQ(rooms, size_t{ 80 });
+}
+
 // ───────────────── 시야 (3D) ─────────────────
 
 TEST_CASE(Sight_WallBlocks_ButNotFromAbove)

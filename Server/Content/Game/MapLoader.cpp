@@ -107,12 +107,30 @@ void Parse(const Json& d, MapData& m)
 	// 순찰 지점: id 순서대로 넣는다 (연결선이 id로 가리키므로 id == 배열 위치여야 한다)
 	const Json& nodes = d.at("patrol").at("nodes");
 	m.patrolNodes.assign(nodes.size(), Vec3{});
+	m.patrolKinds.assign(nodes.size(), PatrolNodeKind::Corridor);
+	m.patrolRooms.assign(nodes.size(), int16_t{ -1 });
 	for (const Json& n : nodes)
 	{
 		const size_t id = n.at("id").get<size_t>();
 		if (id >= m.patrolNodes.size())
 			throw std::runtime_error("patrol.nodes의 id " + std::to_string(id) + "가 개수보다 큼");
 		m.patrolNodes[id] = ReadVec3(n.at("pos"));
+		// 지점 종류 (경비원 순찰 둘러보기·중요한 방, 경비원AI_공격탐색_개선안 P-4·P-5): "door"는 문, 반납 지점을 둘 수 있는 방이면 방
+		const std::string room = n.value("room", std::string{});
+		if (room == "door")
+		{
+			m.patrolKinds[id] = PatrolNodeKind::Door;
+			continue;
+		}
+		for (size_t r = 0; r < m.rooms.size(); ++r)
+		{
+			if (m.rooms[r].id != room)
+				continue;
+			m.patrolRooms[id] = static_cast<int16_t>(r);
+			if (m.rooms[r].returnPoint)
+				m.patrolKinds[id] = PatrolNodeKind::Room;
+			break;
+		}
 	}
 	m.patrolEdges = ReadList<MapPatrolEdge>(d.at("patrol").at("edges"), [](const Json& e) {
 		return MapPatrolEdge{ e.at(0).get<uint16_t>(), e.at(1).get<uint16_t>(), e.size() > 2 ? e.at(2).get<float>() : 0.0f };

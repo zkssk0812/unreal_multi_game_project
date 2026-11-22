@@ -37,6 +37,8 @@ int RunAll(const std::string& filter)
 	{
 		if (!filter.empty() && std::string_view(c.name).find(filter) == std::string_view::npos)
 			continue;
+		if (filter.empty() && std::string_view(c.name).starts_with("Bench_"))
+			continue;		// 측정(GuardBenchTests)은 오래 걸리므로 이름으로 고를 때만 ("ContentTests.exe Bench")
 		++ran;
 		g_failuresInCase = 0;
 		const auto start = std::chrono::steady_clock::now();

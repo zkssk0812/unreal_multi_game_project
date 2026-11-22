@@ -65,6 +65,13 @@ struct MapCollider				// 벽·가구. P5 시야 검사(3D)에 쓴다
 	bool dynamic = false;							// 창고 문·탈출구처럼 열리고 닫히는 것
 };
 
+enum class PatrolNodeKind : uint8_t	// 순찰 지점이 놓인 곳 (JSON의 patrol.nodes[].room)
+{
+	Room,			// 방 안 (반납 지점을 둘 수 있는 방)
+	Door,			// 방 사이 문 ("door")
+	Corridor,		// 복도 등 그 밖
+};
+
 struct MapPatrolEdge			// 순찰 지점 a ↔ b 가 이어져 있음
 {
 	uint16_t a = 0;
@@ -111,6 +118,8 @@ struct MapData
 	std::vector<MapRoom> rooms;				// 방 (반납 지점·금고·아이템 후보). 엔티티 typeId = 이 배열의 위치
 
 	std::vector<Vec3> patrolNodes;			// 경비원 순찰 지점
+	std::vector<PatrolNodeKind> patrolKinds;	// patrolNodes와 같은 순서. 코드로 만든 맵은 비어 있을 수 있다
+	std::vector<int16_t> patrolRooms;		// 지점이 놓인 방 (rooms의 위치, 없으면 -1). patrolKinds와 같음
 	std::vector<MapPatrolEdge> patrolEdges;
 	std::vector<MapCollider> colliders;
 	std::vector<MapArea> floors;			// 바닥 (FBX의 바닥판). 있으면 이 위의 칸만 걸을 수 있다 (건물 밖은 막힘)
