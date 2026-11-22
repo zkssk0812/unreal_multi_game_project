@@ -51,6 +51,18 @@ TEST_CASE(Money_PickUpValuable_DeliverToOwnBank)
 	CHECK(empty && *empty == RejectReason::InvalidState);		// 반납할 것이 없음
 }
 
+TEST_CASE(Money_ReturnPoint_Warns5sBeforeReplace)
+{
+	GameWorld world = MakeWorld(2);
+	const uint16_t point = Nth(world, EntityKind::ReturnPoint);
+	Run(world, 54000);
+	CHECK((world.Find(point)->state & StateBit::Warning) == 0);	// 54초: 아직 경고 없음
+	Run(world, 1100);
+	CHECK((world.Find(point)->state & StateBit::Warning) != 0);	// 55초: 빨강 (O-22, 마지막 5초)
+	Run(world, 5000);
+	CHECK(world.Find(point) == nullptr);						// 60초: 다른 방으로
+}
+
 TEST_CASE(Money_DownByPlayer_DropsAllValuables_Loses10Percent)
 {
 	GameWorld world = MakeWorld(2);

@@ -105,7 +105,7 @@ struct Entity
 	float interactRange = 0.0f;
 	float progressMs = 0.0f;			// 진행한 시간 (작업 속도를 곱해 쌓는다)
 	uint16_t interactor = 0;			// 지금 상호작용 중인 플레이어. 한 명만
-	uint32_t spawnMs = 0;				// 생긴 시각 (반납 지점 50초·60초)
+	uint32_t spawnMs = 0;				// 생긴 시각 (반납 지점 55초·60초)
 	uint16_t safeRoom = 0;				// 금고: 놓인 방 (MapData::rooms의 위치). 다음 금고는 이 방을 뺀다
 
 	// ── 끈끈이·연막·지뢰 ──
