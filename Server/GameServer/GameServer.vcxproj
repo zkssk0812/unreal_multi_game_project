@@ -89,7 +89,7 @@
     <ClInclude Include="Protocol\CommandDecoder.h" />
     <ClInclude Include="Db\DbConnection.h" />
     <ClInclude Include="Db\SqlRecordStore.h" />
-    <ClInclude Include="..\Shared\Protocol\protocol.h" />
+    <ClInclude Include="..\..\Common\Protocol\protocol.h" />
     <ClInclude Include="..\Shared\Protocol\ProtocolUtil.h" />
     <ClInclude Include="..\Shared\Protocol\PacketBuilder.h" />
   </ItemGroup>

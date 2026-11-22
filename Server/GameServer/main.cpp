@@ -7,7 +7,7 @@
 #include "../ServerCore/Service.h"
 #include "../ServerCore/Session.h"
 #include "../ServerCore/ThreadManager.h"
-#include "../Shared/Protocol/protocol.h"
+#include "Protocol/protocol.h"
 #include "Content/ContentGlobal.h"
 #include "Content/Interface/MessageEncoder.h"
 #include "Protocol/MessageEncoder.h"

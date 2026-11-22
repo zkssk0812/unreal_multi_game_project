@@ -14,8 +14,9 @@
       <WarningLevel>Level4</WarningLevel>
       <SDLCheck>true</SDLCheck>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
-      <!-- #include "ServerCore/..." , #include "Protocol/..." 형태로 쓴다 -->
-      <AdditionalIncludeDirectories>$(RepoRoot);$(RepoRoot)Shared;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <!-- #include "ServerCore/..." , #include "Protocol/..." 형태로 쓴다.
+           ..\Common = 저장소 루트의 Common (클라와 공유하는 파일: Protocol/protocol.h) -->
+      <AdditionalIncludeDirectories>$(RepoRoot);$(RepoRoot)Shared;$(RepoRoot)..\Common;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;_WIN32_WINNT=0x0A00;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <!-- 소스는 UTF-8(BOM 없음)로 저장한다 -->
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>

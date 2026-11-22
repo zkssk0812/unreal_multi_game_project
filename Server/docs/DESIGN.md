@@ -42,7 +42,8 @@
 ├──────────────────────────────────────────────────────────────┤
 │ ServerCore (lib) : IOCP, Session, SendBuffer, 메모리 풀, JobQueue, JobTimer, Logger │
 ├──────────────────────────────────────────────────────────────┤
-│ Shared/Protocol : protocol.h (클라와 공유), PacketBuilder, ProtocolUtil │
+│ Common/Protocol (저장소 루트) : protocol.h (클라와 공유)              │
+│ Shared/Protocol : PacketBuilder, ProtocolUtil (서버 전용)             │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -89,7 +90,7 @@
 
 ## 4. 프로토콜 v2
 
-`Shared/Protocol/protocol.h`가 정본입니다. 여기에는 구성만 적습니다.
+`Common/Protocol/protocol.h`(저장소 루트)가 정본입니다. 여기에는 구성만 적습니다.
 
 - 모든 패킷: `[size:uint16][type:uint16][body]`, 리틀 엔디언, `#pragma pack(1)` 고정 구조체.
 - 가변 길이 패킷은 배열이 마지막 멤버이고 `count`개만 보냅니다(`*_Size(count)`로 크기 계산).

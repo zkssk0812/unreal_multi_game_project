@@ -7,7 +7,7 @@
 - **학습 사이트** (서버 없이 브라우저로 열기): [docs/learn/index.html](docs/learn/index.html)
 - 설계: [docs/DESIGN.md](docs/DESIGN.md)
 - 진행 상황과 일정: [ROADMAP.md](ROADMAP.md)
-- 클라이언트와 공유하는 프로토콜 v3.0: [Shared/Protocol/protocol.h](Shared/Protocol/protocol.h)
+- 클라이언트와 공유하는 프로토콜 v3.0: [Common/Protocol/protocol.h](../Common/Protocol/protocol.h)
 - 최고 기록 DB(SQL Server): [tools/db/README.md](tools/db/README.md)
 
 ## 구성

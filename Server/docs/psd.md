@@ -84,7 +84,7 @@
 
 ## 3. 프로토콜 v3.0 설계
 
-`Shared/Protocol/protocol.h`를 v3.0으로 바꿉니다. **호환되지 않는 변경**이므로 enum 번호도 새로 매기고, 클라 팀에 이 절을 그대로 전달합니다. `MessageEncoder.cpp`의 `VH_SAME_ENUM` 목록도 함께 맞춥니다.
+`Common/Protocol/protocol.h`(저장소 루트)를 v3.0으로 바꿉니다. **호환되지 않는 변경**이므로 enum 번호도 새로 매기고, 클라 팀에 이 절을 그대로 전달합니다. `MessageEncoder.cpp`의 `VH_SAME_ENUM` 목록도 함께 맞춥니다.
 
 - `PROTOCOL_VERSION = (3 << 16) | 0`, `MAX_ENTITIES = 128` (A-23), `MAX_PACKET_SIZE` 8192 유지 (시작 패킷이 넘지 않는지 `static_assert`).
 - 서버는 **모든 정보를 전원에게 보냅니다.** 퍽·은신·연막으로 숨길 것은 클라가 화면에서 숨깁니다 (Q-15). 서버는 판단에 필요한 상태 비트와 퍽 목록만 함께 보냅니다.

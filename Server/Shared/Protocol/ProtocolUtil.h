@@ -4,7 +4,7 @@
 #include <cstring>
 #include <type_traits>
  
-#include "protocol.h"
+#include "Protocol/protocol.h"		// 저장소 루트 Common/ (클라와 공유)
 
 namespace Protocol {
 

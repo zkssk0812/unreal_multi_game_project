@@ -33,7 +33,7 @@
 | └ 세계 | `Content/Game/GameWorld.cpp` | 엔티티, 입력 반영, 규칙 판정, 이벤트 |
 | └ AI | `Content/Game/GuardAI.cpp`, `PathFinder`, `Sight` | 경비원 상태 머신, A* 경로, 3D 시야 |
 | └ 맵 | `Content/Game/MapData`, `MapLoader` | 맵 파일 읽기, 충돌체로 경로 격자 만들기, 검사 |
-| 공용 | `Shared/Protocol/protocol.h` | 패킷 구조체·ID (클라와 공유) |
+| 공용 | `Common/Protocol/protocol.h`(저장소 루트) | 패킷 구조체·ID (클라와 공유) |
 
 데이터 모양의 변화:
 ```

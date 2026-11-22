@@ -9,7 +9,7 @@
     <ClInclude Include="TestConn.h" />
     <ClInclude Include="PhaseTest.h" />
     <ClInclude Include="RoomTest.h" />
-    <ClInclude Include="..\Shared\Protocol\protocol.h">
+    <ClInclude Include="..\..\Common\Protocol\protocol.h">
       <Filter>Shared</Filter>
     </ClInclude>
     <ClInclude Include="..\Shared\Protocol\ProtocolUtil.h">
