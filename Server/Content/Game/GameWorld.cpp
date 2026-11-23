@@ -347,15 +347,14 @@ std::optional<RejectReason> GameWorld::ApplyAction(uint64_t playerId, const Inpu
 	case ActionType::SwitchWeapon:
 	{
 		const uint8_t other = static_cast<uint8_t>(thief->activeSlot ^ 1);
-		if (thief->weapons[other].id == WeaponId::None)
+		if ((thief->state & StateBit::TaserReady) != 0)
+			result = RejectReason::Locked;				// 사제 테이저건을 든 동안은 무기 수와 상관없이 교체 불가 (Q로 먼저 집어넣기)
+		else if (thief->weapons[other].id == WeaponId::None)
 			result = RejectReason::OnlyOneWeapon;		// 무기가 하나뿐이면 교체 불가 (CT-05)
 		else if ((thief->state & StateBit::RailgunLock) != 0)
 			result = RejectReason::Locked;
 		else
-		{
 			thief->activeSlot = other;
-			HolsterTaser(*thief);					// 무기를 바꾸면 든 테이저건은 집어넣음
-		}
 		break;
 	}
 

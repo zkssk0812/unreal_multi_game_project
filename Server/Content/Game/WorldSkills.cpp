@@ -55,7 +55,7 @@ std::optional<RejectReason> GameWorld::UseSkill(Entity& thief)
 		// 든 채로 Q를 다시 누르면 집어넣는다(SC_SKILL End, 쿨타임 없음) (S-01, 클라 2026-11)
 		if ((thief.state & StateBit::TaserReady) != 0)
 		{
-			HolsterTaser(thief);
+			HolsterTaser(thief, false);		// Q로 집어넣음: 쿨타임 없음
 			return std::nullopt;
 		}
 		if (_nowMs < thief.skillReadyMs)
@@ -90,12 +90,16 @@ bool GameWorld::FireTaser(Entity& thief)
 	return true;
 }
 
-void GameWorld::HolsterTaser(Entity& thief)
+void GameWorld::HolsterTaser(Entity& thief, bool startCooldown)
 {
-	// 무기 교체·경직·쓰러짐·제트팩·Q 다시 누름 → 쏘지 않고 집어넣음 (쿨타임 없음)
+	// 쏘지 않고 집어넣음 (SC_SKILL End). Q 다시 누름 → 쿨타임 없음,
+	// 경직·쓰러짐처럼 외부 요인 → 쿨타임 시작 (쓰러지면 리스폰 때 쿨타임이 초기화된다, D-07).
+	// 무기 교체·소비 아이템은 든 동안 막혀 있어 여기로 오지 않는다 (클라 2026-11-23)
 	if ((thief.state & StateBit::TaserReady) == 0)
 		return;
 	ClearBits(thief.state, StateBit::TaserReady);
+	if (startCooldown)
+		thief.skillReadyMs = _nowMs + GameData::SkillCooldownMs;
 	SetSkillEvent(thief, SkillPhase::End, thief.pos);
 }
 
@@ -131,8 +135,8 @@ std::optional<RejectReason> GameWorld::UseConsumable(Entity& thief, const InputC
 {
 	if (thief.consumable == ConsumableId::None)
 		return RejectReason::NotAvailable;		// 없으면 아무 일도 없음 (CT-08)
-	if ((thief.state & (StateBit::RailgunLock | StateBit::Jetpack)) != 0)
-		return RejectReason::Locked;
+	if ((thief.state & (StateBit::RailgunLock | StateBit::Jetpack | StateBit::TaserReady)) != 0)
+		return RejectReason::Locked;		// 사제 테이저건을 든 동안은 소비 아이템 모두 불가 (Q로 먼저 집어넣기)
 
 	switch (thief.consumable)
 	{
@@ -159,7 +163,6 @@ std::optional<RejectReason> GameWorld::UseConsumable(Entity& thief, const InputC
 		// 3초 동안 마우스 방향 10m/s. 이동은 클라가, 부딪침은 서버가 (I-34, A-19)
 		thief.jetpackUntilMs = _nowMs + GameData::JetpackMs;
 		thief.jetpackHit.clear();
-		HolsterTaser(thief);
 		thief.state |= StateBit::Jetpack;
 		if (thief.interactTarget != 0)
 			CancelInteract(thief);

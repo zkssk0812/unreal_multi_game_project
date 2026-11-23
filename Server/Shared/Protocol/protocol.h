@@ -138,7 +138,7 @@ enum class ActionType : uint8_t {
 
 enum class RejectReason : uint8_t {
 	InvalidState, Cooldown, NoStamina, OutOfRange, TargetBusy, NotAvailable,
-	Downed, Stunned, Locked /*레일건·제트팩 중*/, HpFull, OnlyOneWeapon,
+	Downed, Stunned, Locked /*레일건·제트팩 중, 사제 테이저건을 든 중(무기 교체·소비 아이템)*/, HpFull, OnlyOneWeapon,
 };
 
 enum class EndReason : uint8_t { TimeUp, Aborted };
