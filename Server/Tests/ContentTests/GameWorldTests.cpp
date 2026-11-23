@@ -16,7 +16,7 @@ TEST_CASE(World_Setup_CreatesEntities)
 	CHECK(world.Entities()[1].ownerPlayerId == B);
 	CHECK_EQ(CountKind(world, EntityKind::Guard), size_t{ 3 });			// N-02
 	CHECK_EQ(CountKind(world, EntityKind::Safe), size_t{ 1 });			// O-01
-	CHECK_EQ(CountKind(world, EntityKind::ReturnPoint), size_t{ 5 });	// O-21
+	CHECK_EQ(CountKind(world, EntityKind::ReturnPoint), size_t{ 3 });	// O-21 (클라 2026-11-23: 5 → 3)
 	CHECK(CountKind(world, EntityKind::Box) > 10 && CountKind(world, EntityKind::Box) <= GameData::BoxCount);
 	CHECK_EQ(CountKind(world, EntityKind::FieldItem), GameData::FieldItemStart);	// I-14
 	CHECK_EQ(world.TreasureValue(), uint32_t{ 2000 });

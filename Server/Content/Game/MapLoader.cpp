@@ -299,7 +299,7 @@ std::string ValidateMap(const MapData& map)
 	// 하나라도 어긋나면 이유를 돌려준다. 게임 중에 이상한 일(벽 안에서 스폰, 금고에 못 감 등)이 생기기 전에, 서버 시작 때 드러나게.
 	if (map.thiefSpawns.size() < GameData::MaxRoomPlayers)
 		return "의적 스폰이 " + std::to_string(GameData::MaxRoomPlayers) + "곳보다 적음";
-	// 반납 지점은 항상 5곳이고, 반납하면 "다른 방"으로 옮겨 가므로 놓을 수 있는 방이 5곳보다 많아야 한다
+	// 반납 지점은 항상 ReturnPointCount곳이고, 반납하면 "다른 방"으로 옮겨 가므로 놓을 수 있는 방이 그보다 많아야 한다
 	const auto returnRooms = std::count_if(map.rooms.begin(), map.rooms.end(),
 		[](const MapRoom& room) { return !room.returnCells.empty(); });
 	if (static_cast<size_t>(returnRooms) <= GameData::ReturnPointCount)

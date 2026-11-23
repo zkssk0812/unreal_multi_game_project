@@ -212,9 +212,14 @@ constexpr float ItemSpacingCm = 100.0f;				// 무작위로 놓을 때 다른 오
 
 // ── 금고·반납 지점 ──
 constexpr size_t SafeRoomsNeeded = MaxRoomPlayers + 1;	// 금고: 의적 시작 방 3곳을 빼고도 1곳 (맵 검사)
-constexpr size_t ReturnPointCount = 5;				// [명세 O-21]
-constexpr uint32_t ReturnPointWarnMs = 55000;		// 사라지기 5초 전 빨강 (클라 2026-11: 반납 경고 5초. 전에는 50초)
-constexpr uint32_t ReturnPointLifeMs = 60000;
+// 반납 구역 (클라 2026-11-23, 싸움 유도): 3곳 · 30초 · 구역 안에서 4초 머물러야 반납, 한 번에 한 명.
+// 2초 이하 남은 구역에서는 시작할 수 없고, 반납 도중 구역이 닫히면 실패 (버저비터 없음)
+constexpr size_t ReturnPointCount = 3;				// [명세 O-21] 전에는 5곳
+constexpr uint32_t ReturnPointLifeMs = 30000;		// 전에는 60초
+constexpr uint32_t ReturnPointWarnMs = ReturnPointLifeMs - 5000;	// 사라지기 5초 전 빨강
+constexpr uint32_t ReturnDeliverMs = 4000;			// 반납에 걸리는 시간 (작업 속도 퍽과 관계없이 4초)
+constexpr uint32_t ReturnMinLeftMs = 2000;			// 이 이하로 남으면 반납 시작 불가
+static_assert(ReturnMinLeftMs < ReturnDeliverMs && ReturnDeliverMs < ReturnPointWarnMs);
 
 // ── 맵 ──
 constexpr float NavWallPaddingCm = 25.0f;		// 경로 격자를 만들 때 벽을 이만큼 넓혀서 막는다

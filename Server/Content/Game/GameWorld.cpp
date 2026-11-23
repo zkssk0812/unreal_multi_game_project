@@ -71,7 +71,7 @@ void GameWorld::Setup(const MapData& map, const std::vector<ThiefSlot>& thieves,
 	for (const MapPoint& spawn : map.guardSpawns)
 		Add(EntityKind::Guard, spawn.pos, spawn.yaw, 1).hp = GameData::GuardMaxHp;
 
-	// 3) 반납 지점: 서로 다른 방 5곳
+	// 3) 반납 지점: 서로 다른 방 3곳
 	for (size_t i = 0; i < GameData::ReturnPointCount; ++i)
 	{
 		Entity& point = Add(EntityKind::ReturnPoint, {}, 0.0f, NoRoom);
@@ -220,10 +220,7 @@ Msg::EntityInfo GameWorld::InfoOf(const Entity& e) const
 {
 	Msg::EntityInfo info{ e.id, e.kind, e.typeId, e.ownerPlayerId, e.pos, e.yaw, e.state, 0, e.param };
 	if (e.kind == EntityKind::ReturnPoint)
-	{
-		const uint32_t age = _nowMs - e.spawnMs;
-		info.timerMs = age < GameData::ReturnPointLifeMs ? GameData::ReturnPointLifeMs - age : 0;
-	}
+		info.timerMs = ReturnPointLeftMs(e);
 	else if (e.expireMs > _nowMs)
 	{
 		info.timerMs = e.expireMs - _nowMs;		// 끈끈이·연막
@@ -376,8 +373,9 @@ std::optional<RejectReason> GameWorld::ApplyAction(uint64_t playerId, const Inpu
 }
 
 // ───────────────── 상호작용 (§13) ─────────────────
-// 즉시: 환금·무기·소비 아이템 줍기(3m), 반납 지점에 반납
+// 즉시: 환금·무기·소비 아이템 줍기(3m)
 // 시간: 금고 열기(10초 × 작업 속도, 진행도 유지), 상자 열기(3초, 멈추면 처음부터) — 1m 안에서
+//       반납(4초, 멈추면 처음부터, 2초 이하 남은 구역은 시작 불가, 도중에 닫히면 실패) — 구역 1m 안에서
 
 std::optional<RejectReason> GameWorld::BeginInteract(Entity& thief, uint16_t targetId)
 {
@@ -409,11 +407,11 @@ std::optional<RejectReason> GameWorld::BeginInteract(Entity& thief, uint16_t tar
 	case EntityKind::ReturnPoint:
 		if (thief.carried.empty())
 			return RejectReason::InvalidState;	// 반납할 것이 없음
-		Deliver(thief);
-		ReplaceReturnPoint(*target);
-		if ((thief.state & StateBit::Cloaked) != 0)
-			EndCloak(thief);
-		return std::nullopt;
+		if (ReturnPointLeftMs(*target) <= GameData::ReturnMinLeftMs)
+			return RejectReason::NotAvailable;	// 곧 닫히는 구역 (버저비터 없음)
+		if (target->interactor == 0)
+			target->progressMs = 0.0f;			// 반납은 처음부터
+		break;
 
 	case EntityKind::Safe:
 		if ((target->state & StateBit::Opened) != 0)
@@ -448,8 +446,8 @@ void GameWorld::CancelInteract(Entity& thief)
 	if (Entity* target = Find(thief.interactTarget); target != nullptr && target->interactor == thief.id)
 	{
 		target->interactor = 0;
-		if (target->kind == EntityKind::Box)
-			target->progressMs = 0.0f;			// 상자는 멈추면 처음부터. 금고는 진행도 유지 (O-02)
+		if (target->kind == EntityKind::Box || target->kind == EntityKind::ReturnPoint)
+			target->progressMs = 0.0f;			// 상자·반납은 멈추면 처음부터. 금고는 진행도 유지 (O-02)
 		_events.push_back(Msg::Interact{ thief.id, target->id, InteractState::Cancel,
 			static_cast<uint32_t>(target->progressMs), InteractDurationMs(*target) });
 	}
@@ -465,7 +463,8 @@ void GameWorld::UpdateInteract(Entity& thief, uint32_t dtMs)
 		CancelInteract(thief);					// 범위를 벗어나면 중단
 		return;
 	}
-	target->progressMs += static_cast<float>(dtMs) * WorkSpeed(thief);
+	const float speed = target->kind == EntityKind::ReturnPoint ? 1.0f : WorkSpeed(thief);	// 반납은 늘 4초
+	target->progressMs += static_cast<float>(dtMs) * speed;
 	if (target->progressMs >= static_cast<float>(InteractDurationMs(*target)))
 		CompleteInteract(thief, *target);
 }
@@ -482,6 +481,12 @@ void GameWorld::CompleteInteract(Entity& thief, Entity& target)
 		OnSafeOpened(target, thief);
 	else if (target.kind == EntityKind::Box)
 		BreakBox(target);
+	else if (target.kind == EntityKind::ReturnPoint)
+	{
+		if (!thief.carried.empty())
+			Deliver(thief);
+		ReplaceReturnPoint(target);				// 반납하면 그 구역은 사라지고 다른 방에 새로 (O-24)
+	}
 }
 
 uint32_t GameWorld::InteractDurationMs(const Entity& target) const
@@ -490,6 +495,7 @@ uint32_t GameWorld::InteractDurationMs(const Entity& target) const
 	{
 	case EntityKind::Safe: return GameData::SafeOpenMs;
 	case EntityKind::Box: return GameData::BoxOpenMs;
+	case EntityKind::ReturnPoint: return GameData::ReturnDeliverMs;
 	default: return 0;
 	}
 }
@@ -533,13 +539,21 @@ bool GameWorld::PlaceReturnPoint(Entity& point, std::optional<uint16_t> excludeR
 	point.interactRange = GameData::ReturnPointRangeCm;
 	point.typeId = room;
 	point.spawnMs = _nowMs;
+	point.interactor = 0;
+	point.progressMs = 0.0f;
 	ClearBits(point.state, StateBit::Warning);
 	return true;
 }
 
+uint32_t GameWorld::ReturnPointLeftMs(const Entity& point) const
+{
+	const uint32_t age = _nowMs - point.spawnMs;
+	return age < GameData::ReturnPointLifeMs ? GameData::ReturnPointLifeMs - age : 0;
+}
+
 void GameWorld::ReplaceReturnPoint(Entity& point)
 {
-	// 반납했거나 60초가 지남: 옛 지점은 사라지고, 다른 방에 새 지점 (새 id로 같은 엔티티 칸을 다시 쓴다)
+	// 반납했거나 30초가 지남: 옛 지점은 사라지고, 다른 방에 새 지점 (새 id로 같은 엔티티 칸을 다시 쓴다)
 	const uint16_t oldId = point.id;
 	const uint16_t oldRoom = point.typeId;
 	if (!PlaceReturnPoint(point, oldRoom))
@@ -554,6 +568,8 @@ void GameWorld::UpdateReturnPoint(Entity& point)
 	const uint32_t age = _nowMs - point.spawnMs;
 	if (age >= GameData::ReturnPointLifeMs)
 	{
+		if (Entity* returner = Find(point.interactor); returner != nullptr && returner->interactTarget == point.id)
+			CancelInteract(*returner);			// 반납 도중 구역이 닫히면 실패
 		ReplaceReturnPoint(point);
 	}
 	else if (age >= GameData::ReturnPointWarnMs && (point.state & StateBit::Warning) == 0)

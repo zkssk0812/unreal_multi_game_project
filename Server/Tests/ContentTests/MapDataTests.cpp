@@ -1,6 +1,7 @@
 #include "ServerCore/CorePch.h"
 
 #include "Content/Game/MapData.h"
+#include "Content/GameData.h"
 #include "Content/Game/PathFinder.h"
 #include "TestFramework.h"
 
@@ -182,12 +183,12 @@ TEST_CASE(MapLoad_MissingSection_ReportsWhich)
 
 TEST_CASE(MapLoad_RuleViolation_Fails)
 {
-	// 형식은 맞지만 규칙에 안 맞는 맵: 실제 맵을 고쳐 놓을 칸이 있는 방을 5곳만 남긴다
-	// (반납 지점 5곳이 반납 때마다 "다른 방"으로 옮겨 가야 하므로 6곳 이상 필요)
+	// 형식은 맞지만 규칙에 안 맞는 맵: 실제 맵을 고쳐 놓을 칸이 있는 방을 반납 지점 수만큼만 남긴다
+	// (반납 지점이 반납 때마다 "다른 방"으로 옮겨 가야 하므로 그보다 1곳 이상 필요)
 	MapData map = DefaultMap();
 	size_t kept = 0;
 	for (MapRoom& room : map.rooms)
-		if (!room.returnCells.empty() && ++kept > 5)
+		if (!room.returnCells.empty() && ++kept > GameData::ReturnPointCount)
 			room.returnCells.clear();
 	CHECK(ValidateMap(map).find("반납 지점을 놓을 수 있는 방") != std::string::npos);
 

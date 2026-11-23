@@ -22,6 +22,25 @@ void OpenSafe(GameWorld& world, uint64_t playerId)
 	Run(world, GameData::SafeOpenMs);
 }
 
+// 반납 구역에 가서 4초 머물러 반납
+void DeliverAt(GameWorld& world, uint64_t playerId, uint16_t point)
+{
+	GoTo(world, playerId, point);
+	Act(world, playerId, ActionType::InteractBegin, point);
+	Run(world, GameData::ReturnDeliverMs + 100);
+}
+
+// A가 환금 아이템 25를 들고 첫 반납 구역 위에 선 상태 (경비원·상자는 치움)
+uint16_t CarryToPoint(GameWorld& world)
+{
+	ClearArena(world);
+	world.ThiefOf(A)->carried = { { ValuableQuality::Common, 25 } };
+	const uint16_t point = Nth(world, EntityKind::ReturnPoint);
+	GoTo(world, A, point);
+	world.TakeEvents();
+	return point;
+}
+
 } // namespace
 
 TEST_CASE(Money_PickUpValuable_DeliverToOwnBank)
@@ -37,6 +56,7 @@ TEST_CASE(Money_PickUpValuable_DeliverToOwnBank)
 	const uint16_t point = Nth(world, EntityKind::ReturnPoint);
 	GoTo(world, A, point);
 	CHECK(!Act(world, A, ActionType::InteractBegin, point).has_value());
+	Run(world, GameData::ReturnDeliverMs + 100);
 	CHECK_EQ(world.ThiefOf(A)->banked, uint32_t{ 25 });		// 개인 금액 (M-02, O-23)
 	CHECK_EQ(world.ThiefOf(B)->banked, uint32_t{ 0 });
 	CHECK(world.ThiefOf(A)->carried.empty());
@@ -51,16 +71,140 @@ TEST_CASE(Money_PickUpValuable_DeliverToOwnBank)
 	CHECK(empty && *empty == RejectReason::InvalidState);		// 반납할 것이 없음
 }
 
-TEST_CASE(Money_ReturnPoint_Warns5sBeforeReplace)
+TEST_CASE(Money_ReturnPoint_Three_Warns5sBeforeReplace_30s)
 {
 	GameWorld world = MakeWorld(2);
+	CHECK_EQ(CountKind(world, EntityKind::ReturnPoint), size_t{ 3 });	// 3곳 (클라 2026-11-23)
 	const uint16_t point = Nth(world, EntityKind::ReturnPoint);
-	Run(world, 54000);
-	CHECK((world.Find(point)->state & StateBit::Warning) == 0);	// 54초: 아직 경고 없음
+	Run(world, 24000);
+	CHECK((world.Find(point)->state & StateBit::Warning) == 0);	// 24초: 아직 경고 없음
 	Run(world, 1100);
-	CHECK((world.Find(point)->state & StateBit::Warning) != 0);	// 55초: 빨강 (O-22, 마지막 5초)
+	CHECK((world.Find(point)->state & StateBit::Warning) != 0);	// 25초: 빨강 (O-22, 마지막 5초)
 	Run(world, 5000);
-	CHECK(world.Find(point) == nullptr);						// 60초: 다른 방으로
+	CHECK(world.Find(point) == nullptr);						// 30초: 다른 방으로
+	CHECK_EQ(CountKind(world, EntityKind::ReturnPoint), size_t{ 3 });
+}
+
+TEST_CASE(Money_Return_Takes4s_SendsProgress)
+{
+	GameWorld world = MakeWorld(2);
+	const uint16_t point = CarryToPoint(world);
+	CHECK(!Act(world, A, ActionType::InteractBegin, point).has_value());
+	const auto begin = First<Msg::Interact>(world.TakeEvents());
+	CHECK(begin && begin->state == InteractState::Begin && begin->target == point &&
+		begin->progressMs == 0 && begin->durationMs == GameData::ReturnDeliverMs);	// 클라 게이지
+	CHECK((world.ThiefOf(A)->state & StateBit::Interacting) != 0);
+
+	Run(world, 3900);
+	CHECK_EQ(world.ThiefOf(A)->banked, uint32_t{ 0 });			// 4초가 안 됨
+	CHECK(world.Find(point) != nullptr);
+	const auto events = RunCollect(world, 200);
+	CHECK_EQ(world.ThiefOf(A)->banked, uint32_t{ 25 });
+	const auto done = First<Msg::Interact>(events);
+	CHECK(done && done->state == InteractState::Complete && done->target == point);
+	CHECK(world.Find(point) == nullptr);						// 완료하면 바로 다른 방으로
+	CHECK((world.ThiefOf(A)->state & StateBit::Interacting) == 0);
+}
+
+TEST_CASE(Money_Return_ToolsPerk_StillFourSeconds)
+{
+	GameWorld world = MakeWorld(2, false, { { GameData::Perk::Tools } });
+	const uint16_t point = CarryToPoint(world);
+	Act(world, A, ActionType::InteractBegin, point);
+	Run(world, 3800);											// 작업 속도 +10%면 3.64초에 끝났을 것
+	CHECK_EQ(world.ThiefOf(A)->banked, uint32_t{ 0 });
+	Run(world, 300);
+	CHECK_EQ(world.ThiefOf(A)->banked, uint32_t{ 25 });
+}
+
+TEST_CASE(Money_Return_OneAtATime)
+{
+	GameWorld world = MakeWorld(2);
+	const uint16_t point = CarryToPoint(world);
+	world.ThiefOf(B)->carried = { { ValuableQuality::Common, 30 } };
+	GoTo(world, B, point);
+	Act(world, A, ActionType::InteractBegin, point);
+	const auto busy = Act(world, B, ActionType::InteractBegin, point);
+	CHECK(busy && *busy == RejectReason::TargetBusy);			// 먼저 시작한 사람만
+	Run(world, GameData::ReturnDeliverMs + 100);
+	CHECK_EQ(world.ThiefOf(A)->banked, uint32_t{ 25 });
+	CHECK_EQ(world.ThiefOf(B)->banked, uint32_t{ 0 });
+}
+
+TEST_CASE(Money_Return_LeavingZone_CancelsAndResets)
+{
+	GameWorld world = MakeWorld(2);
+	const uint16_t point = CarryToPoint(world);
+	Act(world, A, ActionType::InteractBegin, point);
+	Run(world, 3000);
+	world.TakeEvents();
+	Teleport(world, A, Offset(world.Find(point)->interactPos, 300, 0));	// 구역 밖
+	const auto events = RunCollect(world, 100);
+	const auto cancel = First<Msg::Interact>(events);
+	CHECK(cancel && cancel->state == InteractState::Cancel && cancel->progressMs == 0);
+	CHECK((world.ThiefOf(A)->state & StateBit::Interacting) == 0);
+
+	GoTo(world, A, point);
+	Act(world, A, ActionType::InteractBegin, point);
+	const auto again = First<Msg::Interact>(world.TakeEvents());
+	CHECK(again && again->state == InteractState::Begin && again->progressMs == 0);	// 처음부터
+	Run(world, 3000);
+	CHECK_EQ(world.ThiefOf(A)->banked, uint32_t{ 0 });
+	Run(world, 1100);
+	CHECK_EQ(world.ThiefOf(A)->banked, uint32_t{ 25 });
+}
+
+TEST_CASE(Money_Return_CancelledByHit_Attack_Dodge_FCancel)
+{
+	GameWorld world = MakeWorld(2);
+	const uint16_t point = CarryToPoint(world);
+	const auto interrupted = [&](auto&& interrupt) {
+		GoTo(world, A, point);
+		Act(world, A, ActionType::InteractBegin, point);
+		Run(world, 1000);
+		interrupt();
+		const bool cancelled = (world.ThiefOf(A)->state & StateBit::Interacting) == 0;
+		Run(world, 2000);										// 경직·쿨타임이 풀리도록
+		world.TakeEvents();
+		return cancelled && world.ThiefOf(A)->banked == 0;
+	};
+
+	CHECK(interrupted([&] { Act(world, A, ActionType::InteractCancel); }));		// F 취소
+	CHECK(interrupted([&] { Act(world, A, ActionType::Dodge); }));
+	CHECK(interrupted([&] { Attack(world, A, 0.0f); }));							// 내가 공격
+	CHECK(interrupted([&] {
+		Teleport(world, B, Offset(world.ThiefOf(A)->pos, 150, 0), 180.0f);
+		Attack(world, B, 180.0f);												// 맞음 (IN-05, 금고·상자와 같음)
+		Teleport(world, B, FarAway);
+	}));
+	CHECK_EQ(world.ThiefOf(A)->carried.size(), size_t{ 1 });					// 들고 있던 것은 그대로
+}
+
+TEST_CASE(Money_Return_NoBuzzerBeater)
+{
+	GameWorld world = MakeWorld(2);
+	const uint16_t point = CarryToPoint(world);
+	Run(world, GameData::ReturnPointLifeMs - GameData::ReturnMinLeftMs);	// 2초 남음
+	const auto late = Act(world, A, ActionType::InteractBegin, point);
+	CHECK(late && *late == RejectReason::NotAvailable);			// 2초 이하 남으면 시작 불가
+	CHECK((world.ThiefOf(A)->state & StateBit::Interacting) == 0);
+}
+
+TEST_CASE(Money_Return_ZoneClosesMidway_Fails)
+{
+	GameWorld world = MakeWorld(2);
+	const uint16_t point = CarryToPoint(world);
+	Run(world, GameData::ReturnPointLifeMs - 3000);			// 3초 남음: 시작은 되지만 4초가 안 됨
+	CHECK(!Act(world, A, ActionType::InteractBegin, point).has_value());
+	world.TakeEvents();
+	const auto events = RunCollect(world, 3100);
+	CHECK(world.Find(point) == nullptr);						// 구역이 닫힘
+	const auto cancel = First<Msg::Interact>(events);
+	CHECK(cancel && cancel->state == InteractState::Cancel && cancel->target == point);
+	CHECK_EQ(world.ThiefOf(A)->banked, uint32_t{ 0 });			// 반납 실패
+	CHECK_EQ(world.ThiefOf(A)->carried.size(), size_t{ 1 });
+	CHECK((world.ThiefOf(A)->state & StateBit::Interacting) == 0);
+	CHECK_EQ(world.ThiefOf(A)->interactTarget, uint16_t{ 0 });
 }
 
 TEST_CASE(Money_DownByPlayer_DropsAllValuables_Loses10Percent)
@@ -159,9 +303,7 @@ TEST_CASE(Money_Treasure_TakeRemovesSafe_DeliverRaisesValue_NewSafeElsewhere)
 	CHECK_EQ(CountKind(world, EntityKind::Safe), size_t{ 0 });		// 보물이 있는 동안 금고 없음 (O-06)
 	CHECK((world.ThiefOf(A)->state & StateBit::CarryingTreasure) != 0);
 
-	const uint16_t point = Nth(world, EntityKind::ReturnPoint);
-	GoTo(world, A, point);
-	Act(world, A, ActionType::InteractBegin, point);
+	DeliverAt(world, A, Nth(world, EntityKind::ReturnPoint));
 	CHECK_EQ(world.ThiefOf(A)->banked, uint32_t{ 2000 });
 	CHECK_EQ(world.ThiefOf(A)->treasuresDelivered, uint8_t{ 1 });
 	CHECK_EQ(world.TreasureValue(), uint32_t{ 2400 });			// +20% (I-22)

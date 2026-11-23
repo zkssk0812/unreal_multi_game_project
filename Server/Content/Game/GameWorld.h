@@ -273,6 +273,7 @@ private:
 	void UpdateReturnPoint(Entity& point);
 	bool PlaceReturnPoint(Entity& point, std::optional<uint16_t> excludeRoom);
 	void ReplaceReturnPoint(Entity& point);
+	uint32_t ReturnPointLeftMs(const Entity& point) const;
 	bool CanAct(const Entity& thief) const;
 
 	// ── 전투 (WorldCombat.cpp) ──
