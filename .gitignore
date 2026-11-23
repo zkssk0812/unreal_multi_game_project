@@ -11,6 +11,7 @@ Client/Plugins/*/Intermediate/
 
 # 언리얼이 자동 생성하는 솔루션/프로젝트 파일 (uproject 우클릭으로 재생성 가능)
 Client/*.sln
+Client/*.slnx
 Client/*.vsconfig
 Client/.vs/
 Client/.idea/

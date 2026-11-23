@@ -70,9 +70,11 @@ TEST_CASE(Room_SelectCharacter_OutOfRange_Invalid)
 {
 	RoomSetup r(1);
 	ContentFixture::Post(r.players[0], Cmd::SelectCharacter{ 0 });
-	ContentFixture::Post(r.players[0], Cmd::SelectCharacter{ 6 });	// 캐릭터는 1~5 (CH-01~05)
+	ContentFixture::Post(r.players[0], Cmd::SelectCharacter{ 4 });	// 캐릭터는 도적1~3 (2026-11-22)
 	const auto errors = r.players[0]->Sent<Msg::RoomError>();
 	CHECK(errors.size() == 2 && errors[0].result == Result::CharacterInvalid && errors[1].result == Result::CharacterInvalid);
+	ContentFixture::Post(r.players[0], Cmd::SelectCharacter{ 3 });
+	CHECK_EQ(r.players[0]->Sent<Msg::RoomError>().size(), size_t{ 2 });	// 3은 고를 수 있음
 }
 
 // ───────────────── 퍽 ─────────────────

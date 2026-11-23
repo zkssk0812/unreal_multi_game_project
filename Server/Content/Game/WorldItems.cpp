@@ -189,12 +189,19 @@ void GameWorld::BreakBox(Entity& box)
 	{
 	case GameData::BoxDrop::Weapon:
 	{
-		// 삼단봉은 기본 무기라 상자에서 나오지 않는다
-		std::vector<const GameData::WeaponType*> weapons;
-		for (const GameData::WeaponType& w : GameData::WeaponTypes)
-			if (w.id != WeaponId::Baton)
-				weapons.push_back(&w);
-		const GameData::WeaponType* w = weapons[std::uniform_int_distribution<size_t>(0, weapons.size() - 1)(_rng)];
+		// 무기별 비율 GameData::BoxWeapons (권총·테이저건 20%, 레일건·화염방사기 5% …). 삼단봉은 나오지 않는다
+		int pick = std::uniform_int_distribution<int>(0, 99)(_rng);
+		WeaponId weapon = GameData::BoxWeapons[0].weapon;
+		for (const GameData::BoxWeaponChance& chance : GameData::BoxWeapons)
+		{
+			if (pick < chance.percent)
+			{
+				weapon = chance.weapon;
+				break;
+			}
+			pick -= chance.percent;
+		}
+		const GameData::WeaponType* w = GameData::WeaponOf(weapon);
 		Spawn(EntityKind::WeaponPickup, pos, static_cast<uint16_t>(w->id), w->ammo);
 		break;
 	}

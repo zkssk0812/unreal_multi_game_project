@@ -72,19 +72,54 @@ TEST_CASE(Skill_Taser_QAgain_Holsters_NoCooldown)
 	CHECK((world.ThiefOf(B)->state & StateBit::Stunned) != 0);
 }
 
-TEST_CASE(Skill_Taser_SwitchWeaponOrStun_Holsters)
+TEST_CASE(Skill_Taser_WhileHeld_NoWeaponSwitch_NoConsumable)
+{
+	// 든 동안 무기 교체·소비 아이템은 Locked, 테이저는 계속 든다 (클라 2026-11-23)
+	GameWorld world = Arena();
+	Entity* a = world.ThiefOf(A);
+	Act(world, A, ActionType::UseSkill);
+	const auto alone = Act(world, A, ActionType::SwitchWeapon);	// 무기가 하나뿐이어도 OnlyOneWeapon이 아니라 Locked
+	CHECK(alone && *alone == RejectReason::Locked);
+	Give(world, A, WeaponId::Pistol, 1, false);
+	const auto two = Act(world, A, ActionType::SwitchWeapon);
+	CHECK(two && *two == RejectReason::Locked);
+	CHECK(a->activeSlot == 0 && (a->state & StateBit::TaserReady) != 0);
+
+	for (const ConsumableId item : { ConsumableId::Jetpack, ConsumableId::HealKit, ConsumableId::Smoke, ConsumableId::Flashbang })
+	{
+		a->consumable = item;
+		a->hp = 50;
+		const auto used = Act(world, A, ActionType::UseConsumable);
+		CHECK(used && *used == RejectReason::Locked);
+		CHECK(a->consumable == item && (a->state & StateBit::Jetpack) == 0);	// 쓰이지 않음
+	}
+	CHECK((a->state & StateBit::TaserReady) != 0);
+
+	Act(world, A, ActionType::UseSkill);								// Q로 집어넣으면 둘 다 된다
+	CHECK(!Act(world, A, ActionType::SwitchWeapon).has_value());
+	CHECK(!Act(world, A, ActionType::UseConsumable).has_value());
+}
+
+TEST_CASE(Skill_Taser_StunCancels_StartsCooldown)
 {
 	GameWorld world = Arena();
-	Give(world, A, WeaponId::Pistol);
 	Act(world, A, ActionType::UseSkill);
-	CHECK(!Act(world, A, ActionType::SwitchWeapon).has_value());
-	CHECK((world.ThiefOf(A)->state & StateBit::TaserReady) == 0);	// 무기 교체 → 집어넣음
-
-	Act(world, A, ActionType::UseSkill);
+	world.TakeEvents();
 	Give(world, B, WeaponId::Taser);								// 줍는 무기 테이저건 (W-12)
 	Attack(world, B, 180.0f);
 	CHECK((world.ThiefOf(A)->state & StateBit::Stunned) != 0);
 	CHECK((world.ThiefOf(A)->state & StateBit::TaserReady) == 0);	// 경직 → 집어넣음
+	const auto events = world.TakeEvents();
+	bool ended = false;
+	for (const WorldEvent& e : events)
+		if (const auto* skill = std::get_if<Msg::Skill>(&e); skill && skill->phase == SkillPhase::End)
+			ended = true;
+	CHECK(ended);
+	Run(world, 2500);												// 경직이 풀린 뒤
+	const auto again = Act(world, A, ActionType::UseSkill);
+	CHECK(again && *again == RejectReason::Cooldown);				// 외부 요인 취소 → 쿨타임 30초
+	Run(world, 28000);
+	CHECK(!Act(world, A, ActionType::UseSkill).has_value());
 }
 
 TEST_CASE(Skill_Taser_OutOfRange_Misses)
@@ -178,11 +213,11 @@ TEST_CASE(Skill_Cloak_BrokenByInteracting)
 	CHECK((world.ThiefOf(C)->state & StateBit::Cloaked) == 0);		// 상호작용하면 풀림
 }
 
-TEST_CASE(Skill_CharacterWithoutSkill_NotAvailable)
+TEST_CASE(Skill_EveryCharacterHasSkill)
 {
-	GameWorld world = MakeWorld(5);		// 도적4·5는 스킬 없음 (A-06)
-	const auto reject = Act(world, A + 3, ActionType::UseSkill);
-	CHECK(reject && *reject == RejectReason::NotAvailable);
+	// 도적1~3 모두 고유 스킬이 있다 (도적4·5는 2026-11-22에 없어짐)
+	for (uint16_t id = 1; id <= GameData::CharacterCount; ++id)
+		CHECK(GameData::SkillOf(id) != SkillId::None);
 }
 
 TEST_CASE(Skill_RespawnResetsCooldown)

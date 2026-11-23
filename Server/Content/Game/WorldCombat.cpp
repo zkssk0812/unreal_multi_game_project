@@ -222,6 +222,9 @@ void GameWorld::FireWeapon(Entity& thief)
 		thief.railgunUntilMs = _nowMs + GameData::RailgunLockMs;
 		thief.state |= StateBit::RailgunLock;
 		UseAmmo(thief);
+		// 클릭 한 번에 한 발: 꾹 누르고 있어도 잠금이 끝난 뒤 이어서 쏘지 않는다 (다시 눌러야 다음 발, 클라 2026-11-23)
+		thief.attackHeld = false;
+		ClearBits(thief.state, StateBit::Attacking);
 		return;
 
 	case GameData::WeaponHit::Thrown:
@@ -310,7 +313,7 @@ void GameWorld::Stun(Entity& target, uint32_t ms)
 	if (target.IsThief() && target.interactTarget != 0)
 		CancelInteract(target);
 	if (target.IsThief())
-		HolsterTaser(target);
+		HolsterTaser(target, true);			// 경직으로 취소: 쿨타임 시작
 }
 
 void GameWorld::ApplyDamage(Entity& target, Entity* attacker, WeaponId weapon, int32_t amount, uint32_t stunMs)
@@ -394,7 +397,7 @@ void GameWorld::Down(Entity& thief, Entity* attacker, DownCause cause)
 {
 	if (thief.interactTarget != 0)
 		CancelInteract(thief);
-	HolsterTaser(thief);
+	HolsterTaser(thief, true);				// 쓰러져 취소: 쿨타임 시작 (리스폰 때 초기화, D-07)
 
 	// 반납 금액 손실: 플레이어에게 10%, 경비원에게 40%. 잃은 금액은 그냥 사라짐 (D-04, Q-03)
 	const uint32_t pct = cause == DownCause::Guard ? GameData::LossPctByGuard : GameData::LossPctByPlayer;

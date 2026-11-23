@@ -16,7 +16,7 @@ constexpr size_t MaxRoomPlayers = 3;		// 방장 포함 (protocol.h MAX_ROOM_PLAY
 constexpr size_t MaxPerks = 3;				// 한 사람이 고를 수 있는 퍽 수
 constexpr size_t MaxRoomList = 20;			// 방 목록 한 번에 보내는 수
 
-constexpr uint16_t CharacterCount = 5;		// [명세 CH-01~05] 임시 캐릭터 도적1~5
+constexpr uint16_t CharacterCount = 3;		// 도적1·2·3 (2026-11-22 확정, 전에는 임시 5명 CH-01~05)
 constexpr uint16_t PerkCount = 7;			// [명세 K-01~07]
 
 constexpr size_t NicknameMaxChars = 12;		// 글자 수 (UTF-8 바이트 수가 아님)
@@ -33,7 +33,7 @@ constexpr uint16_t RobotSense = 6;		// 로봇탐지 (클라 표시)
 constexpr uint16_t BioSense = 7;		// 생체감지 (클라 표시)
 }
 
-// 캐릭터 → 고유 스킬 [가정 A-06]. 도적4·5는 스킬 없음. 기획이 정해지면 이 표만 바꾼다
+// 캐릭터 → 고유 스킬 [가정 A-06]. 캐릭터를 늘리면 이 표에 더한다 (없으면 스킬 없음)
 inline SkillId SkillOf(uint16_t characterId)
 {
 	switch (characterId)
@@ -171,13 +171,27 @@ constexpr int32_t BoxHp = 20;
 constexpr size_t BoxCount = 20;
 constexpr uint32_t BoxRespawnMinMs = 30000;
 constexpr uint32_t BoxRespawnMaxMs = 60000;
-// 드롭 확률(%): 무기 35 · 필드 20 · 없음 20 · 소비 15 · 일반 6 · 고급 3 · 희귀 1
+// 드롭 확률(%): 무기 60 · 필드 10 · 없음 5 · 소비 15 · 일반 6 · 고급 3 · 희귀 1
+// (클라 2026-11-22: 무기를 더 자주. 전에는 무기 35 · 필드 20 · 없음 20)
 enum class BoxDrop : uint8_t { Weapon, FieldItem, Nothing, Consumable, Common, Advanced, Rare };
 struct BoxDropChance { BoxDrop drop; uint8_t percent; };
 inline constexpr BoxDropChance BoxDrops[] = {
-	{ BoxDrop::Weapon, 35 }, { BoxDrop::FieldItem, 20 }, { BoxDrop::Nothing, 20 }, { BoxDrop::Consumable, 15 },
+	{ BoxDrop::Weapon, 60 }, { BoxDrop::FieldItem, 10 }, { BoxDrop::Nothing, 5 }, { BoxDrop::Consumable, 15 },
 	{ BoxDrop::Common, 6 }, { BoxDrop::Advanced, 3 }, { BoxDrop::Rare, 1 },
 };
+consteval int SumBoxDrops() { int s = 0; for (const BoxDropChance& c : BoxDrops) s += c.percent; return s; }
+static_assert(SumBoxDrops() == 100, "상자 드롭 확률의 합은 100");
+
+// 상자에서 무기가 나왔을 때 무기별 비율(%). 권총·테이저건은 잘, 레일건·화염방사기는 드물게 (클라 2026-11-22).
+// 삼단봉은 기본 무기라 나오지 않는다
+struct BoxWeaponChance { WeaponId weapon; uint8_t percent; };
+inline constexpr BoxWeaponChance BoxWeapons[] = {
+	{ WeaponId::Pistol, 20 }, { WeaponId::Taser, 20 }, { WeaponId::Sword, 15 }, { WeaponId::Grenade, 12 },
+	{ WeaponId::BlastMine, 8 }, { WeaponId::ShockMine, 8 }, { WeaponId::BeamSword, 7 },
+	{ WeaponId::Flamethrower, 5 }, { WeaponId::Railgun, 5 },
+};
+consteval int SumBoxWeapons() { int s = 0; for (const BoxWeaponChance& c : BoxWeapons) s += c.percent; return s; }
+static_assert(SumBoxWeapons() == 100, "상자 무기 비율의 합은 100");
 
 // ── 필드 아이템 (§11.6) [명세 I-11~16, 가정 A-04] ──
 struct FieldItemType { FieldItemId id; int32_t heal; uint8_t percent; };
