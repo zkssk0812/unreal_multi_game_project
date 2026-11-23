@@ -222,6 +222,9 @@ void GameWorld::FireWeapon(Entity& thief)
 		thief.railgunUntilMs = _nowMs + GameData::RailgunLockMs;
 		thief.state |= StateBit::RailgunLock;
 		UseAmmo(thief);
+		// 클릭 한 번에 한 발: 꾹 누르고 있어도 잠금이 끝난 뒤 이어서 쏘지 않는다 (다시 눌러야 다음 발, 클라 2026-11-23)
+		thief.attackHeld = false;
+		ClearBits(thief.state, StateBit::Attacking);
 		return;
 
 	case GameData::WeaponHit::Thrown:

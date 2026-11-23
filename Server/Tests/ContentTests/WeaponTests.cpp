@@ -167,6 +167,27 @@ TEST_CASE(Weapon_Railgun_SixHits_IgnoresWalls_LocksMovement)
 	CHECK((world.ThiefOf(A)->state & StateBit::RailgunLock) == 0);
 }
 
+TEST_CASE(Weapon_Railgun_OneShotPerClick)
+{
+	// 꾹 누르고 있어도 한 발. 다시 눌러야 다음 발 (클라 2026-11-23)
+	GameWorld world = MakeWorld(2);
+	ClearArena(world);
+	Teleport(world, A, { 3300.0f, -4000.0f, 0.0f }, 0.0f);
+	Teleport(world, B, { 3800.0f, -4000.0f, 0.0f });
+	world.ThiefOf(B)->hp = 1000;
+	Give(world, A, WeaponId::Railgun);
+	Act(world, A, ActionType::AttackStart, 0, 0.0f);
+	Run(world, 5000);										// 누른 채로 5초 (잠금 2초 두 번 이상)
+	CHECK_EQ(world.ThiefOf(A)->weapons[1].ammo, uint16_t{ 1 });
+	CHECK_EQ(world.ThiefOf(B)->hp, 1000 - 120);
+	CHECK((world.ThiefOf(A)->state & StateBit::Attacking) == 0);
+	Act(world, A, ActionType::AttackStop);
+	Attack(world, A, 0.0f);									// 다시 클릭 → 두 번째 발
+	Run(world, 2500);
+	CHECK_EQ(world.ThiefOf(A)->weapons[1].ammo, uint16_t{ 0 });
+	CHECK_EQ(world.ThiefOf(B)->hp, 1000 - 240);
+}
+
 TEST_CASE(Weapon_Railgun_DownedWhileCharging_NoShot)
 {
 	GameWorld world = MakeWorld(2);
