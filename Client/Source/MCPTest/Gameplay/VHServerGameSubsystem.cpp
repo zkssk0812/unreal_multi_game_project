@@ -3108,10 +3108,14 @@ void UVHServerGameSubsystem::OnReject(const SC_ActionReject& P)
 		{
 		case RejectReason::TargetBusy:	Text = LOCTEXT("DoorBusy", "문간에 누가 있어 닫을 수 없습니다"); break;
 		case RejectReason::OutOfRange:	Text = LOCTEXT("DoorFar", "문에서 너무 멉니다 — 문 앞 1.5m 안에서 F를 누르세요"); break;
+		// 서버는 상호작용(금고·상자·반납) 중이면 새 상호작용(문 포함)을 InvalidState 로 거절하고 작업을 이어 간다 (정호님 2026-11-25).
+		// 클라는 작업 중 F 를 "작업 취소"로 먼저 쓰므로 보통은 오지 않는다 (취소가 서버에 닿기 전에 문 요청이 간 경우 등)
+		case RejectReason::InvalidState:	Text = LOCTEXT("DoorBusyWork", "다른 작업 중이라 문을 열거나 닫을 수 없습니다"); break;
 		default:						Text = Detail.IsEmpty() ? LOCTEXT("DoorRejected", "지금은 문을 열거나 닫을 수 없습니다") : Detail; break;
 		}
-		UE_LOG(LogVHServerGame, Log, TEXT("[문] 거절: 문 %u %s 요청 → reason %d \"%s\""), PendingDoor.DoorId, PendingDoor.bWantOpen ? TEXT("열기") : TEXT("닫기"),
-			(int32)P.reason, *Text.ToString());
+		const UVHInteractionComponent* MyI = GetMyInteraction();
+		UE_LOG(LogVHServerGame, Log, TEXT("[문] 거절: 문 %u %s 요청 → reason %d \"%s\" (내 작업 진행 중 %d — 작업 상태는 건드리지 않음)"), PendingDoor.DoorId, PendingDoor.bWantOpen ? TEXT("열기") : TEXT("닫기"),
+			(int32)P.reason, *Text.ToString(), MyI && MyI->IsInteracting() ? 1 : 0);
 		Sub->PostMessage(Text, true);
 		PendingDoor = FPendingDoor();
 		return;
@@ -3251,9 +3255,12 @@ void UVHServerGameSubsystem::SendDoorInteract(uint16 DoorEntityId, bool bWantOpe
 	PendingDoor.bWantOpen = bWantOpen;
 	PendingDoor.SentTime = FPlatformTime::Seconds();
 	const APawn* Pawn = GetLocalPawn();
-	UE_LOG(LogVHServerGame, Log, TEXT("→ 문 %s 요청: 문 엔티티 %u %s (seq %u, 내 위치 %.0f, %.0f, 문 가운데까지 %.0fcm)"), bWantOpen ? TEXT("열기") : TEXT("닫기"),
+	const UVHDoorSubsystem* Doors = GetWorld()->GetSubsystem<UVHDoorSubsystem>();
+	const AVHDoor* DoorActor = Doors ? Doors->FindByServerEntity(DoorEntityId) : nullptr;
+	UE_LOG(LogVHServerGame, Log, TEXT("→ 문 %s 요청: 문 엔티티 %u %s (seq %u, 내 위치 %.1f, %.1f, 문 가운데까지 %.0fcm, %s)"), bWantOpen ? TEXT("열기") : TEXT("닫기"),
 		DoorEntityId, *DoorDesc, Seq, Pawn ? Pawn->GetActorLocation().X : 0.f, Pawn ? Pawn->GetActorLocation().Y : 0.f,
-		Pawn ? FVector::Dist2D(Pawn->GetActorLocation(), Entities[DoorEntityId].Pos) : -1.f);
+		Pawn ? FVector::Dist2D(Pawn->GetActorLocation(), Entities[DoorEntityId].Pos) : -1.f,
+		DoorActor ? *UVHDoorSubsystem::DescribeDoorway(*DoorActor, Pawn) : TEXT("문 액터 없음"));
 }
 
 void UVHServerGameSubsystem::SendInteractCancel(UVHInteractionComponent* By)
@@ -3506,6 +3513,56 @@ void UVHServerGameSubsystem::SendAttackHeld(bool bHeld)
 
 namespace
 {
+	// vh.WorkBox : 가장 가까운 상자 옆(150cm)으로 옮겨 F (상자 3초 작업 시작). 작업 중 문 요청 거절(InvalidState) 시험용 (2026-11-25)
+	FAutoConsoleCommandWithWorldAndArgs GVHWorkBoxCommand(TEXT("vh.WorkBox"),
+		TEXT("개발용: vh.WorkBox — 가장 가까운 상자 옆으로 옮겨 F 를 눌러 상자 작업을 시작한다 (실서버 게임 중)."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			UVHServerGameSubsystem* Server = World ? World->GetSubsystem<UVHServerGameSubsystem>() : nullptr;
+			APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+			APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+			UVHInteractionComponent* I = Pawn ? Pawn->FindComponentByClass<UVHInteractionComponent>() : nullptr;
+			if (!Server || !Server->IsActive() || !I)
+			{
+				return;
+			}
+			const UVHServerGameSubsystem::FEntity* Best = nullptr;
+			for (const TPair<uint16, UVHServerGameSubsystem::FEntity>& Pair : Server->GetEntities())
+			{
+				if (Pair.Value.Kind == EntityKind::Box && Pair.Value.Object.IsValid()
+					&& (!Best || FVector::Dist2D(Pair.Value.Pos, Pawn->GetActorLocation()) < FVector::Dist2D(Best->Pos, Pawn->GetActorLocation())))
+				{
+					Best = &Pair.Value;
+				}
+			}
+			if (!Best)
+			{
+				return;
+			}
+			for (int32 Try = 0; Try < 8; ++Try)
+			{
+				const FVector Cand = Best->Pos + FRotator(0.f, 45.f * Try, 0.f).Vector() * 150.f;
+				if (Pawn->TeleportTo(FVector(Cand.X, Cand.Y, Pawn->GetActorLocation().Z), Pawn->GetActorRotation()))	// 높이는 그대로
+				{
+					break;
+				}
+			}
+			I->DebugSetHoverAt(Best->Object.Get());
+			// 커서 대상(포커스)은 다음 틱에 잡히므로 조금 뒤에 F
+			TWeakObjectPtr<UVHInteractionComponent> WeakI(I);
+			FTimerHandle Handle;
+			World->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateLambda([WeakI]()
+			{
+				if (UVHInteractionComponent* Comp = WeakI.Get())
+				{
+					Comp->InteractPressed();
+					UE_LOG(LogVHServerGame, Log, TEXT("[개발] vh.WorkBox: F (대상 %s)"), *GetNameSafe(Comp->GetFocusTarget()));
+				}
+			}), 0.25f, false);
+			UE_LOG(LogVHServerGame, Log, TEXT("[개발] vh.WorkBox: 상자 %u (type %u) 옆으로, 내 위치 (%.0f, %.0f)"), Best->Id, Best->TypeId,
+				Pawn->GetActorLocation().X, Pawn->GetActorLocation().Y);
+		}));
+
 	// vh.Press skill|attack|wheel : Q 키·좌클릭(누르고 0.1초 뒤 뗌)·마우스 휠과 같은 처리 (봇 스크립트로 사제 테이저건 시험)
 	FAutoConsoleCommandWithWorldAndArgs GVHPressCommand(TEXT("vh.Press"),
 		TEXT("개발용: vh.Press skill|attack|wheel — Q 키 / 좌클릭(0.1초) / 마우스 휠을 누른 것과 같은 처리 (실서버 게임 중)."),

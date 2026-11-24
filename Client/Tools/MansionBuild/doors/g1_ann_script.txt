@@ -1,0 +1,60 @@
+# 2026-11-25 문간 경계 시험 (Ann): wall_119 (3300,3150). 서버 문간 = 문 위 벽 사각형 + 사방 40cm. 경계 안·밖에서 F(클라 판단) → vh.DoorSet close(서버 판단)
+1.0 vh.CeilingGo 3200 3150
+1.2 vh.Aim 0
+2.0 vh.DoorSet open near
+3.0 vh.CeilingGo 3235 3150
+3.7 vh.PressF
+4.4 vh.DoorSet close near
+5.3 vh.CeilingGo 3200 3150
+6.0 vh.DoorSet open near
+7.0 vh.CeilingGo 3238 3150
+7.7 vh.PressF
+8.4 vh.DoorSet close near
+9.3 vh.CeilingGo 3200 3150
+10.0 vh.DoorSet open near
+11.0 vh.CeilingGo 3242 3150
+11.7 vh.PressF
+12.4 vh.DoorSet close near
+13.3 vh.CeilingGo 3200 3150
+14.0 vh.DoorSet open near
+15.0 vh.CeilingGo 3245 3150
+15.7 vh.PressF
+16.4 vh.DoorSet close near
+17.3 vh.CeilingGo 3200 3150
+18.0 vh.DoorSet open near
+19.0 vh.CeilingGo 3400 3150
+19.5 vh.DoorSet open near
+20.0 vh.CeilingGo 3365 3150
+20.7 vh.PressF
+21.4 vh.DoorSet close near
+22.3 vh.CeilingGo 3400 3150
+23.0 vh.DoorSet open near
+24.0 vh.CeilingGo 3362 3150
+24.7 vh.PressF
+25.4 vh.DoorSet close near
+26.3 vh.CeilingGo 3400 3150
+27.0 vh.DoorSet open near
+28.0 vh.CeilingGo 3358 3150
+28.7 vh.PressF
+29.4 vh.DoorSet close near
+30.3 vh.CeilingGo 3400 3150
+31.0 vh.DoorSet open near
+32.0 vh.CeilingGo 3355 3150
+32.7 vh.PressF
+33.4 vh.DoorSet close near
+34.3 vh.CeilingGo 3400 3150
+35.0 vh.DoorSet open near
+# Bob 이 문간(가운데 → 경계 안 3358 → 경계 밖 3365)에 설 때 Ann 이 닫기
+38.0 vh.CeilingGo 3200 3150
+38.5 vh.DoorSet open near
+40.0 vh.PressF
+40.6 vh.Shot g1_busy_center
+44.0 vh.PressF
+44.6 vh.Shot g1_busy_edge
+48.0 vh.PressF
+49.5 vh.DoorSet open near
+# 상자 작업 중 문 요청 → 서버 InvalidState, 작업은 계속
+52.0 vh.WorkBox
+53.0 vh.DoorSet toggle near
+53.4 vh.Shot g1_work_door
+57.0 vh.DoorBind

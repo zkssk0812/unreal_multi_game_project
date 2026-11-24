@@ -1,0 +1,7 @@
+# 2026-11-25 상자 작업 중 문 요청 시험 (Ann 혼자): 서버는 작업 중 새 상호작용을 InvalidState 로 거절하고 작업을 이어 간다
+2.0 vh.WorkBox
+3.4 vh.DoorSet toggle near
+3.8 vh.Shot g2_work_door1
+4.4 vh.DoorSet toggle near
+4.8 vh.Shot g2_work_door2
+9.0 vh.DoorBind

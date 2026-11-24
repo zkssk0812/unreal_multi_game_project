@@ -52,6 +52,12 @@ namespace
 				UE_LOG(LogMCPTest, Warning, TEXT("[Door] %s: 서버 문 엔티티가 없어 요청하지 않음"), *Door.Describe());
 				return;
 			}
+			// 서버 InteractBegin 은 "토글"이라, 이미 그 상태면 보내지 않는다 (vh.DoorSet close 가 닫힌 문을 여는 일 방지)
+			if (Door.IsOpen() == bOpen)
+			{
+				UE_LOG(LogMCPTest, Log, TEXT("[Door] %s: 이미 %s → 요청하지 않음"), *Door.Describe(), bOpen ? TEXT("열림") : TEXT("닫힘"));
+				return;
+			}
 			Game->SendDoorInteract(Door.ServerEntityId, bOpen, Door.Describe());
 		}
 	};
@@ -297,13 +303,26 @@ bool UVHDoorSubsystem::IsPawnInDoorway(const AVHDoor& Door, const APawn* Pawn)
 	{
 		return false;
 	}
-	float Radius = 35.f;
-	if (const UCapsuleComponent* Cap = Pawn->FindComponentByClass<UCapsuleComponent>())
-	{
-		Radius = Cap->GetScaledCapsuleRadius();
-	}
+	// 서버 DoorOccupied 와 같은 범위 (정호님 답변 2026-11-25): 문 위 벽(above_door) 바닥 사각형 = 벽 두께 × 문 폭 을
+	// 사방으로 몸 반지름(40cm, GameData::BodyRadiusCm)만큼 넓힌 범위 안에 몸 중심(2D)이 있으면 문간 점유. 경계 포함(서버도 <=)
+	const float R = UVHSettings::Get().GetGameplayConfig().DoorOccupyRadius;
 	const FVector L = Door.GetActorTransform().InverseTransformPosition(Pawn->GetActorLocation());
-	return FMath::Abs(L.X) < Door.WallThickness * 0.5f + Radius + 2.f && FMath::Abs(L.Y) < Door.Width * 0.5f + Radius;
+	return FMath::Abs(L.X) <= Door.WallThickness * 0.5f + R && FMath::Abs(L.Y) <= Door.Width * 0.5f + R;
+}
+
+FString UVHDoorSubsystem::DescribeDoorway(const AVHDoor& Door, const APawn* Pawn)
+{
+	if (!Pawn)
+	{
+		return FString();
+	}
+	const float R = UVHSettings::Get().GetGameplayConfig().DoorOccupyRadius;
+	const FVector L = Door.GetActorTransform().InverseTransformPosition(Pawn->GetActorLocation());
+	const float LimX = Door.WallThickness * 0.5f + R, LimY = Door.Width * 0.5f + R;
+	// 넓힌 범위 경계까지 남은 거리: 양수 = 안쪽, 음수 = 바깥 (두 축 중 작은 쪽)
+	const float Inside = FMath::Min(LimX - FMath::Abs(L.X), LimY - FMath::Abs(L.Y));
+	return FString::Printf(TEXT("문 로컬 (%.1f, %.1f), 넓힌 범위 |x|<=%.0f |y|<=%.0f → 경계까지 %+.1fcm (%s)"), L.X, L.Y, LimX, LimY, Inside,
+		Inside >= 0.f ? TEXT("문간 안") : TEXT("문간 밖"));
 }
 
 bool UVHDoorSubsystem::TryToggle(APawn* Pawn, AVHDoor* Door, FText& OutMessage)
@@ -322,8 +341,12 @@ bool UVHDoorSubsystem::TryToggle(APawn* Pawn, AVHDoor* Door, FText& OutMessage)
 	if (!bOpen && IsPawnInDoorway(*Door, Pawn))
 	{
 		OutMessage = LOCTEXT("InDoorway", "문간에 서 있어서 닫을 수 없습니다 — 한 걸음 비키세요");
-		UE_LOG(LogMCPTest, Log, TEXT("[Door] %s 문간에 서서 닫기 → 거절"), *Door->Describe());
+		UE_LOG(LogMCPTest, Log, TEXT("[Door] %s 문간에 서서 닫기 → 클라에서 거절 (%s)"), *Door->Describe(), *DescribeDoorway(*Door, Pawn));
 		return false;
+	}
+	if (!bOpen)
+	{
+		UE_LOG(LogMCPTest, Log, TEXT("[Door] 닫기 요청 보냄 (%s)"), *DescribeDoorway(*Door, Pawn));
 	}
 	RequestSetOpen(Door, bOpen);
 	return true;

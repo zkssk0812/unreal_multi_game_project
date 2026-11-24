@@ -226,6 +226,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door", meta = (ClampMin = 30, Units = "cm"))
 	float DoorServerRange = 140.f;
 
+	/**
+	 * 문간 점유 범위: 문 위 벽 바닥 사각형(벽 두께 × 문 폭)을 사방으로 이만큼 넓힌 범위에 몸 중심이 있으면 닫을 수 없다.
+	 * 서버 GameData::BodyRadiusCm(40)와 같아야 한다 (정호님 답변 2026-11-25: 서버 DoorOccupied 와 같은 범위)
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door", meta = (ClampMin = 0, Units = "cm"))
+	float DoorOccupyRadius = 40.f;
+
 	/** F로 문을 고를 수 있는 거리: 벽 면에서 앞뒤로 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door", meta = (ClampMin = 30, Units = "cm"))
 	float DoorInteractDepth = 150.f;

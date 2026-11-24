@@ -71,6 +71,8 @@ public:
 
 	/** 이 폰이 문간(문짝이 지나가는 자리)에 서 있는가 → 닫으면 안 됨 */
 	static bool IsPawnInDoorway(const AVHDoor& Door, const APawn* Pawn);
+	/** 로그용: 문 로컬 위치와 넓힌 문간 범위 경계까지 거리 (양수 = 안) */
+	static FString DescribeDoorway(const AVHDoor& Door, const APawn* Pawn);
 
 	// ── 서버 문 (2026-11-24 팀 서버: EntityKind::Door 37개) ──
 
