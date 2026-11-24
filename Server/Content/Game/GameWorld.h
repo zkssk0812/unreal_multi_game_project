@@ -342,6 +342,8 @@ private:
 	struct RoomSpot { Vec3 pos; uint16_t room = 0; };
 	std::optional<RoomSpot> RandomRoomSpot(const std::vector<uint16_t>& excludeRooms, const Entity* ignore = nullptr);	// 방을 먼저 고르고 그 방의 빈 칸
 	RoomSpot ThiefSpot(const Entity* thief, const std::vector<uint16_t>& avoidRooms);	// 의적 시작·리스폰 (A-26)
+	std::optional<uint16_t> RoomAt(const Vec3& pos) const;			// pos가 들어 있는 방 (놓을 칸이 있는 방만). 복도·문간이면 없음
+	std::vector<uint16_t> RespawnAvoidRooms(const Entity& thief) const;	// 경비원·다른 의적이 지금 있는 방
 	void OnSafeOpened(Entity& safe, Entity& opener);
 	std::optional<RejectReason> PickUpItem(Entity& thief, Entity& item);
 	void Deliver(Entity& thief);

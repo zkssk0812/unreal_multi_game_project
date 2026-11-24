@@ -48,6 +48,62 @@ TEST_CASE(World_ThievesStartInDifferentRandomRooms)
 	CHECK(firstSpots.size() >= 20);
 }
 
+TEST_CASE(World_ThievesNeverStartInGuardRooms)
+{
+	// 의적은 경비원이 시작하는 방(경비실·식당·중앙 홀)에서 시작하지 않는다 (2026-11-25)
+	const MapData& map = DefaultMap();
+	std::set<int> guardRooms;
+	for (const MapPoint& spawn : map.guardSpawns)
+		guardRooms.insert(RoomOf(map, spawn.pos));
+	CHECK_EQ(guardRooms.size(), size_t{ 3 });
+	for (uint32_t seed = 1; seed <= 100; ++seed)
+	{
+		GameWorld world = MakeWorld(3, false, {}, seed);
+		for (const Entity& e : world.Entities())
+		{
+			if (e.IsGuard())
+				CHECK(guardRooms.contains(RoomOf(map, e.pos)));			// 경비원은 정해진 시작 방
+			if (e.IsThief())
+				CHECK(!guardRooms.contains(RoomOf(map, e.pos)));
+		}
+	}
+}
+
+TEST_CASE(World_RespawnAvoidsRoomsWithGuardsAndOtherThieves)
+{
+	// 리스폰은 경비원·다른 의적이 그 순간 있는 방을 빼고 고른다 (2026-11-25). 매번 경비원 3명·다른 의적 2명을 서로 다른 방에 둔다
+	const MapData& map = DefaultMap();
+	std::vector<int> rooms;
+	for (size_t i = 0; i < map.rooms.size(); ++i)
+		if (!map.rooms[i].returnCells.empty())
+			rooms.push_back(static_cast<int>(i));
+	GameWorld world = MakeWorld(3);
+	std::mt19937 rng(42);
+	for (int round = 0; round < 60; ++round)
+	{
+		std::shuffle(rooms.begin(), rooms.end(), rng);
+		std::set<int> occupied;
+		for (size_t n = 0; n < 3; ++n)
+		{
+			PlaceGuard(world, map.rooms[static_cast<size_t>(rooms[n])].returnCells.front(), 0.0f, n);
+			occupied.insert(rooms[n]);
+		}
+		Teleport(world, B, map.rooms[static_cast<size_t>(rooms[3])].returnCells.front());
+		Teleport(world, C, map.rooms[static_cast<size_t>(rooms[4])].returnCells.front());
+		occupied.insert(rooms[3]);
+		occupied.insert(rooms[4]);
+
+		Entity* a = world.ThiefOf(A);
+		a->state |= StateBit::Downed;
+		a->downedUntilMs = world.NowMs();
+		Run(world, 50);													// 리스폰
+		CHECK((a->state & StateBit::Downed) == 0);
+		CHECK(OnRoomCell(map, a->pos));
+		CHECK(!occupied.contains(RoomOf(map, a->pos)));
+		world.TakeEvents();
+	}
+}
+
 TEST_CASE(World_ThiefStartsWithLoadout)
 {
 	GameWorld world = MakeWorld(3, false, { {}, {}, { GameData::Perk::Vest, GameData::Perk::DeathSave } });

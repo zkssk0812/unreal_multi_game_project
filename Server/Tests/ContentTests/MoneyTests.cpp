@@ -1,5 +1,7 @@
 #include "ServerCore/CorePch.h"
 
+#include "Content/Game/Sight.h"
+#include "Content/Game/WorldMath.h"
 #include "TestFramework.h"
 #include "WorldTestUtil.h"
 
@@ -173,8 +175,19 @@ TEST_CASE(Money_Return_CancelledByHit_Attack_Dodge_FCancel)
 	CHECK(interrupted([&] { Act(world, A, ActionType::Dodge); }));
 	CHECK(interrupted([&] { Attack(world, A, 0.0f); }));							// 내가 공격
 	CHECK(interrupted([&] {
-		Teleport(world, B, Offset(world.ThiefOf(A)->pos, 150, 0), 180.0f);
-		Attack(world, B, 180.0f);												// 맞음 (IN-05, 금고·상자와 같음)
+		// 반납 지점은 판마다 다른 자리라, A 옆 1.2m 중 벽이 없는 쪽에 B를 세운다
+		using namespace Content::WorldMath;
+		const Vec3 at = world.ThiefOf(A)->pos;
+		for (const float yaw : { 0.0f, 90.0f, 180.0f, 270.0f })
+		{
+			const Vec3 p = Ahead(at, yaw, 120.0f);
+			if (!DefaultMap().nav.IsWalkable(p) ||
+				!HasLineOfSight(DefaultMap(), { p.x, p.y, GameData::ShotHeightCm }, { at.x, at.y, GameData::ShotHeightCm }))
+				continue;
+			Teleport(world, B, p, yaw + 180.0f);
+			Attack(world, B, yaw + 180.0f);										// 맞음 (IN-05, 금고·상자와 같음)
+			break;
+		}
 		Teleport(world, B, FarAway);
 	}));
 	CHECK_EQ(world.ThiefOf(A)->carried.size(), size_t{ 1 });					// 들고 있던 것은 그대로

@@ -324,6 +324,30 @@ GameWorld::RoomSpot GameWorld::ThiefSpot(const Entity* thief, const std::vector<
 	return {};
 }
 
+std::optional<uint16_t> GameWorld::RoomAt(const Vec3& pos) const
+{
+	if (_map == nullptr)
+		return std::nullopt;
+	for (size_t i = 0; i < _map->rooms.size(); ++i)
+		if (!_map->rooms[i].returnCells.empty() && _map->rooms[i].Contains(pos))
+			return static_cast<uint16_t>(i);
+	return std::nullopt;
+}
+
+std::vector<uint16_t> GameWorld::RespawnAvoidRooms(const Entity& thief) const
+{
+	// 리스폰할 때 빼는 방: 경비원이 지금 있는 방, 다른 의적(나간 사람 제외)이 지금 있는 방 (2026-11-25)
+	std::vector<uint16_t> rooms;
+	for (const Entity& e : _entities)
+	{
+		if (e.removed || &e == &thief || !(e.IsGuard() || e.IsThief()) || (e.state & StateBit::LeftGame) != 0)
+			continue;
+		if (const auto room = RoomAt(e.pos))
+			rooms.push_back(*room);
+	}
+	return rooms;
+}
+
 std::optional<Vec3> GameWorld::RandomFreeCell()
 {
 	// 방 안의 칸(복도 제외) 중 다른 오브젝트와 1m 이상 떨어진 곳 — 상자·필드 아이템 (A-02, A-04). 몇 번 해 봐도 없으면 포기

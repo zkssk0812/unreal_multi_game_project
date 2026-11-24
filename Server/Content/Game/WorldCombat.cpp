@@ -434,7 +434,7 @@ void GameWorld::Respawn(Entity& thief)
 	// 방 안 무작위 칸 (D-06, A-26). 위치는 클라가 정하므로 SC_RESPAWNED의 pos로 옮기라고 알린다
 	if (_map != nullptr)
 	{
-		thief.pos = ThiefSpot(&thief, {}).pos;
+		thief.pos = ThiefSpot(&thief, RespawnAvoidRooms(thief)).pos;	// 경비원·다른 의적이 있는 방은 빼고 (2026-11-25)
 		thief.yaw = std::uniform_real_distribution<float>(-180.0f, 180.0f)(_rng);
 	}
 	ResetLoadout(thief);

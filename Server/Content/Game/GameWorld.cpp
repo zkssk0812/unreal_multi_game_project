@@ -51,10 +51,17 @@ void GameWorld::Setup(const MapData& map, const std::vector<ThiefSlot>& thieves,
 		_itemCells.insert(_itemCells.end(), room.returnCells.begin(), room.returnCells.end());
 
 	// 1) 플레이어: 방 안 무작위 칸, 셋이 서로 다른 방에서 시작 (A-26). 플레이어가 1~3번 엔티티가 되도록 가장 먼저 만든다.
+	//    경비원이 시작하는 방에서는 시작하지 않는다 (2026-11-25: 시작하자마자 경비원과 마주치지 않게)
+	std::vector<uint16_t> guardRooms;
+	for (const MapPoint& spawn : map.guardSpawns)
+		if (const auto room = RoomAt(spawn.pos))
+			guardRooms.push_back(*room);
 	std::vector<uint16_t> startRooms;
 	for (const ThiefSlot& slot : thieves)
 	{
-		const RoomSpot spot = ThiefSpot(nullptr, startRooms);
+		std::vector<uint16_t> avoid = startRooms;
+		avoid.insert(avoid.end(), guardRooms.begin(), guardRooms.end());
+		const RoomSpot spot = ThiefSpot(nullptr, avoid);
 		startRooms.push_back(spot.room);
 		const float yaw = std::uniform_real_distribution<float>(-180.0f, 180.0f)(_rng);
 		Entity& thief = Add(EntityKind::Thief, spot.pos, yaw, slot.characterId, slot.playerId);
