@@ -6,6 +6,7 @@
 #include "Gameplay/VHFxActor.h"
 #include "Gameplay/VHDoor.h"
 #include "Gameplay/VHGameplayConfig.h"
+#include "Gameplay/VHAimComponent.h"
 #include "Network/VHSettings.h"
 #include "MCPTest.h"
 
@@ -13,6 +14,9 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/Texture2D.h"
+#include "Engine/TextureRenderTarget2D.h"
+#include "Engine/Canvas.h"
+#include "Kismet/KismetRenderingLibrary.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
@@ -31,6 +35,8 @@ namespace
 		TEXT("천장 가림(방 단위 시야): 1 = 켬(기본), 0 = 끔. 내 구역만 보이고 다른 구역은 회색 천장으로 덮는다."));
 	TAutoConsoleVariable<int32> CVarVHCeilingCut(TEXT("vh.CeilingCut"), 1,
 		TEXT("내 구역 앞 가림 지우기: 1 = 켬(기본), 0 = 끔(예전처럼 옆 구역 천장·벽이 내 구역 바닥을 가림). 비교용."));
+	TAutoConsoleVariable<int32> CVarVHDoorPeek(TEXT("vh.DoorPeek"), 1,
+		TEXT("열린 문 너머 엿보기(부채꼴 시야): 1 = 켬(기본), 0 = 끔(열린 문 너머도 덮임)."));
 	TAutoConsoleVariable<float> CVarVHCeilingCutZ(TEXT("vh.CeilingCutZ"), -10000.f,
 		TEXT("내 구역 판단 높이(cm) 덮어쓰기: 0 = 바닥, 90 = 허리. -10000 = 설정값(DA CeilingCutPlaneZ) 사용."));
 
@@ -108,6 +114,17 @@ namespace
 			}
 		}));
 
+	// vh.DoorPeekInfo : 엿보기 상태
+	FAutoConsoleCommandWithWorldAndArgs GVHDoorPeekInfoCommand(TEXT("vh.DoorPeekInfo"),
+		TEXT("개발용: vh.DoorPeekInfo — 열린 문 너머 엿보기(문마다 너머 구역·각도·광선 길이)를 로그에 쓴다."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (const UVHCeilingSubsystem* Ceiling = World ? World->GetSubsystem<UVHCeilingSubsystem>() : nullptr)
+			{
+				UE_LOG(LogMCPTest, Log, TEXT("[Peek] %s"), *Ceiling->DescribePeek());
+			}
+		}));
+
 	// vh.CeilingInfo : 지금 상태 (내 구역·숨긴 물체 수)
 	FAutoConsoleCommandWithWorldAndArgs GVHCeilingInfoCommand(TEXT("vh.CeilingInfo"),
 		TEXT("개발용: vh.CeilingInfo — 천장 가림 상태(내 구역, 덮인 구역, 숨긴 물체 수)를 로그에 쓴다."),
@@ -161,6 +178,10 @@ void UVHCeilingSubsystem::Deinitialize()
 	CutMIDs.Reset();
 	CutMIDRefs.Reset();
 	ZoneTexture = nullptr;
+	PeekTarget = nullptr;
+	Wedges.Reset();
+	DoorList.Reset();
+	ZoneMapIds.Reset();
 	Super::Deinitialize();
 }
 
@@ -622,7 +643,7 @@ bool UVHCeilingSubsystem::IsPointCovered(const FVector2D& P) const
 			return false;
 		}
 	}
-	return bAny;
+	return bAny && !IsPointPeeked(P);	// 열린 문 너머 부채꼴 안이면 보임 [2026-11-24]
 }
 
 void UVHCeilingSubsystem::SetActorCovered(AActor* Actor, bool bCovered)
@@ -712,6 +733,7 @@ void UVHCeilingSubsystem::Tick(float DeltaTime)
 	UpdateCurrentZone();
 	UpdateFade(DeltaTime);
 	UpdateCutParams();
+	UpdatePeek();
 	UpdateProps();
 	UpdateActors();
 	UpdateSilhouette();
@@ -835,7 +857,7 @@ FString UVHCeilingSubsystem::Describe() const
 	int32 HiddenProps = 0;
 	for (const FZone& Z : Zones)
 	{
-		HiddenProps += Z.bPropsHidden ? Z.Props.Num() : 0;
+		HiddenProps += Z.PropMode == 1 ? Z.Props.Num() : 0;
 	}
 	return FString::Printf(TEXT("%s, 내 구역 %s (%.0f, %.0f), 덮인 구역 %d/%d, 바뀌는 중[%s ], 숨긴 물체 %d, 앞 가림 지우기 %s(높이 %.0f, A=%.0f/%.2f B=%.0f/%.2f), 숨긴 소품 %d/%d"),
 		IsEnabled() ? TEXT("켬") : TEXT("끔"), *GetCurrentZoneLabel(), V.X, V.Y, Covered, Zones.Num(), *Fading, Hidden.Num(),
@@ -919,6 +941,24 @@ void UVHCeilingSubsystem::BuildZoneTexture()
 	ZoneTexture->UpdateResource();
 	ZoneMapParam = FVector4(B.Min.X, B.Min.Y, 1.0 / Cell, 0.0);
 	ZoneSizeParam = FVector4(W, H, 0.0, 0.0);
+
+	// 엿보기용: 넓은 구역(R) CPU 사본 + 같은 칸의 마스크 렌더 타깃 (흰 = 열린 문 너머로 보이는 바닥)
+	ZoneMapSize = FIntPoint(W, H);
+	ZoneMapIds.SetNumUninitialized(W * H);
+	for (int32 i = 0; i < W * H; ++i)
+	{
+		ZoneMapIds[i] = Data[i * 4 + 2];
+	}
+	// 마스크는 구역 지도보다 촘촘하게 (부채꼴 가장자리가 계단 모양으로 보이지 않게). 재질은 0~1 좌표로 읽으므로 배율과 무관
+	PeekScale = FMath::Clamp(C.DoorPeekMaskScale, 1, FMath::Max(1, 4096 / FMath::Max(W, H)));
+	PeekTarget = UKismetRenderingLibrary::CreateRenderTarget2D(this, W * PeekScale, H * PeekScale, RTF_R8, FLinearColor::Black);
+	if (PeekTarget)
+	{
+		PeekTarget->Filter = TF_Bilinear;
+		PeekTarget->AddressX = TA_Clamp;
+		PeekTarget->AddressY = TA_Clamp;
+		PeekTarget->UpdateResourceImmediate(true);
+	}
 	UE_LOG(LogMCPTest, Log, TEXT("[Ceiling] 구역 지도 %dx%d (칸 %.0fcm, 원점 %.0f, %.0f)"), W, H, Cell, B.Min.X, B.Min.Y);
 }
 
@@ -940,6 +980,11 @@ void UVHCeilingSubsystem::SetCutParams(UMaterialInstanceDynamic* MID, float Self
 	MID->SetScalarParameterValue(TEXT("CutZoneB"), FMath::Max(0.f, SentB));
 	MID->SetScalarParameterValue(TEXT("CutAlphaB"), FMath::Max(0.f, SentBA));
 	MID->SetScalarParameterValue(TEXT("CutPlaneZ"), SentZ > -10000.f ? SentZ : 0.f);
+	if (PeekTarget)
+	{
+		MID->SetTextureParameterValue(TEXT("PeekTex"), PeekTarget);
+		MID->SetScalarParameterValue(TEXT("PeekOn"), 1.f);
+	}
 }
 
 void UVHCeilingSubsystem::ApplyCutaway(AActor* Actor, float SelfZone)
@@ -1030,9 +1075,11 @@ void UVHCeilingSubsystem::AddDoorCurtains()
 	// 열린 문으로 덮인 구역 안이 비치지 않게: 문 자리마다 양쪽 구역의 벽 면(구역 쪽)에 세로 천장 조각을 세운다.
 	// 그 구역 천장과 같은 인스턴스 메시라 함께 덮이고 걷힌다. 한쪽 면만 그리는 재질이라 문 바깥(다른 구역 쪽)에서만 보인다
 	int32 Count = 0;
+	DoorList.Reset();
 	for (TActorIterator<AVHDoor> It(GetWorld()); It; ++It)
 	{
 		const AVHDoor* Door = *It;
+		DoorList.Add(*It);
 		const FTransform& T = Door->GetActorTransform();
 		for (int32 Side = 0; Side < 2; ++Side)
 		{
@@ -1088,6 +1135,7 @@ void UVHCeilingSubsystem::CollectProps()
 			P->MarkRenderStateDirty();
 		}
 		Zones[Zi].Props.Add(A);
+		Zones[Zi].PropBoxes.Add(FBox2D(FVector2D(Origin.X - Extent.X, Origin.Y - Extent.Y), FVector2D(Origin.X + Extent.X, Origin.Y + Extent.Y)));
 		++PropCount;
 	}
 	UE_LOG(LogMCPTest, Log, TEXT("[Ceiling] 구역 소품 %d개 (구역이 다 덮이면 숨김, 그림자·간접광은 남김)"), PropCount);
@@ -1095,22 +1143,321 @@ void UVHCeilingSubsystem::CollectProps()
 
 void UVHCeilingSubsystem::UpdateProps()
 {
+	// 다 덮인 구역의 소품은 숨김. 열린 문 너머로 일부가 보이는 구역은 부채꼴 안의 소품만 보임 [2026-11-24]
 	const bool bEnabled = IsEnabled();
 	for (int32 i = 0; i < Zones.Num(); ++i)
 	{
 		FZone& Z = Zones[i];
-		const bool bHide = bEnabled && i != Current && Z.Opacity >= 1.f;
-		if (bHide == Z.bPropsHidden)
+		const bool bCovered = bEnabled && i != Current && Z.Opacity >= 1.f;
+		const int32 Mode = !bCovered ? 0 : (Z.bPeek ? 2 : 1);
+		if (Mode == Z.PropMode && Mode != 2)
 		{
 			continue;
 		}
-		Z.bPropsHidden = bHide;
-		for (const TWeakObjectPtr<AActor>& A : Z.Props)
+		Z.PropMode = Mode;
+		for (int32 k = 0; k < Z.Props.Num(); ++k)
 		{
-			if (AActor* Actor = A.Get())
+			AActor* Actor = Z.Props[k].Get();
+			if (!Actor)
+			{
+				continue;
+			}
+			bool bHide = Mode == 1;
+			if (Mode == 2)
+			{
+				const FBox2D& Bx = Z.PropBoxes[k];
+				bHide = !(IsPointPeeked(Bx.GetCenter()) || IsPointPeeked(Bx.Min) || IsPointPeeked(Bx.Max)
+					|| IsPointPeeked(FVector2D(Bx.Min.X, Bx.Max.Y)) || IsPointPeeked(FVector2D(Bx.Max.X, Bx.Min.Y)));
+			}
+			if (Actor->IsHidden() != bHide)
 			{
 				Actor->SetActorHiddenInGame(bHide);
 			}
 		}
 	}
+}
+
+int32 UVHCeilingSubsystem::ZoneIdAtMap(const FVector2D& P) const
+{
+	if (ZoneMapSize.X <= 0)
+	{
+		return 0;
+	}
+	const int32 X = FMath::FloorToInt((P.X - ZoneMapParam.X) * ZoneMapParam.Z);
+	const int32 Y = FMath::FloorToInt((P.Y - ZoneMapParam.Y) * ZoneMapParam.Z);
+	if (X < 0 || Y < 0 || X >= ZoneMapSize.X || Y >= ZoneMapSize.Y)
+	{
+		return 0;
+	}
+	return ZoneMapIds[Y * ZoneMapSize.X + X];
+}
+
+void UVHCeilingSubsystem::UpdatePeek()
+{
+	const UVHGameplayConfig& C = UVHSettings::Get().GetGameplayConfig();
+	const bool bOn = IsEnabled() && C.bDoorPeek && CVarVHDoorPeek.GetValueOnGameThread() != 0 && Zones.IsValidIndex(Current) && ZoneMapSize.X > 0 && PeekTarget;
+	const FVector V3 = GetViewerLocation();
+	const FVector2D V(V3.X, V3.Y);
+	const bool bFacing = C.DoorPeekMode == EVHDoorPeekMode::ApertureAndFacing;
+	float AimYaw = 0.f;
+	if (bFacing)
+	{
+		const APlayerController* PC = GetWorld()->GetFirstPlayerController();
+		const APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+		const UVHAimComponent* Aim = Pawn ? Pawn->FindComponentByClass<UVHAimComponent>() : nullptr;
+		AimYaw = Aim ? Aim->GetAimYaw() : (Pawn ? Pawn->GetActorRotation().Yaw : 0.f);
+	}
+
+	// 1) 입력이 그대로면(내 위치 2cm·내 구역 문들의 문틈·설정) 다시 계산하지 않는다
+	uint32 InSig = GetTypeHash(bOn ? Current : -1);
+	if (bOn)
+	{
+		InSig = HashCombine(InSig, GetTypeHash(FMath::RoundToInt(V.X * 0.5f)));
+		InSig = HashCombine(InSig, GetTypeHash(FMath::RoundToInt(V.Y * 0.5f)));
+		InSig = HashCombine(InSig, GetTypeHash(bFacing ? FMath::RoundToInt(AimYaw) : 9999));
+		InSig = HashCombine(InSig, GetTypeHash(C.DoorPeekRays));
+		const FName CurId = Zones[Current].Id;
+		for (const TWeakObjectPtr<AVHDoor>& Weak : DoorList)
+		{
+			const AVHDoor* D = Weak.Get();
+			if (D && (D->ZoneA == CurId || D->ZoneB == CurId))
+			{
+				float Y0 = 0.f, Y1 = 0.f;
+				const bool bAp = D->GetAperture(Y0, Y1);
+				InSig = HashCombine(InSig, GetTypeHash(bAp ? FMath::RoundToInt(Y0) * 1000 + FMath::RoundToInt(Y1) : -77777));
+			}
+		}
+	}
+	if (InSig == PeekSignature)
+	{
+		return;
+	}
+	PeekSignature = InSig;
+
+	// 2) 문마다 부채꼴: 문 로컬 좌표(x = 벽을 뚫는 방향, y = 문 폭 방향)에서 문틈 양 끝을 지나는 각도 범위를 구하고,
+	//    그 사이 광선을 쏴 문 너머 구역 안에서만 늘린다 (그 구역을 벗어나는 곳 = 벽에서 멈춤)
+	for (FZone& Z : Zones)
+	{
+		Z.bPeek = false;
+	}
+	Wedges.Reset();
+	if (bOn)
+	{
+		const FName CurId = Zones[Current].Id;
+		const int32 CurMap = Current + 1;
+		const float Step = FMath::Max(2.f, 1.f / static_cast<float>(ZoneMapParam.Z));	// 구역 지도 한 칸
+		const int32 N = FMath::Clamp(C.DoorPeekRays, 4, 256);
+		const float HalfFacing = FMath::DegreesToRadians(C.DoorPeekFacingHalfAngle);
+		for (const TWeakObjectPtr<AVHDoor>& Weak : DoorList)
+		{
+			AVHDoor* D = Weak.Get();
+			if (!D || (D->ZoneA != CurId && D->ZoneB != CurId))
+			{
+				continue;
+			}
+			const bool bMineA = D->ZoneA == CurId;
+			const FName OtherId = bMineA ? D->ZoneB : D->ZoneA;
+			const int32 Other = OtherId.IsNone() ? INDEX_NONE : Zones.IndexOfByPredicate([OtherId](const FZone& Q) { return Q.Id == OtherId; });
+			float Y0 = 0.f, Y1 = 0.f;
+			if (Other == INDEX_NONE || Other == Current || !D->GetAperture(Y0, Y1))
+			{
+				continue;
+			}
+			FPeekWedge W;
+			W.Door = D;
+			W.Zone = Other;
+			W.DoorT = D->GetActorTransform();
+			W.DoorT.SetScale3D(FVector::OneVector);
+			const float Mine = bMineA ? -1.f : 1.f;	// 내 구역 쪽 로컬 x 부호
+			W.Fwd = -Mine;
+			const float HalfT = D->WallThickness * 0.5f;
+			const FVector L = W.DoorT.InverseTransformPosition(FVector(V.X, V.Y, W.DoorT.GetLocation().Z));
+			FVector2D E(L.X, L.Y);
+			if (E.X * Mine < HalfT + 1.f)
+			{
+				E.X = Mine * (HalfT + 1.f);	// 문간에 서 있으면 눈을 내 쪽 벽 면으로 (부채꼴이 거의 반원이 된다)
+			}
+			W.Eye = E;
+			const float NearX = Mine * HalfT;
+			W.FarX = -Mine * HalfT;
+			const float Fn = (NearX - E.X) * W.Fwd;	// 눈 → 가까운 벽 면 (앞쪽 거리, > 0)
+			const float Ff = (W.FarX - E.X) * W.Fwd;	// 눈 → 먼 벽 면
+			// 두 벽 면 모두에서 문틈 안을 지나는 옆 기울기 범위 (벽이 두꺼우면 비스듬할수록 좁아진다)
+			const float KMin = FMath::Max((Y0 - E.Y) / Fn, (Y0 - E.Y) / Ff);
+			const float KMax = FMath::Min((Y1 - E.Y) / Fn, (Y1 - E.Y) / Ff);
+			float A0 = FMath::Atan(KMin), A1 = FMath::Atan(KMax);
+			if (bFacing)
+			{
+				// 설정: 문틈 ∩ 바라보는 방향 부채꼴
+				const FVector AimL = W.DoorT.InverseTransformVectorNoScale(FRotator(0.f, AimYaw, 0.f).Vector());
+				const float AimA = FMath::Atan2(AimL.Y, AimL.X * W.Fwd);
+				A0 = FMath::Max(A0, AimA - HalfFacing);
+				A1 = FMath::Min(A1, AimA + HalfFacing);
+			}
+			if (A1 - A0 < 0.002f)
+			{
+				continue;
+			}
+			auto ToWorld = [&W](const FVector2D& Lp)
+			{
+				const FVector P = W.DoorT.TransformPosition(FVector(Lp.X, Lp.Y, 0.f));
+				return FVector2D(P.X, P.Y);
+			};
+			bool bAny = false;
+			for (int32 i = 0; i < N; ++i)
+			{
+				const float A = FMath::Lerp(A0, A1, static_cast<float>(i) / static_cast<float>(N - 1));
+				const FVector2D Dir(W.Fwd * FMath::Cos(A), FMath::Sin(A));
+				const float TNear = Fn / FMath::Cos(A);
+				const float TFar = Ff / FMath::Cos(A);
+				const FVector2D StartW = ToWorld(E + Dir * TFar);
+				const FVector DirW3 = W.DoorT.TransformVectorNoScale(FVector(Dir.X, Dir.Y, 0.f));
+				const FVector2D DW(DirW3.X, DirW3.Y);
+				// 내 쪽 가림: 실제 내 위치 → 가까운 벽 면까지가 내 구역 안이어야 한다 (복도 모퉁이 너머 문은 안 보임)
+				bool bBlocked = false;
+				{
+					const FVector2D NearW = ToWorld(E + Dir * TNear);
+					const float Total = FVector2D::Distance(V, NearW);
+					const FVector2D DV = Total > 1.f ? (NearW - V) / Total : FVector2D::ZeroVector;
+					for (float S = 50.f; S < Total - 70.f; S += Step)
+					{
+						if (ZoneIdAtMap(V + DV * S) != CurMap)
+						{
+							bBlocked = true;
+							break;
+						}
+					}
+				}
+				// 문 너머: 먼 벽 면에서 시작해 너머 구역 안에서만 늘린다 (처음 60cm 는 벽 틈이라 건너뜀)
+				float Len = 0.f;
+				if (!bBlocked)
+				{
+					bool bFound = false;
+					for (float S = 0.f; S <= C.DoorPeekMaxDistance; S += Step)
+					{
+						if (ZoneIdAtMap(StartW + DW * S) == Other + 1)
+						{
+							bFound = true;
+							Len = S + Step * 0.5f;
+						}
+						else if (bFound || S > 60.f)
+						{
+							break;
+						}
+					}
+				}
+				W.Angles.Add(A);
+				W.EndDist.Add(TFar + Len);
+				W.Starts.Add(StartW);
+				W.Ends.Add(StartW + DW * Len);
+				bAny |= Len > 0.f;
+			}
+			if (bAny)
+			{
+				Zones[Other].bPeek = true;
+				Wedges.Add(MoveTemp(W));
+			}
+		}
+	}
+
+	// 3) 마스크 그리기 (부채꼴마다 이웃 광선 둘씩 사각형 = 삼각형 2개)
+	UWorld* World = GetWorld();
+	if (!PeekTarget || (!bPeekDrawn && Wedges.Num() == 0))
+	{
+		return;
+	}
+	UKismetRenderingLibrary::ClearRenderTarget2D(World, PeekTarget, FLinearColor::Black);
+	bPeekDrawn = Wedges.Num() > 0;
+	++PeekDraws;
+	if (!bPeekDrawn)
+	{
+		return;
+	}
+	TArray<FCanvasUVTri> Tris;
+	const double S = static_cast<double>(PeekScale);
+	auto Px = [this, S](const FVector2D& P)
+	{
+		return FVector2D((P.X - ZoneMapParam.X) * ZoneMapParam.Z * S, (P.Y - ZoneMapParam.Y) * ZoneMapParam.Z * S);
+	};
+	auto AddTri = [&Tris](const FVector2D& A, const FVector2D& B, const FVector2D& Cc)
+	{
+		FCanvasUVTri& T = Tris.AddDefaulted_GetRef();
+		T.V0_Pos = A;
+		T.V1_Pos = B;
+		T.V2_Pos = Cc;
+		T.V0_Color = T.V1_Color = T.V2_Color = FLinearColor::White;
+	};
+	for (const FPeekWedge& W : Wedges)
+	{
+		for (int32 i = 0; i + 1 < W.Starts.Num(); ++i)
+		{
+			const FVector2D S0 = Px(W.Starts[i]), E0 = Px(W.Ends[i]), S1 = Px(W.Starts[i + 1]), E1 = Px(W.Ends[i + 1]);
+			AddTri(S0, E0, E1);
+			AddTri(S0, E1, S1);
+		}
+	}
+	UCanvas* Canvas = nullptr;
+	FVector2D Size;
+	FDrawToRenderTargetContext Context;
+	UKismetRenderingLibrary::BeginDrawCanvasToRenderTarget(World, PeekTarget, Canvas, Size, Context);
+	if (Canvas)
+	{
+		Canvas->K2_DrawTriangle(nullptr, Tris);
+	}
+	UKismetRenderingLibrary::EndDrawCanvasToRenderTarget(World, Context);
+}
+
+bool UVHCeilingSubsystem::IsPointPeeked(const FVector2D& P) const
+{
+	for (const FPeekWedge& W : Wedges)
+	{
+		const int32 N = W.Angles.Num();
+		if (N < 2 || ZoneIdAtMap(P) != W.Zone + 1)
+		{
+			continue;
+		}
+		const FVector L = W.DoorT.InverseTransformPosition(FVector(P.X, P.Y, W.DoorT.GetLocation().Z));
+		const float F = (L.X - W.Eye.X) * W.Fwd;
+		if (F <= (W.FarX - W.Eye.X) * W.Fwd)
+		{
+			continue;	// 문 너머가 아님
+		}
+		const float A = FMath::Atan2(L.Y - W.Eye.Y, F);
+		const float A0 = W.Angles[0], A1 = W.Angles[N - 1];
+		if (A < A0 || A > A1)
+		{
+			continue;
+		}
+		const float T = (A - A0) / FMath::Max(1e-5f, A1 - A0) * static_cast<float>(N - 1);
+		const int32 I = FMath::Clamp(FMath::FloorToInt(T), 0, N - 2);
+		const float Reach = FMath::Lerp(W.EndDist[I], W.EndDist[I + 1], T - static_cast<float>(I));
+		if (FVector2D::Distance(FVector2D(L.X, L.Y), W.Eye) <= Reach + 20.f)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+FString UVHCeilingSubsystem::DescribePeek() const
+{
+	TArray<FString> Parts;
+	for (const FPeekWedge& W : Wedges)
+	{
+		const AVHDoor* D = W.Door.Get();
+		float MaxLen = 0.f;
+		int32 Open = 0;
+		for (int32 i = 0; i < W.Starts.Num(); ++i)
+		{
+			const float Len = FVector2D::Distance(W.Starts[i], W.Ends[i]);
+			MaxLen = FMath::Max(MaxLen, Len);
+			Open += Len > 0.f ? 1 : 0;
+		}
+		Parts.Add(FString::Printf(TEXT("문 %s → %s: 각도 %.0f°~%.0f°(폭 %.0f°), 광선 %d/%d, 최대 %.0fcm"),
+			D ? *D->ServerId.ToString() : TEXT("?"), *Zones[W.Zone].Label,
+			FMath::RadiansToDegrees(W.Angles[0]), FMath::RadiansToDegrees(W.Angles.Last()),
+			FMath::RadiansToDegrees(W.Angles.Last() - W.Angles[0]), Open, W.Angles.Num(), MaxLen));
+	}
+	return FString::Printf(TEXT("내 구역 %s, 엿보기 %d곳 (마스크 그린 횟수 %d)%s%s"), *GetCurrentZoneLabel(), Wedges.Num(), PeekDraws,
+		Parts.Num() ? TEXT(": ") : TEXT(""), *FString::Join(Parts, TEXT(" | ")));
 }

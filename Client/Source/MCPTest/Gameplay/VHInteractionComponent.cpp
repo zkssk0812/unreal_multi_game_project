@@ -11,6 +11,8 @@
 #include "Gameplay/VHFlashlightComponent.h"
 #include "Gameplay/VHServerGameSubsystem.h"
 #include "Gameplay/VHCeilingSubsystem.h"
+#include "Gameplay/VHDoorSubsystem.h"
+#include "Gameplay/VHDoor.h"
 #include "Network/VHSettings.h"
 #include "MCPTest.h"
 
@@ -368,6 +370,25 @@ void UVHInteractionComponent::InteractPressed()
 	const UVHActionComponent* Action = GetOwner()->FindComponentByClass<UVHActionComponent>();
 	AVHInteractableBase* Target = FocusTarget.Get();
 	const bool bBusy = Action && Action->IsBusy();
+	// 문 [2026-11-24]: 상자·아이템·금고·반납이 F 대상이 아닐 때(없거나 지금 할 수 없을 때)만 앞의 문을 열고 닫는다
+	if (!bBusy && (!Sub || !Target || !FocusOffer.IsAvailable()))
+	{
+		APawn* Pawn = Cast<APawn>(GetOwner());
+		UVHDoorSubsystem* Doors = GetWorld() ? GetWorld()->GetSubsystem<UVHDoorSubsystem>() : nullptr;
+		if (AVHDoor* Door = Doors ? Doors->FindDoorFor(Pawn) : nullptr)
+		{
+			FText Why;
+			if (!Doors->TryToggle(Pawn, Door, Why))
+			{
+				OnMessage.Broadcast(Why, true);
+			}
+			if (C.bPressToInteract)
+			{
+				bInteractHeld = false;
+			}
+			return;
+		}
+	}
 	if (bBusy || !Sub || !Target || !FocusOffer.IsAvailable())
 	{
 		if (!bBusy && Sub && Target)

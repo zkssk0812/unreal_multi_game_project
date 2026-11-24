@@ -20,6 +20,8 @@ ZoneCut (2026-11-21 (4), M_VHCeiling 과 벽 재질 M_VHWallFadeTex 에 같은 �
   - 자기 자신은 지우지 않는다: SelfZone > 0 = 그 구역 천장(자기 페이드로만), -1 = 벽·기둥(픽셀 자리의 좁은 구역(G 채널)이 내 구역이면 그대로 = 방 안 기둥), 0 = 문.
   - 구역 지도 채널: R = 넓은 구역(벽 면까지, 선을 늘린 점), G = 좁은 구역(서버 조각 + 메운 기둥 자리, 벽·기둥 자기 자리).
   - 파라미터 기본값은 "지우지 않음"(CutZoneA 0)이라 옛 레벨·에디터 화면은 그대로다.
+  - (2026-11-24) 엿보기: PeekOn = 1 이면 바닥 점이 엿보기 마스크(PeekTex, 열린 문 너머 부채꼴, C++ 이 그리는 렌더 타깃) 안일 때 지운다.
+    벽·기둥(SelfZone -1)은 자기 자리도 마스크 안이면 남긴다(문 너머 방 안 기둥). 자기 구역 천장도 지운다(문 너머 구역 천장에 부채꼴 구멍).
 
 MI_VHDoorLock: 잠긴 문 표시(빨강), 부모 M_VHWallFadeTex
 M_VHDoorMark (2026-11-21 (5)): 문 위치 표시(바닥 문턱 띠·화살표·잠긴 문 X·천장 위 밝은 틈), 반투명 언릿. 단계 이름 doormark
@@ -45,17 +47,29 @@ return (Op > thr) ? 1.0 : 0.0;
 """
 
 ZONE_CUT_CODE = r"""
+if (A < 0.5 && B < 0.5 && PK < 0.5) return 1.0;
+float3 d = P.xyz - Cam.xyz;
+if (d.z > -1.0) return 1.0;
+float t = (PZ - Cam.z) / d.z;
+if (t <= 0.0) return 1.0;
+float2 q = Cam.xy + d.xy * t;
+if (PK > 0.5) {
+  float2 u = (q - Map.xy) * Map.z / Size.xy;
+  if (u.x > 0.0 && u.y > 0.0 && u.x < 1.0 && u.y < 1.0 && Texture2DSampleLevel(Peek, PeekSampler, u, 0).r > 0.5) {
+    bool keep = false;
+    if (Self < -0.5) {
+      float2 u2 = (P.xy - Map.xy) * Map.z / Size.xy;
+      keep = u2.x > 0.0 && u2.y > 0.0 && u2.x < 1.0 && u2.y < 1.0 && Texture2DSampleLevel(Peek, PeekSampler, u2, 0).r > 0.5;
+    }
+    if (!keep) return 0.0;
+  }
+}
 if (A < 0.5 && B < 0.5) return 1.0;
 float2 px = floor(Parameters.SvPosition.xy);
 uint2 p = (uint2)px;
 uint a = ((p.x ^ p.y) & 1u) * 2u + (p.y & 1u);
 uint b = (((p.x >> 1) ^ (p.y >> 1)) & 1u) * 2u + ((p.y >> 1) & 1u);
 float thr = ((float)(a * 4u + b) + 0.5) / 16.0;
-float3 d = P.xyz - Cam.xyz;
-if (d.z > -1.0) return 1.0;
-float t = (PZ - Cam.z) / d.z;
-if (t <= 0.0) return 1.0;
-float2 q = Cam.xy + d.xy * t;
 float2 c = floor((q - Map.xy) * Map.z);
 if (c.x < 0.0 || c.y < 0.0 || c.x >= Size.x || c.y >= Size.y) return 1.0;
 float id = floor(Texture2DSampleLevel(Tex, TexSampler, (c + 0.5) / Size.xy, 0).r * 255.0 + 0.5);
@@ -73,7 +87,7 @@ if (abs(id - A) < 0.5) cut = AA;
 else if (abs(id - B) < 0.5) cut = BA;
 return (cut > thr) ? 0.0 : 1.0;
 """
-ZONE_CUT_INPUTS = ["P", "Cam", "Tex", "Map", "Size", "A", "AA", "B", "BA", "PZ", "Self"]
+ZONE_CUT_INPUTS = ["P", "Cam", "Tex", "Map", "Size", "A", "AA", "B", "BA", "PZ", "Self", "Peek", "PK"]
 
 SILHOUETTE_CODE = r"""
 float2 uv = GetDefaultSceneTextureUV(Parameters, 13);
@@ -151,6 +165,9 @@ def zone_cut_node(m, x, y, self_default):
     tex = mel.create_material_expression(m, unreal.MaterialExpressionTextureObjectParameter, x - 500, y + 160)
     tex.set_editor_property("parameter_name", "ZoneTex")
     tex.set_editor_property("texture", unreal.load_asset("/Engine/EngineResources/Black"))
+    peek = mel.create_material_expression(m, unreal.MaterialExpressionTextureObjectParameter, x - 500, y + 600)
+    peek.set_editor_property("parameter_name", "PeekTex")
+    peek.set_editor_property("texture", unreal.load_asset("/Engine/EngineResources/Black"))
     zmap = vector(m, "ZoneMap", unreal.LinearColor(0, 0, 0.1, 0), x - 500, y + 300)
     zsize = vector(m, "ZoneSize", unreal.LinearColor(1, 1, 0, 0), x - 500, y + 450)
     params = {
@@ -161,6 +178,8 @@ def zone_cut_node(m, x, y, self_default):
         "BA": scalar(m, "CutAlphaB", 0.0, x - 800, y + 240),
         "PZ": scalar(m, "CutPlaneZ", 0.0, x - 800, y + 320),
         "Self": scalar(m, "SelfZone", self_default, x - 800, y + 400),
+        "Peek": peek,
+        "PK": scalar(m, "PeekOn", 0.0, x - 800, y + 480),
     }
     for nm, node in params.items():
         mel.connect_material_expressions(node, "", c, nm)

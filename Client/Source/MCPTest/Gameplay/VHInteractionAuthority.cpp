@@ -93,7 +93,7 @@ FVHInteractOffer UVHLocalInteractionAuthority::BuildOffer(const UVHInteractionCo
 				: G.ReturnText);
 		if (Count == 0)
 		{
-			Offer.Blocked(EVHInteractBlock::NotAvailable, LOCTEXT("NothingToReturn", "반납할 보물이 없습니다"));
+			Offer.Blocked(EVHInteractBlock::NotAvailable, LOCTEXT("NothingToReturn", "반납할 환금 아이템이 없습니다"));
 		}
 		return Offer;
 	}

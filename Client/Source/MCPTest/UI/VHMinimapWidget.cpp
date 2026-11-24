@@ -78,6 +78,7 @@ void UVHMinimapWidget::CacheRooms() const
 		D.A = ToUV(C - R);
 		D.B = ToUV(C + R);
 		D.bLocked = It->bLocked;
+		D.Door = *It;
 	}
 	bRoomsCached = World->HasBegunPlay();
 }
@@ -159,7 +160,10 @@ int32 UVHMinimapWidget::NativePaint(const FPaintArgs& Args, const FGeometry& All
 	// 문 자리 [사용자 요청 2026-11-21 (5)]: 방 사이 벽 틈 위에 밝은 선분. 잠긴 바깥 문은 빨강
 	for (const FDoorMark& D : Doors)
 	{
-		const FLinearColor Color = D.bLocked ? G.MinimapDoorLockedColor : G.MinimapDoorColor;
+		// 잠긴 문 = 빨강, 열린 문 = 하늘색, 닫힌 문 = 흰 회색 [2026-11-24]
+		const bool bOpenDoor = !D.bLocked && D.Door.IsValid() && D.Door->GetOpenAlpha() > 0.5f;
+		const FLinearColor Color = D.bLocked ? G.MinimapDoorLockedColor : (bOpenDoor ? G.MinimapDoorColor : G.MinimapDoorClosedColor);
+		Stats.OpenDoors += bOpenDoor ? 1 : 0;
 		// 미니맵 축척에서 문 폭(2m)은 2px 남짓이라 점처럼 보인다 → 선분을 굵기의 2.5배 이상으로 늘린다
 		FVector2D A = UVToLocal(D.A), B = UVToLocal(D.B);
 		const FVector2D Mid = (A + B) * 0.5, Dir = (B - A).GetSafeNormal();

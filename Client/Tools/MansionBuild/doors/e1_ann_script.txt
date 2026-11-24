@@ -1,0 +1,58 @@
+# 2026-11-24 F 문·엿보기 시험: Ann(도적1) 관찰. 문 wall_109 (3300,150) 복도(아래) ↔ 객실 5(위, 화면 위 = +X)
+1.0 vh.CeilingGo 3150 150
+1.2 vh.Aim 0
+2.4 vh.DoorPeekInfo
+2.5 vh.Shot e1_01_closed_front
+# (5) 닫힌 문으로 걸어가기 → 막힘
+3.0 vh.Walk 1 0 1.6
+4.9 vh.CeilingInfo
+5.0 vh.Shot e1_02_blocked
+# 문간(문짝 자리)에 붙어 F = 열기
+5.4 vh.PressF
+6.2 vh.CeilingGo 3150 150
+7.0 vh.DoorPeekInfo
+7.1 vh.CeilingInfo
+7.2 vh.Shot e1_03_open_front_near
+7.6 vh.CeilingGo 2980 150
+8.4 vh.DoorPeekInfo
+8.5 vh.Shot e1_04_open_front_far
+# (2) 옆에서 비스듬히
+9.0 vh.CeilingGo 3060 -250
+9.8 vh.DoorPeekInfo
+9.9 vh.CeilingInfo
+10.0 vh.Shot e1_05_open_side_left
+10.4 vh.CeilingGo 3060 560
+11.2 vh.DoorPeekInfo
+11.3 vh.Shot e1_06_open_side_right
+# (4) Bob 이 부채꼴 안·밖으로 (Bob 스크립트와 시각을 맞춤)
+11.8 vh.CeilingGo 2980 150
+13.0 vh.CeilingInfo
+13.1 vh.Shot e1_07_bob_in_far
+15.0 vh.CeilingInfo
+15.1 vh.Shot e1_08_bob_out_corner
+17.0 vh.CeilingInfo
+17.1 vh.Shot e1_09_bob_out_side
+19.0 vh.CeilingInfo
+19.1 vh.Shot e1_10_bob_in_near
+# (3) 문 닫기 연속 프레임: 문 앞으로 가서 F
+20.0 vh.CeilingGo 3150 150
+21.0 vh.CeilingShots 10 0.07 e1_11_close
+21.05 vh.PressF
+22.2 vh.CeilingInfo
+22.3 vh.DoorPeekInfo
+# 닫힌 뒤 다시 걸어가기 → 막힘, 다시 열고 걸어 들어가기 → 객실 5
+23.0 vh.Walk 1 0 1.2
+24.4 vh.CeilingInfo
+24.6 vh.PressF
+25.2 vh.Walk 1 0 1.5
+27.0 vh.CeilingInfo
+27.1 vh.DoorPeekInfo
+27.2 vh.Shot e1_12_inside_room5
+# 문간에 서서 닫기 → 거절
+27.6 vh.CeilingGo 3300 150
+28.4 vh.PressF
+# 잠긴 현관 바깥 문 F → 거절
+29.0 vh.CeilingGo -200 2760
+29.8 vh.PressF
+30.0 vh.Shot e1_13_locked
+30.5 vh.DoorInfo

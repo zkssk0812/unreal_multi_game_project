@@ -11,6 +11,7 @@ class UMaterialInstanceDynamic;
 class UMaterialInterface;
 class USceneComponent;
 class UTexture2D;
+class UTextureRenderTarget2D;
 class AVHDoor;
 
 /**
@@ -26,6 +27,10 @@ class AVHDoor;
  *    컴포넌트 HiddenInGame 으로 숨긴다 → 몸·이름표(HP 글자)·발밑 원·붙은 이펙트·상호작용 테두리가 모두 안 보인다.
  *    (다른 코드가 쓰는 SetVisibility·SetActorHiddenInGame 과 겹치지 않는 별도 스위치. 내가 숨긴 컴포넌트만 되돌린다)
  *  - 판정은 서버 그대로이고 보이는 것만 바꾼다. 미니맵·퍽 표시(미니맵/HUD)는 손대지 않는다.
+ *  - [2026-11-24] 열린 문 너머 엿보기: 내 구역의 열린 문마다 내 위치에서 문틈 양 끝을 지나는 두 선 사이(부채꼴)만큼
+ *    문 너머 구역이 보인다. 구역 지도 위에서 광선을 쏴 그 구역을 벗어나는 곳(벽)에서 멈추고, 결과 다각형을 "엿보기 마스크"
+ *    렌더 타깃(구역 지도와 같은 칸)에 그린다 → 천장·벽 재질(ZoneCut)이 바닥 점이 마스크 안이면 지운다.
+ *    같은 다각형으로 그 안의 사람·물품·가구를 보이게 한다(IsPointCovered). 콘솔 vh.DoorPeek 0/1, vh.DoorPeekInfo
  *  - 콘솔: vh.Ceiling 0/1, 개발용 vh.CeilingGo X Y(순간이동), vh.CeilingShots 장수 간격(연속 화면 저장)
  */
 UCLASS()
@@ -72,6 +77,11 @@ public:
 	/** 개발용: 상태 한 줄 */
 	FString Describe() const;
 
+	/** 이 위치가 열린 문 너머 부채꼴 안인가 (엿보기) */
+	bool IsPointPeeked(const FVector2D& P) const;
+	/** 개발용: 엿보기 상태 (문마다 각도·광선) */
+	FString DescribePeek() const;
+
 private:
 	struct FZone
 	{
@@ -86,8 +96,10 @@ private:
 		TWeakObjectPtr<UInstancedStaticMeshComponent> Mesh;	// CeilingActor 가 가진다
 		TWeakObjectPtr<UMaterialInstanceDynamic> Material;		// Mesh 의 재질 칸이 가진다
 		TArray<TWeakObjectPtr<AActor>> Props;	// 이 구역의 소품(가구) — 구역이 다 덮이면 숨긴다
-		bool bPropsHidden = false;
+		TArray<FBox2D> PropBoxes;				// 소품 경계 (엿보기 판정)
+		int32 PropMode = 0;						// 0 = 모두 보임, 1 = 모두 숨김, 2 = 엿보기(부채꼴 안만 보임)
 		int32 Curtains = 0;						// 문간 가림막 수
+		bool bPeek = false;						// 열린 문 너머로 일부가 보이는 중
 	};
 
 	void BuildZones();
@@ -105,6 +117,10 @@ private:
 	/** 구역마다 소품(가구 StaticMeshActor)을 모은다 (숨겨도 그림자·간접광은 남게) */
 	void CollectProps();
 	void UpdateProps();
+	/** 열린 문 너머 엿보기: 부채꼴 계산 + 마스크 그리기 */
+	void UpdatePeek();
+	/** 구역 지도(넓은 구역)에서 이 점의 구역 번호 (1~, 0 = 없음) */
+	int32 ZoneIdAtMap(const FVector2D& P) const;
 	/** 내 구역(A)·직전 구역(B)과 지우기 정도를 재질에 보낸다 (바뀔 때만) */
 	void UpdateCutParams(bool bForce = false);
 	void SetCutParams(UMaterialInstanceDynamic* MID, float SelfZone) const;
@@ -134,6 +150,29 @@ private:
 	TArray<FCutMID> CutMIDs;
 	UPROPERTY() TArray<TObjectPtr<UMaterialInstanceDynamic>> CutMIDRefs;	// GC 보호
 	int32 PropCount = 0;
+
+	// ── 열린 문 너머 엿보기 [2026-11-24] ──
+	TArray<uint8> ZoneMapIds;			// 구역 지도 R 채널(넓은 구역) CPU 사본
+	FIntPoint ZoneMapSize = FIntPoint(0, 0);
+	UPROPERTY() TObjectPtr<UTextureRenderTarget2D> PeekTarget;
+	int32 PeekScale = 1;				// 마스크 칸 = 구역 지도 칸 / PeekScale
+	TArray<TWeakObjectPtr<AVHDoor>> DoorList;
+	struct FPeekWedge
+	{
+		TWeakObjectPtr<AVHDoor> Door;
+		int32 Zone = INDEX_NONE;		// 문 너머 구역
+		FTransform DoorT;
+		FVector2D Eye;					// 문 로컬 (x, y)
+		float Fwd = 1.f;				// 문 너머 쪽 로컬 x 부호
+		float FarX = 0.f;				// 먼 쪽 벽 면 로컬 x
+		TArray<float> Angles;			// 광선 각도 (라디안, 앞쪽 기준 옆으로)
+		TArray<float> EndDist;			// 눈에서 광선 끝까지 (로컬 2D)
+		TArray<FVector2D> Starts, Ends;	// 월드 2D
+	};
+	TArray<FPeekWedge> Wedges;
+	uint32 PeekSignature = 0;
+	bool bPeekDrawn = false;
+	int32 PeekDraws = 0;
 
 	/** 가려진 내 캐릭터 실루엣: 내 메시들을 커스텀 뎁스(스텐실 0)에 그리고, 카메라 후처리에 M_VHSilhouette 을 붙인다 */
 	void UpdateSilhouette();

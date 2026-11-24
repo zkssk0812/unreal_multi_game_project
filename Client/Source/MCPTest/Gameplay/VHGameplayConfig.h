@@ -10,6 +10,22 @@ class UMaterialParameterCollection;
 class AVHReturnPoint;
 class AVHSafe;
 
+/** 문 열림 상태가 오는 곳 [2026-11-24] */
+UENUM(BlueprintType)
+enum class EVHDoorStateSource : uint8
+{
+	Local	UMETA(DisplayName = "내 클라 (지금)"),
+	Server	UMETA(DisplayName = "서버 메시지 (아직 없음 → 로컬)"),
+};
+
+/** 열린 문 너머 보이는 범위를 정하는 방법 [2026-11-24] */
+UENUM(BlueprintType)
+enum class EVHDoorPeekMode : uint8
+{
+	Aperture			UMETA(DisplayName = "문틈 각도만"),
+	ApertureAndFacing	UMETA(DisplayName = "문틈 + 바라보는 방향"),
+};
+
 /**
  * 카메라·이동·표시용 수치 모음 (DA_VHGameplayConfig).
  * 규칙 판정에 쓰는 값(대미지·시간·금액)은 서버 v3.0 값을 따른다. 여기에는 화면 표시용 값과 클라가 스스로 적용하는 값만 둔다.
@@ -185,15 +201,39 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Ceiling", meta = (ClampMin = 1))
 	float MinimapDoorThickness = 3.f;
 
-	// ── 방 입구 문 (보이는 연출만, 판정 영향 없음) [사용자 요청 2026-11-21 (4)] ──
+	/** 닫힌 문 표시 색 (바닥 띠·화살표·천장 틈) [2026-11-24 F 문]. 열린 문 = DoorMarkColor */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Ceiling")
+	FLinearColor DoorMarkClosedColor = FLinearColor(0.9f, 0.9f, 0.95f);
+	/** 닫힌 문 표시 밝기 배율 (열린 문 대비) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Ceiling", meta = (ClampMin = 0))
+	float DoorMarkClosedIntensityScale = 0.45f;
+	/** 미니맵 닫힌 문 색 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Camera|Ceiling")
+	FLinearColor MinimapDoorClosedColor = FLinearColor(0.78f, 0.78f, 0.82f, 1.f);
 
-	/** 이 거리(벽에서 앞뒤로) 안에 누가 있으면 열린다 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door", meta = (ClampMin = 50, Units = "cm"))
-	float DoorOpenDepth = 220.f;
+	// ── 방 입구 문 [사용자 요청 2026-11-21 (4), 2026-11-24: F로 열고 닫기] ──
+	//    처음엔 모두 닫힘. 문 앞에서 F(상자·아이템·반납이 F 대상이 아닐 때만) = 열기/닫기. 잠긴 바깥 문은 안 열림.
+	//    문 상태는 UVHDoorSubsystem 한 곳에서 바뀐다 (DoorStateSource: 지금 = 내 클라, 나중 = 서버 메시지)
 
-	/** 문 폭 바깥으로 이만큼까지 (옆에서 비스듬히 다가올 때) */
+	/** 문 상태가 오는 곳. Server 는 아직 프로토콜에 문 상태가 없어서 로컬로 동작한다(로그 경고) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door")
+	EVHDoorStateSource DoorStateSource = EVHDoorStateSource::Local;
+
+	/** F로 문을 고를 수 있는 거리: 벽 면에서 앞뒤로 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door", meta = (ClampMin = 30, Units = "cm"))
+	float DoorInteractDepth = 150.f;
+
+	/** F로 문을 고를 수 있는 거리: 문 폭 바깥으로 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door", meta = (ClampMin = 0, Units = "cm"))
-	float DoorOpenSideMargin = 60.f;
+	float DoorInteractSideMargin = 40.f;
+
+	/** 닫힌 문은 내 캐릭터가 지나가지 못한다 (클라에서만 막음. 서버 판정은 그대로) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door")
+	bool bDoorBlockClosed = true;
+
+	/** 문이 이만큼(0~1) 열리면 지나갈 수 있다 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door", meta = (ClampMin = 0, ClampMax = 1))
+	float DoorPassAlpha = 0.75f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door", meta = (ClampMin = 0.05, Units = "s"))
 	float DoorOpenSeconds = 0.35f;
@@ -201,9 +241,32 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door", meta = (ClampMin = 0.05, Units = "s"))
 	float DoorCloseSeconds = 0.5f;
 
-	/** 아무도 없어진 뒤 이만큼 기다렸다 닫는다 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door", meta = (ClampMin = 0, Units = "s"))
-	float DoorCloseDelay = 0.4f;
+	// ── 열린 문 너머 엿보기 (부채꼴 시야) [사용자 요청 2026-11-24] ──
+	//    내 구역의 열린 문마다: 내 위치에서 문틈 양 끝을 지나는 두 선 사이만큼 문 너머 구역이 보인다(벽에 막힌 곳은 안 보임).
+	//    콘솔 vh.DoorPeek 0/1
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Peek")
+	bool bDoorPeek = true;
+
+	/** 보이는 범위를 정하는 방법: 문틈 각도만(지금) / 문틈 ∩ 바라보는 방향(마우스) 부채꼴 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Peek")
+	EVHDoorPeekMode DoorPeekMode = EVHDoorPeekMode::Aperture;
+
+	/** DoorPeekMode = 바라보는 방향일 때 부채꼴 반각 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Peek", meta = (ClampMin = 5, ClampMax = 90, Units = "deg"))
+	float DoorPeekFacingHalfAngle = 60.f;
+
+	/** 문 하나당 광선 수 (벽에 막히는 모양을 이만큼 잘게) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Peek", meta = (ClampMin = 4, ClampMax = 256))
+	int32 DoorPeekRays = 64;
+
+	/** 문 너머로 보이는 최대 거리 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Peek", meta = (ClampMin = 100, Units = "cm"))
+	float DoorPeekMaxDistance = 3000.f;
+
+	/** 엿보기 마스크 해상도 배율 (구역 지도 한 칸을 이만큼 나눔. 3 = 약 3cm 칸, 가장자리가 매끈해진다) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door|Peek", meta = (ClampMin = 1, ClampMax = 4))
+	int32 DoorPeekMaskScale = 3;
 
 	/** 문짝 재질 (훈연 오크, 벽과 같은 벽 투명 재질) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door")

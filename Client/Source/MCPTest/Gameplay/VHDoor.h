@@ -7,14 +7,17 @@
 class UStaticMeshComponent;
 class USceneComponent;
 class UMaterialInstanceDynamic;
+class UBoxComponent;
 
 /**
  * 방 입구의 미닫이 문 (보이는 연출만) [사용자 요청 2026-11-21].
  *
  *  - 자리는 서버 맵의 "문 위 벽"(above_door) 39곳. Tools/MansionBuild/setup_shell_level.py doors 가 레벨에 놓는다.
- *  - 이동·충돌·총알·시야 판정은 서버 그대로라 문은 아무것도 막지 않는다 (모든 컴포넌트 충돌 없음, 길찾기 영향 없음).
- *  - 나·다른 플레이어·경비원(AVHNetProxy)이 가까이 오면 열리고 모두 지나가면 닫힌다. 문짝은 벽 속으로 들어간다(포켓 도어).
- *    양문 = 문짝 두 개가 양쪽 벽으로, 한 짝 = 한 개가 SlideSign 쪽 벽으로.
+ *  - [2026-11-24] 처음엔 닫힘, 문 앞에서 F 로 열고 닫는다. 열림 상태는 UVHDoorSubsystem 만 바꾼다(SetOpenState) —
+ *    지금은 내 클라가 정하고, 나중에 서버 메시지로 바꿔 끼운다(IVHDoorStateSource).
+ *  - 닫힌 문은 내 캐릭터만 막는다(Blocker 상자: Pawn 채널만 막음, 총알·시야·마우스 조준·카메라 추적에는 안 걸림). 서버 판정은 그대로.
+ *    문짝은 벽 속으로 들어간다(포켓 도어). 양문 = 문짝 두 개가 양쪽 벽으로, 한 짝 = 한 개가 SlideSign 쪽 벽으로.
+ *  - 열린 문틈(GetAperture)으로 문 너머 구역이 부채꼴로 보인다 (UVHCeilingSubsystem 엿보기).
  *  - 소리: 효과음 표 DoorOpen / DoorClose (Kenney RPG doorOpen·doorClose). 천장에 덮인 구역끼리의 문은 소리를 내지 않는다.
  *  - 잠긴 문(bLocked, 서버가 막는 바깥 문 2곳)은 늘 닫혀 있고 손잡이 옆에 빨간 잠금 표시.
  *  - 천장 가림: 문간 가림막(다른 구역 안이 열린 문으로 비치지 않게)은 UVHCeilingSubsystem 이 ZoneA/ZoneB 로 만든다.
@@ -69,9 +72,18 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 
-	/** 0 = 닫힘, 1 = 열림 */
+	/** 0 = 닫힘, 1 = 열림 (움직이는 중간값 포함) */
 	float GetOpenAlpha() const { return OpenAlpha; }
-	bool IsWantOpen() const { return bWantOpen; }
+	/** 상태(목표): 열림인가. UVHDoorSubsystem 이 정한다 */
+	bool IsOpen() const { return bWantOpen; }
+	/** 상태 바꾸기 — UVHDoorSubsystem::ApplyDoorState 만 부른다 */
+	void SetOpenState(bool bOpen);
+	/** 문이 켜져 있는가 (vh.Doors 0 이면 숨김 = 늘 열린 것으로 친다) */
+	bool IsDoorEnabled() const { return bEnabledApplied; }
+	/** 지금 뚫린 문틈 (로컬 Y 범위). 닫혀 있으면 false */
+	bool GetAperture(float& OutY0, float& OutY1) const;
+	/** F 안내를 띄울 위치 (이 위치 쪽 문 앞) */
+	FVector GetPromptLocation(const FVector& From) const;
 	/** 개발용 한 줄 */
 	FString Describe() const;
 
@@ -81,7 +93,7 @@ public:
 private:
 	void Layout();
 	void ApplyAlpha(float Alpha);
-	bool IsAnyoneNear() const;
+	void UpdateBlocker();
 	bool IsAudible() const;
 	UStaticMeshComponent* MakePart(const TCHAR* Name);
 	/** 문 위치 표시 (바닥 띠·화살표 = 내 구역 문, 천장 위 틈 = 다른 구역 문). 매 틱 내 구역을 보고 바꾼다 */
@@ -100,19 +112,20 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Door") TObjectPtr<UStaticMeshComponent> MarkStrip;
 	UPROPERTY(VisibleAnywhere, Category = "Door") TObjectPtr<UStaticMeshComponent> MarkArrow;
 	UPROPERTY(VisibleAnywhere, Category = "Door") TObjectPtr<UStaticMeshComponent> MarkCeiling;
+	/** 닫힌 문의 통과 막기 (내 캐릭터 = Pawn 채널만) */
+	UPROPERTY(VisibleAnywhere, Category = "Door") TObjectPtr<UBoxComponent> Blocker;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> StripMID;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> ArrowMID;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> CeilingMID;
 	int32 MarkSide = 0;			// 바닥 표시를 그린 쪽 (-1 = A 쪽, +1 = B 쪽, 0 = 없음)
 	bool bCeilingMarkOn = false;
 	float MarkBoostApplied = -1.f;
+	int32 MarkStateApplied = -1;	// 표시 색에 쓴 상태 (0 닫힘, 1 열림)
+	bool bBlocking = false;
 
 	float OpenAlpha = 0.f;
 	float AppliedAlpha = -1.f;
 	bool bWantOpen = false;
-	bool bWasOpening = false;
-	float CheckTimer = 0.f;
-	double LastNearTime = -1000.0;
 	bool bEnabledApplied = true;
 
 	// 문짝 크기 (Layout 에서 계산)

@@ -16,6 +16,8 @@
 #include "Gameplay/VHReturnPoint.h"
 #include "Gameplay/VHRoomVolume.h"
 #include "Gameplay/VHGameplayConfig.h"
+#include "Gameplay/VHDoor.h"
+#include "Gameplay/VHDoorSubsystem.h"
 #include "Gameplay/VHWeaponCatalog.h"
 #include "Gameplay/VHHealthComponent.h"
 #include "Gameplay/VHRanking.h"
@@ -586,8 +588,8 @@ void UVHGameHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime
 		{
 			LastMinimapLog = Now;
 			const UVHMinimapWidget::FDrawStats& M = Minimap->GetLastStats();
-			UE_LOG(LogMCPTest, Log, TEXT("[미니맵] 방 %d, 반납지점 %d, 경비원 %d, 다른 플레이어 %d, 보물 방향 %d, 섬광으로 숨김 %d, 떨어뜨린 내 보물 %d, 문 %d(잠김 %d)"),
-				M.Rooms, M.ReturnPoints, M.Guards, M.Thieves, M.bTreasureArrow ? 1 : 0, M.bHiddenByFlash ? 1 : 0, M.bMyTreasure ? 1 : 0, M.Doors, M.LockedDoors);
+			UE_LOG(LogMCPTest, Log, TEXT("[미니맵] 방 %d, 반납지점 %d, 경비원 %d, 다른 플레이어 %d, 보물 방향 %d, 섬광으로 숨김 %d, 떨어뜨린 내 보물 %d, 문 %d(잠김 %d, 열림 %d)"),
+				M.Rooms, M.ReturnPoints, M.Guards, M.Thieves, M.bTreasureArrow ? 1 : 0, M.bHiddenByFlash ? 1 : 0, M.bMyTreasure ? 1 : 0, M.Doors, M.LockedDoors, M.OpenDoors);
 		}
 	}
 	UpdatePrompt();
@@ -1260,6 +1262,26 @@ void UVHGameHUDWidget::UpdatePrompt()
 
 	AVHInteractableBase* Target = Interaction->IsInteracting() ? Interaction->GetActiveTarget() : Interaction->GetFocusTarget();
 	const FVHInteractOffer& Offer = Interaction->GetFocusOffer();
+	// 문 [2026-11-24]: F 대상 물품이 없거나 지금 할 수 없으면 앞의 문 안내 ("[F] 문 열기" / "[F] 문 닫기" / 잠긴 문)
+	if (!Interaction->IsInteracting() && !Interaction->IsApproaching() && (!Target || !Offer.IsAvailable()))
+	{
+		const UVHDoorSubsystem* Doors = World->GetSubsystem<UVHDoorSubsystem>();
+		if (const AVHDoor* Door = Doors ? Doors->FindDoorFor(Pawn) : nullptr)
+		{
+			if (PlaceAt(PromptBox, Door->GetPromptLocation(Pawn->GetActorLocation())))
+			{
+				PromptBox->SetVisibility(ESlateVisibility::HitTestInvisible);
+				const bool bLockedDoor = Door->bLocked;
+				const FText DoorLine = bLockedDoor ? LOCTEXT("DoorLocked", "잠긴 문")
+					: FText::Format(LOCTEXT("DoorPrompt", "{0} {1}"), FText::FromString(KeyLabel),
+						Door->IsOpen() ? LOCTEXT("DoorClose", "문 닫기") : LOCTEXT("DoorOpen", "문 열기"));
+				PromptText->SetText(DoorLine);
+				PromptText->SetColorAndOpacity(FSlateColor(bLockedDoor ? S.DisabledText : S.Text));
+				PromptBar->SetVisibility(ESlateVisibility::Collapsed);
+				return;
+			}
+		}
+	}
 	if (!Target || !PlaceAt(PromptBox, Target->GetPromptLocation()))
 	{
 		PromptBox->SetVisibility(ESlateVisibility::Collapsed);

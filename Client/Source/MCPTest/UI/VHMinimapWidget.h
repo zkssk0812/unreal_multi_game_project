@@ -4,6 +4,8 @@
 #include "Blueprint/UserWidget.h"
 #include "VHMinimapWidget.generated.h"
 
+class AVHDoor;
+
 /**
  * 미니맵 (HUD 좌상단) [기획 U-04·U-05, UI 수정본]. 위젯 트리 없이 NativePaint 에서 직접 그린다.
  *
@@ -33,6 +35,7 @@ public:
 		bool bHiddenByFlash = false;
 		int32 Doors = 0;			// 문 자리 표시 (2026-11-21 (5))
 		int32 LockedDoors = 0;
+		int32 OpenDoors = 0;
 	};
 	const FDrawStats& GetLastStats() const { return LastStats; }
 
@@ -57,6 +60,7 @@ protected:
 		FVector2D A = FVector2D::ZeroVector;
 		FVector2D B = FVector2D::ZeroVector;
 		bool bLocked = false;
+		TWeakObjectPtr<AVHDoor> Door;	// 열림/닫힘 색 [2026-11-24]
 	};
 	mutable TArray<FDoorMark> Doors;
 	mutable int32 RoomCount = 0;		// 방 수

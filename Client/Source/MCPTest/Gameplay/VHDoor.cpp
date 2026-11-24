@@ -1,12 +1,14 @@
 #include "Gameplay/VHDoor.h"
 
 #include "Gameplay/VHCeilingSubsystem.h"
+#include "Gameplay/VHDoorSubsystem.h"
 #include "Gameplay/VHGameplayConfig.h"
 #include "Gameplay/VHNetProxy.h"
 #include "Gameplay/VHSoundConfig.h"
 #include "Network/VHSettings.h"
 #include "MCPTest.h"
 
+#include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -80,6 +82,19 @@ AVHDoor::AVHDoor()
 	MarkArrow = MakeMark(TEXT("MarkArrow"));
 	MarkCeiling = MakeMark(TEXT("MarkCeiling"));
 	MarkCeiling->TranslucencySortPriority = 10;	// 천장(불투명) 위에 그린다
+
+	// 닫힌 문 통과 막기: Pawn 채널만 막는 상자 (총알·시야·마우스 조준·카메라·배치 점검(WorldStatic)에는 걸리지 않게 WorldDynamic)
+	Blocker = CreateDefaultSubobject<UBoxComponent>(TEXT("Blocker"));
+	Blocker->SetupAttachment(SceneRoot);
+	Blocker->SetMobility(EComponentMobility::Movable);
+	Blocker->SetCollisionObjectType(ECC_WorldDynamic);
+	Blocker->SetCollisionResponseToAllChannels(ECR_Ignore);
+	Blocker->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+	Blocker->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Blocker->SetGenerateOverlapEvents(false);
+	Blocker->SetCanEverAffectNavigation(false);
+	Blocker->SetHiddenInGame(true);
+	Blocker->CanCharacterStepUpOn = ECB_No;
 }
 
 UStaticMeshComponent* AVHDoor::MakeMark(const TCHAR* Name)
@@ -156,6 +171,9 @@ void AVHDoor::Layout()
 	HandleB->SetVisibility(bDouble);
 	LockLight->SetRelativeScale3D(CubeScale(PanelThickness + 6.f, 7.f, 9.f));
 	LockLight->SetVisibility(bLocked);
+	// 통과 막기 상자: 문틀 안쪽 구멍 전체 (벽 두께 + 앞뒤 2cm)
+	Blocker->SetRelativeLocation(FVector(0.f, 0.f, OpeningHeight * 0.5f));
+	Blocker->SetBoxExtent(FVector(WallThickness * 0.5f + 2.f, Width * 0.5f, OpeningHeight * 0.5f));
 
 	if (Metal)
 	{
@@ -220,7 +238,15 @@ void AVHDoor::BeginPlay()
 	{
 		Ceiling->ApplyCutaway(this, 0.f);
 	}
-	CheckTimer = FMath::FRand() * 0.1f;	// 문마다 확인 시점을 흩뜨린다
+	// 처음 상태 (지금은 모두 닫힘) — 상태 출처(UVHDoorSubsystem)에게 묻는다
+	if (UVHDoorSubsystem* Doors = GetWorld() ? GetWorld()->GetSubsystem<UVHDoorSubsystem>() : nullptr)
+	{
+		bWantOpen = Doors->GetInitialOpen(*this);
+	}
+	OpenAlpha = bWantOpen ? 1.f : 0.f;
+	AppliedAlpha = -1.f;
+	ApplyAlpha(OpenAlpha);
+	UpdateBlocker();
 
 	// 문 위치 표시 재질: 표시마다 인스턴스 (색·밝기·모양). 잠긴 문은 빨강, 바닥은 화살표 대신 X
 	const UVHGameplayConfig& C = UVHSettings::Get().GetGameplayConfig();
@@ -244,6 +270,7 @@ void AVHDoor::BeginPlay()
 	MarkSide = 0;
 	bCeilingMarkOn = false;
 	MarkBoostApplied = -1.f;
+	MarkStateApplied = -1;
 }
 
 void AVHDoor::UpdateMarks()
@@ -303,48 +330,35 @@ void AVHDoor::UpdateMarks()
 		}
 	}
 
-	// 3) 열리면 바닥 표시를 조금 더 밝게
-	if (Side != 0)
+	// 3) 열림/닫힘에 맞게 [2026-11-24]: 열린 문 = 하늘색(열린 만큼 더 밝게), 닫힌 문 = 흰 회색·어둡게. 잠긴 문은 늘 빨강
+	if (StripMID && !bLocked)
 	{
-		const float Boost = 1.f + (C.DoorMarkOpenBoost - 1.f) * OpenAlpha;
+		const int32 State = OpenAlpha > 0.5f ? 1 : 0;
+		if (State != MarkStateApplied)
+		{
+			MarkStateApplied = State;
+			const FLinearColor Color = State ? C.DoorMarkColor : C.DoorMarkClosedColor;
+			for (UMaterialInstanceDynamic* MID : { StripMID.Get(), ArrowMID.Get(), CeilingMID.Get() })
+			{
+				MID->SetVectorParameterValue(TEXT("Color"), Color);
+			}
+			CeilingMID->SetScalarParameterValue(TEXT("Intensity"), C.CeilingDoorMarkIntensity * (State ? 1.f : C.DoorMarkClosedIntensityScale));
+			MarkBoostApplied = -1.f;
+		}
+	}
+	if (Side != 0 && StripMID)
+	{
+		const float Boost = bLocked ? 1.f : (OpenAlpha > 0.5f ? 1.f + (C.DoorMarkOpenBoost - 1.f) * OpenAlpha : C.DoorMarkClosedIntensityScale);
 		if (Boost != MarkBoostApplied)
 		{
 			MarkBoostApplied = Boost;
 			for (UMaterialInstanceDynamic* MID : { StripMID.Get(), ArrowMID.Get() })
 			{
 				MID->SetScalarParameterValue(TEXT("Intensity"), C.DoorMarkIntensity * Boost);
-				MID->SetScalarParameterValue(TEXT("Opacity"), FMath::Min(1.f, C.DoorMarkOpacity * Boost));
+				MID->SetScalarParameterValue(TEXT("Opacity"), FMath::Min(1.f, C.DoorMarkOpacity * FMath::Max(Boost, 0.8f)));
 			}
 		}
 	}
-}
-
-bool AVHDoor::IsAnyoneNear() const
-{
-	const UVHGameplayConfig& C = UVHSettings::Get().GetGameplayConfig();
-	const FTransform& T = GetActorTransform();
-	const float HalfY = Width * 0.5f + C.DoorOpenSideMargin;
-	auto Near = [&](const FVector& WorldPos)
-	{
-		const FVector L = T.InverseTransformPosition(WorldPos);
-		return FMath::Abs(L.X) <= C.DoorOpenDepth && FMath::Abs(L.Y) <= HalfY && L.Z > -200.f && L.Z < 400.f;
-	};
-	const UWorld* World = GetWorld();
-	if (const APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr)
-	{
-		if (const APawn* Pawn = PC->GetPawn(); Pawn && Near(Pawn->GetActorLocation()))
-		{
-			return true;
-		}
-	}
-	for (TActorIterator<AVHNetProxy> It(World); It; ++It)
-	{
-		if (Near(It->GetActorLocation()))
-		{
-			return true;
-		}
-	}
-	return false;
 }
 
 bool AVHDoor::IsAudible() const
@@ -371,32 +385,81 @@ void AVHDoor::ApplyEnabled(bool bEnabled)
 	SetActorHiddenInGame(!bEnabled);
 }
 
+void AVHDoor::SetOpenState(bool bOpen)
+{
+	if (bLocked)
+	{
+		return;
+	}
+	bWantOpen = bOpen;
+}
+
+bool AVHDoor::GetAperture(float& OutY0, float& OutY1) const
+{
+	// 문짝이 비켜난 만큼 뚫린 틈 (ApplyAlpha 와 같은 계산)
+	const float Alpha = bEnabledApplied ? OpenAlpha : 1.f;
+	if (bLocked || Alpha <= 0.f)
+	{
+		return false;
+	}
+	const float E = Alpha * Alpha * (3.f - 2.f * Alpha);
+	const float Half = ClearWidth * 0.5f;
+	if (bDouble)
+	{
+		const float Travel = Half + JambWidth + 2.f;
+		const float G = FMath::Min(Half, Travel * E);
+		OutY0 = -G;
+		OutY1 = G;
+	}
+	else
+	{
+		const float S = SlideSign >= 0.f ? 1.f : -1.f;
+		const float Y = S * (ClearWidth + JambWidth + 2.f) * E;	// 문짝 가운데
+		if (S > 0.f)
+		{
+			OutY0 = -Half;
+			OutY1 = FMath::Min(Half, Y - Half);
+		}
+		else
+		{
+			OutY0 = FMath::Max(-Half, Y + Half);
+			OutY1 = Half;
+		}
+	}
+	return OutY1 - OutY0 > 2.f;
+}
+
+FVector AVHDoor::GetPromptLocation(const FVector& From) const
+{
+	const FTransform& T = GetActorTransform();
+	const float Side = T.InverseTransformPosition(From).X >= 0.f ? 1.f : -1.f;
+	return T.TransformPosition(FVector(Side * (WallThickness * 0.5f + 25.f), 0.f, 160.f));
+}
+
+void AVHDoor::UpdateBlocker()
+{
+	const UVHGameplayConfig& C = UVHSettings::Get().GetGameplayConfig();
+	// 닫힘·덜 열림이면 막는다. vh.Doors 0(숨김)이면 막지 않는다. 잠긴 바깥 문은 원래 판(ClosedDoor) 충돌도 남아 있다
+	const bool bBlock = C.bDoorBlockClosed && bEnabledApplied && (bLocked || OpenAlpha < C.DoorPassAlpha);
+	if (bBlock != bBlocking)
+	{
+		bBlocking = bBlock;
+		Blocker->SetCollisionEnabled(bBlock ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
+	}
+}
+
 void AVHDoor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	ApplyEnabled(CVarVHDoors.GetValueOnGameThread() != 0);
 	UpdateMarks();
+	UpdateBlocker();
 	if (bLocked)
 	{
 		return;
 	}
+	// 상태(bWantOpen)는 UVHDoorSubsystem 이 정한다. 여기서는 문짝을 그 상태로 움직이고 소리만 낸다
 	const UVHGameplayConfig& C = UVHSettings::Get().GetGameplayConfig();
-	const double Now = GetWorld()->GetTimeSeconds();
-	CheckTimer -= DeltaSeconds;
-	if (CheckTimer <= 0.f)
-	{
-		CheckTimer = 0.1f;
-		if (IsAnyoneNear())
-		{
-			LastNearTime = Now;
-		}
-	}
-	const bool bWant = (Now - LastNearTime) <= C.DoorCloseDelay;
-	if (bWant != bWantOpen)
-	{
-		bWantOpen = bWant;
-		UE_LOG(LogMCPTest, Verbose, TEXT("[Door] %s %s"), *Describe(), bWant ? TEXT("열림 시작") : TEXT("닫힘 시작"));
-	}
 	const float Target = bWantOpen ? 1.f : 0.f;
 	if (OpenAlpha == Target)
 	{
@@ -414,6 +477,7 @@ void AVHDoor::Tick(float DeltaSeconds)
 		UVHSoundConfig::Play(this, EVHSound::DoorClose, GetActorLocation() + FVector(0.f, 0.f, 120.f));
 	}
 	ApplyAlpha(OpenAlpha);
+	UpdateBlocker();
 }
 
 FString AVHDoor::Describe() const
