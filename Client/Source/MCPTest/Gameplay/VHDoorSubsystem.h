@@ -10,11 +10,10 @@ class UVHDoorSubsystem;
 
 /**
  * 문 열림 상태가 "어디서 오는지" [사용자 요청 2026-11-24].
- * 지금은 내 클라(FVHLocalDoorStateSource): F를 누르면 바로 바뀐다.
- * 서버에 문 상태가 생기면 이 인터페이스를 구현한 서버용 출처를 하나 더 만들어 끼운다:
- *   RequestSetOpen = CS_ 패킷 보내기(바로 바꾸지 않음), 서버 메시지(SC_)를 받으면 UVHServerGameSubsystem 이
- *   UVHDoorSubsystem::ApplyDoorState(문 id, 열림, TEXT("서버")) 를 부른다. 문 id = AVHDoor::ServerId (서버 맵 above_door id).
- * 문·시야·소리·표시·통과 막기는 모두 ApplyDoorState 로 바뀐 상태만 보므로 다른 코드는 고칠 필요가 없다.
+ *  - 로컬(FVHLocalDoorStateSource): F 를 누르면 내 클라에서 바로 바뀐다 (가짜 서버·서버 문이 없을 때).
+ *  - 서버(FVHServerDoorStateSource, 2026-11-24 팀 서버 9afd591): F = CS_ACTION InteractBegin(문 엔티티 id) 만 보내고
+ *    바꾸지 않는다. 서버 스냅샷의 ES_OPENED 가 바뀌면 UVHServerGameSubsystem 이 ApplyServerDoorState 를 부른다.
+ * 문·시야·소리·표시·통과 막기는 모두 ApplyDoorState 로 바뀐 상태만 보므로 다른 코드는 출처를 모른다.
  */
 class IVHDoorStateSource
 {
@@ -24,8 +23,10 @@ public:
 	virtual const TCHAR* GetName() const = 0;
 	/** 게임 시작 때 문의 처음 상태 */
 	virtual bool GetInitialOpen(const AVHDoor& Door) const = 0;
-	/** F 로 열기/닫기 요청. 결과는 Sub.ApplyDoorState 로 돌아와야 한다 (로컬 = 바로, 서버 = 응답 때) */
+	/** F 로 열기/닫기 요청. 결과는 Sub.ApplyDoorState 로 돌아와야 한다 (로컬 = 바로, 서버 = 스냅샷 때) */
 	virtual void RequestSetOpen(UVHDoorSubsystem& Sub, AVHDoor& Door, bool bOpen) = 0;
+	/** 서버 출처인가 (서버 문과 짝지은 뒤) */
+	virtual bool IsServer() const { return false; }
 };
 
 DECLARE_MULTICAST_DELEGATE_TwoParams(FVHOnDoorStateChanged, AVHDoor* /*Door*/, bool /*bOpen*/);
@@ -33,8 +34,11 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(FVHOnDoorStateChanged, AVHDoor* /*Door*/, b
 /**
  * 문 상태를 한 곳에서 관리한다 [사용자 요청 2026-11-24].
  *  - 문 목록(레벨의 AVHDoor 39개), 열림 상태를 바꾸는 유일한 길(ApplyDoorState), 상태 출처(로컬/서버) 선택.
+ *  - 서버 문 짝짓기(BindServerDoor): 서버 Door 엔티티 type_id = 맵 colliders.static 의 안쪽 above_door 순서
+ *    = 클라 문 중 잠기지 않은 것을 ServerId(wall_NNN) 순으로 센 번호. pos(문 가운데)·yaw(지나가는 방향)로 한 번 더 확인.
  *  - F: 내 캐릭터 앞의 문 고르기(FindDoorFor), 열기/닫기 요청(TryToggle). 잠긴 문·문간에 서서 닫기는 거절 문구.
- *  - 콘솔: vh.DoorSet open|close|toggle all|near|<문 id>
+ *  - 닫힌 문의 총알 연출: TraceClosedDoor (서버도 닫힌 문을 벽처럼 친다. 레일건은 뚫음)
+ *  - 콘솔: vh.DoorSet open|close|toggle all|near|<문 id>, vh.DoorBind (짝짓기 결과)
  */
 UCLASS()
 class MCPTEST_API UVHDoorSubsystem : public UWorldSubsystem
@@ -49,7 +53,7 @@ public:
 	/** 문이 처음 상태를 물을 때 (문 BeginPlay) */
 	bool GetInitialOpen(const AVHDoor& Door);
 
-	/** 상태 바꾸기 — 상태 출처만 부른다 (로컬 요청 결과·나중의 서버 메시지) */
+	/** 상태 바꾸기 — 상태 출처만 부른다 (로컬 요청 결과·서버 스냅샷) */
 	void ApplyDoorState(FName DoorId, bool bOpen, const TCHAR* Why);
 	void ApplyDoorState(AVHDoor* Door, bool bOpen, const TCHAR* Why);
 
@@ -68,8 +72,28 @@ public:
 	/** 이 폰이 문간(문짝이 지나가는 자리)에 서 있는가 → 닫으면 안 됨 */
 	static bool IsPawnInDoorway(const AVHDoor& Door, const APawn* Pawn);
 
+	// ── 서버 문 (2026-11-24 팀 서버: EntityKind::Door 37개) ──
+
+	/** 서버 Door 엔티티와 클라 문을 짝짓고 처음 상태를 적용한다. 서버 출처로 바꾼다(설정이 Server 일 때) */
+	AVHDoor* BindServerDoor(uint16 EntityId, uint16 TypeId, const FVector& Pos, float Yaw, bool bOpen);
+	/** 서버 스냅샷의 ES_OPENED 가 바뀜 */
+	void ApplyServerDoorState(uint16 EntityId, bool bOpen);
+	/** 게임 시작 엔티티를 다 받은 뒤: 짝짓기 결과 로그 (짝 수, 어긋남 목록, 서버에 없는 클라 문) */
+	void LogServerBindSummary() const;
+	AVHDoor* FindByServerEntity(uint16 EntityId) const;
+	bool HasServerDoors() const { return ServerDoors.Num() > 0; }
+
+	/**
+	 * 선분 From→To 가 처음 지나는 "막는 문"(닫힌 문·잠긴 문)의 자리. 총알·테이저 연출이 문에서 멈추게 할 때.
+	 * 없으면 false. OutT = From→To 비율
+	 */
+	bool TraceClosedDoor(const FVector& From, const FVector& To, FVector& OutHit, float& OutT, AVHDoor** OutDoor = nullptr) const;
+	/** 문에 맞은 연출 (불꽃 + 소리 DoorHit). 총알 연출이 닫힌 문에서 멈출 때 */
+	void PlayDoorHitFx(const FVector& At, const FLinearColor& Color) const;
+
 	const TArray<TWeakObjectPtr<AVHDoor>>& GetDoors() const { return Doors; }
 	const TCHAR* GetSourceName() const;
+	bool IsServerSource() const { return Source && Source->IsServer(); }
 
 	FVHOnDoorStateChanged OnDoorStateChanged;
 
@@ -78,6 +102,10 @@ private:
 	void CollectDoors();
 
 	TArray<TWeakObjectPtr<AVHDoor>> Doors;
+	/** 잠기지 않은 클라 문을 ServerId 순으로 (서버 문 번호 = 이 배열의 위치) */
+	TArray<TWeakObjectPtr<AVHDoor>> InteriorByServerOrder;
+	TMap<uint16, TWeakObjectPtr<AVHDoor>> ServerDoors;
+	TArray<FString> BindProblems;
 	TUniquePtr<IVHDoorStateSource> Source;
 	bool bCollected = false;
 };

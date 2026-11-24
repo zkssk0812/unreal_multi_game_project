@@ -483,6 +483,44 @@ void AVHDoor::Tick(float DeltaSeconds)
 FString AVHDoor::Describe() const
 {
 	const FVector P = GetActorLocation();
-	return FString::Printf(TEXT("%s (%.0f, %.0f) %s %s↔%s 열림 %.2f%s"), *ServerId.ToString(), P.X, P.Y, bDouble ? TEXT("양문") : TEXT("한 짝"),
-		ZoneA.IsNone() ? TEXT("바깥") : *ZoneA.ToString(), ZoneB.IsNone() ? TEXT("바깥") : *ZoneB.ToString(), OpenAlpha, bLocked ? TEXT(" 잠김") : TEXT(""));
+	return FString::Printf(TEXT("%s (%.0f, %.0f) %s %s↔%s 열림 %.2f%s%s"), *ServerId.ToString(), P.X, P.Y, bDouble ? TEXT("양문") : TEXT("한 짝"),
+		ZoneA.IsNone() ? TEXT("바깥") : *ZoneA.ToString(), ZoneB.IsNone() ? TEXT("바깥") : *ZoneB.ToString(), OpenAlpha, bLocked ? TEXT(" 잠김") : TEXT(""),
+		ServerEntityId != 0 ? *FString::Printf(TEXT(" [서버 문 %d, 엔티티 %u]"), ServerDoorIndex, ServerEntityId) : TEXT(""));
+}
+
+bool AVHDoor::IntersectPanel(const FVector& From, const FVector& To, float& OutT) const
+{
+	// 문 로컬 상자 x ∈ [-벽 두께/2, +벽 두께/2], y ∈ [-폭/2, +폭/2], z ∈ [0, 입구 높이] 와 선분의 교차 (slab)
+	const FTransform& T = GetActorTransform();
+	const FVector A = T.InverseTransformPosition(From);
+	const FVector B = T.InverseTransformPosition(To);
+	const FVector D = B - A;
+	const FVector Min(-WallThickness * 0.5f, -Width * 0.5f, 0.f);
+	const FVector Max(WallThickness * 0.5f, Width * 0.5f, OpeningHeight);
+	float T0 = 0.f, T1 = 1.f;
+	for (int32 Axis = 0; Axis < 3; ++Axis)
+	{
+		if (FMath::Abs(D[Axis]) < KINDA_SMALL_NUMBER)
+		{
+			if (A[Axis] < Min[Axis] || A[Axis] > Max[Axis])
+			{
+				return false;
+			}
+			continue;
+		}
+		float Ta = (Min[Axis] - A[Axis]) / D[Axis];
+		float Tb = (Max[Axis] - A[Axis]) / D[Axis];
+		if (Ta > Tb)
+		{
+			Swap(Ta, Tb);
+		}
+		T0 = FMath::Max(T0, Ta);
+		T1 = FMath::Min(T1, Tb);
+		if (T0 > T1)
+		{
+			return false;
+		}
+	}
+	OutT = T0;
+	return true;
 }

@@ -712,9 +712,9 @@ void FVHMockServer::HandleLoadComplete(const uint8* Data, int32 Size)
 		Add(EntityKind::Safe, 0, -900.f, 1500.f, 0.f);												// 중앙 홀
 		Add(EntityKind::ReturnPoint, 0, 300.f, 1600.f, 0.f, 0, 30000);								// 중앙 홀
 		Add(EntityKind::ReturnPoint, 0, -1000.f, -1500.f, 0.f, 0, 30000);							// 사무실
-		Add(EntityKind::Box, 0, 800.f, 1500.f, 0.f);												// 중앙 홀
-		Add(EntityKind::Box, 0, 900.f, 300.f, 0.f);
-		Add(EntityKind::Box, 0, -1200.f, -300.f, 0.f);
+		Add(EntityKind::Box, static_cast<uint16>(BoxType::Weapon), 800.f, 1500.f, 0.f);												// 중앙 홀
+		Add(EntityKind::Box, static_cast<uint16>(BoxType::Valuable), 900.f, 300.f, 0.f);			// 상자 두 종류 (2026-11-24)
+		Add(EntityKind::Box, static_cast<uint16>(BoxType::Weapon), -1200.f, -300.f, 0.f);
 		// 시작 위치 바로 앞(현관)과 홀 입구: 줍는 아이템 종류별로 하나씩 (정보창·테두리 확인용)
 		Add(EntityKind::Valuable, static_cast<uint16>(ValuableQuality::Common), -300.f, 2600.f, 0.f, 12);
 		Add(EntityKind::Valuable, static_cast<uint16>(ValuableQuality::Unique), -100.f, 1800.f, 0.f, 2000);
@@ -728,9 +728,9 @@ void FVHMockServer::HandleLoadComplete(const uint8* Data, int32 Size)
 		Add(EntityKind::Safe, 0, 2895.f, -2920.f, 180.f);											// vault_slot_06 (Safe_06)
 		Add(EntityKind::ReturnPoint, 0, 5600.f, -3600.f, 0.f, 0, 30000);							// 큰 홀
 		Add(EntityKind::ReturnPoint, 0, 4410.f, -5014.f, 0.f, 0, 30000);							// 방 17
-		Add(EntityKind::Box, 0, 6173.f, -4622.f, 0.f);												// box_slot_09
-		Add(EntityKind::Box, 0, 6913.f, -4069.f, 0.f);												// box_slot_07
-		Add(EntityKind::Box, 0, 2865.f, -1461.f, 0.f);												// box_slot_10
+		Add(EntityKind::Box, static_cast<uint16>(BoxType::Weapon), 6173.f, -4622.f, 0.f);												// box_slot_09
+		Add(EntityKind::Box, static_cast<uint16>(BoxType::Valuable), 6913.f, -4069.f, 0.f);												// box_slot_07
+		Add(EntityKind::Box, static_cast<uint16>(BoxType::Weapon), 2865.f, -1461.f, 0.f);												// box_slot_10
 		// 시작 위치 바로 앞: 줍는 아이템 종류별로 하나씩 (정보창·테두리 확인용)
 		Add(EntityKind::Valuable, static_cast<uint16>(ValuableQuality::Common), 4700.f, -2650.f, 0.f, 12);
 		Add(EntityKind::Valuable, static_cast<uint16>(ValuableQuality::Unique), 4700.f, -2400.f, 0.f, 2000);

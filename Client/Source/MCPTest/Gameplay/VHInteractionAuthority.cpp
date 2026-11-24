@@ -7,6 +7,7 @@
 #include "Gameplay/VHThiefStateComponent.h"
 #include "Gameplay/VHTreasureCarrierComponent.h"
 #include "Gameplay/VHSafe.h"
+#include "Gameplay/VHBox.h"
 #include "Gameplay/VHDroppedTreasure.h"
 #include "Gameplay/VHItemPickup.h"
 #include "Gameplay/VHFlashlightComponent.h"
@@ -72,8 +73,9 @@ FVHInteractOffer UVHLocalInteractionAuthority::BuildOffer(const UVHInteractionCo
 	}
 
 	case EVHEntityKind::Box:
-		// [기획·서버] 3초 작업, 멈추면 처음부터 (공격으로도 부술 수 있다)
-		return FVHInteractOffer::Make(EVHInteractMode::Hold, C.BoxOpenSeconds * Scale, false, LOCTEXT("BoxOpen", "상자 열기"));
+		// [기획·서버] 3초 작업, 멈추면 처음부터 (공격으로도 부술 수 있다). 2026-11-24: 무기 상자 / 환금 상자 이름으로
+		return FVHInteractOffer::Make(EVHInteractMode::Hold, C.BoxOpenSeconds * Scale, false,
+			FText::Format(LOCTEXT("BoxOpenNamed", "{0} 열기"), CastChecked<AVHBox>(Target)->GetBoxName()));
 
 	case EVHEntityKind::WeaponPickup:
 	case EVHEntityKind::ConsumablePickup:

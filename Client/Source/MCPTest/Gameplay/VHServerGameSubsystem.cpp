@@ -20,6 +20,8 @@
 #include "Gameplay/VHReturnPoint.h"
 #include "Gameplay/VHDroppedTreasure.h"
 #include "Gameplay/VHBox.h"
+#include "Gameplay/VHDoor.h"
+#include "Gameplay/VHDoorSubsystem.h"
 #include "Misc/FileHelper.h"
 #include "Gameplay/VHItemPickup.h"
 #include "Gameplay/VHRanking.h"
@@ -215,6 +217,7 @@ const TCHAR* UVHServerGameSubsystem::KindName(EntityKind K)
 	case EntityKind::StickyTrap: return TEXT("끈끈이");
 	case EntityKind::Mine: return TEXT("지뢰");
 	case EntityKind::Smoke: return TEXT("연막");
+	case EntityKind::Door: return TEXT("문");
 	}
 	return TEXT("?");
 }
@@ -745,6 +748,19 @@ void UVHServerGameSubsystem::SpawnFireFx(const FVector& Origin, float Yaw, float
 			{
 				End = Hit.ImpactPoint;
 			}
+			// 닫힌 문도 벽처럼 (서버 2026-11-24: 총알·근접·폭발을 막음, 레일건만 뚫음). 직선 하나일 때만 문에 맞은 불꽃·소리
+			const UVHDoorSubsystem* Doors = World->GetSubsystem<UVHDoorSubsystem>();
+			FVector DoorAt;
+			float DoorT = 0.f;
+			if (Doors && Doors->TraceClosedDoor(Origin, End, DoorAt, DoorT))
+			{
+				End = DoorAt;
+				if (HalfAngle <= 0.f)
+				{
+					Doors->PlayDoorHitFx(DoorAt, Color);
+					UE_LOG(LogVHServerGame, Log, TEXT("[문 막음] 직선 공격이 닫힌 문 (%.0f, %.0f)에서 멈춤"), DoorAt.X, DoorAt.Y);
+				}
+			}
 		}
 		AVHFxActor::SpawnBeam(World, Origin, End, RayThickness, Color, 0.8f, Life);
 	};
@@ -1007,10 +1023,24 @@ void UVHServerGameSubsystem::ApplyGameStart(const SC_GameStart& P)
 	{
 		++CountByKind[FMath::Clamp<int32>(static_cast<int32>(Pair.Value.Kind), 0, 15)];
 	}
-	UE_LOG(LogVHServerGame, Log, TEXT("SC_GAME_START 적용: 내 엔티티 %u, 제한 %.0f초, 엔티티 %d개 (플레이어 %d, 경비원 %d, 금고 %d, 반납지점 %d, 상자 %d, 필드아이템 %d)"),
+	int32 WeaponBoxes = 0, ValuableBoxes = 0;
+	for (const TPair<uint16, FEntity>& Pair : Entities)
+	{
+		if (Pair.Value.Kind == EntityKind::Box)
+		{
+			WeaponBoxes += Pair.Value.TypeId == static_cast<uint16>(BoxType::Weapon) ? 1 : 0;
+			ValuableBoxes += Pair.Value.TypeId == static_cast<uint16>(BoxType::Valuable) ? 1 : 0;
+		}
+	}
+	UE_LOG(LogVHServerGame, Log, TEXT("SC_GAME_START 적용: 내 엔티티 %u, 제한 %.0f초, 엔티티 %d개 (플레이어 %d, 경비원 %d, 금고 %d, 반납지점 %d, 상자 %d(무기 %d·환금 %d), 필드아이템 %d, 문 %d)"),
 		SelfEntityId, DurationSeconds, P.entity_count,
 		CountByKind[(int32)EntityKind::Thief], CountByKind[(int32)EntityKind::Guard], CountByKind[(int32)EntityKind::Safe],
-		CountByKind[(int32)EntityKind::ReturnPoint], CountByKind[(int32)EntityKind::Box], CountByKind[(int32)EntityKind::FieldItem]);
+		CountByKind[(int32)EntityKind::ReturnPoint], CountByKind[(int32)EntityKind::Box], WeaponBoxes, ValuableBoxes, CountByKind[(int32)EntityKind::FieldItem],
+		CountByKind[(int32)EntityKind::Door]);
+	if (const UVHDoorSubsystem* Doors = GetWorld()->GetSubsystem<UVHDoorSubsystem>())
+	{
+		Doors->LogServerBindSummary();
+	}
 
 	if (UVHMatchSubsystem* Match = GetMatch())
 	{
@@ -1088,6 +1118,25 @@ void UVHServerGameSubsystem::AddEntity(const EntitySpawn& S, bool bFromStart)
 	UE_LOG(LogVHServerGame, Log, TEXT("엔티티 %s %u: %s type %u 위치 (%.0f, %.0f, %.0f) 상태 0x%06x timer %ums param %u%s"),
 		bFromStart ? TEXT("시작") : TEXT("등장"), E.Id, KindName(E.Kind), E.TypeId, E.Pos.X, E.Pos.Y, E.Pos.Z, E.State, E.TimerMs, E.Param,
 		E.Id == SelfEntityId ? TEXT(" (나)") : TEXT(""));
+
+	// 상자 드롭 기록 (2026-11-24 상자 두 종류): 방금 부서진 상자 자리 150cm 안에 생긴 아이템
+	if (!bFromStart && (E.Kind == EntityKind::WeaponPickup || E.Kind == EntityKind::ConsumablePickup || E.Kind == EntityKind::Valuable || E.Kind == EntityKind::FieldItem))
+	{
+		for (int32 i = 0; i < BrokenBoxes.Num(); ++i)
+		{
+			if (FVector::Dist2D(BrokenBoxes[i].Pos, E.Pos) < 150.f && FPlatformTime::Seconds() - BrokenBoxes[i].Time < 1.5)
+			{
+				const uint16 Type = BrokenBoxes[i].Type;
+				const FString What = E.Kind == EntityKind::WeaponPickup ? FString::Printf(TEXT("무기 %s"), WeaponName(static_cast<WeaponId>(E.TypeId)))
+					: E.Kind == EntityKind::ConsumablePickup ? FString::Printf(TEXT("소비 %s"), ConsumableName(static_cast<ConsumableId>(E.TypeId)))
+					: E.Kind == EntityKind::Valuable ? FString::Printf(TEXT("환금 품질 %u (%u$)"), E.TypeId, E.Param)
+					: FString::Printf(TEXT("필드 %s"), FieldItemName(static_cast<FieldItemId>(E.TypeId)));
+				UE_LOG(LogVHServerGame, Log, TEXT("[상자 드롭] %s → %s"), Type == 1 ? TEXT("무기 상자") : (Type == 2 ? TEXT("환금 상자") : TEXT("종류 모름")), *What);
+				BrokenBoxes.RemoveAt(i);
+				break;
+			}
+		}
+	}
 
 	UVHInteractionSubsystem* Sub = GetInteraction();
 	switch (E.Kind)
@@ -1205,8 +1254,17 @@ void UVHServerGameSubsystem::AddEntity(const EntitySpawn& S, bool bFromStart)
 			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 			if (AVHBox* Box = GetWorld()->SpawnActor<AVHBox>(AVHBox::StaticClass(), E.Pos, FRotator(0.f, E.Yaw, 0.f), Params))
 			{
+				Box->SetBoxType(static_cast<uint8>(E.TypeId));	// 2026-11-24 팀 서버: type_id = BoxType (1 무기 상자, 2 환금 상자)
 				E.Object = Box;
 			}
+		}
+		break;
+
+	case EntityKind::Door:
+		// 방 사이 문 (2026-11-24 팀 서버): type_id = 문 번호(안쪽 above_door 순서), pos = 문 가운데, yaw = 지나가는 방향, ES_OPENED = 열림
+		if (UVHDoorSubsystem* Doors = GetWorld()->GetSubsystem<UVHDoorSubsystem>())
+		{
+			Doors->BindServerDoor(E.Id, E.TypeId, E.Pos, E.Yaw, (E.State & ES_OPENED) != 0);
 		}
 		break;
 
@@ -1323,9 +1381,21 @@ void UVHServerGameSubsystem::RemoveEntity(uint16 Id)
 	}
 	UE_LOG(LogVHServerGame, Log, TEXT("엔티티 사라짐 %u: %s"), Id, KindName(E->Kind));
 	CancelRailgunShot(Id, TEXT("쏜 사람이 사라짐"));
-	if (ReturnCancel.bActive && ReturnCancel.TargetId == Id)
+	if (E->Kind == EntityKind::ReturnPoint)
 	{
-		ReturnCancel.bClosed = true;	// 반납이 끊긴 같은 틱에 그 구역이 사라짐 = 수명이 끝나 닫힘 (서버: 닫히기 직전 Cancel → 교체)
+		TickDespawnedReturnPoints.Add(Id);
+	}
+	if (E->Kind == EntityKind::Box)
+	{
+		// 부서진 상자: 곧 같은 자리에 생기는 아이템을 이 상자 종류와 함께 로그로 남긴다 ([상자 드롭])
+		BrokenBoxes.RemoveAll([](const FBrokenBox& B) { return FPlatformTime::Seconds() - B.Time > 3.0; });
+		BrokenBoxes.Add({ E->Pos, E->TypeId, FPlatformTime::Seconds() });
+	}
+	// 반납 실패 판정 (2026-11-24 정호님 확인): 같은 틱의 Cancel target 과 Despawn 된 반납지점 id 가 같을 때만 "구역이 닫혀서 실패".
+	// 처음 3곳이 같은 틱에 함께 바뀌어도 다른 구역의 Despawn 은 세지 않는다 (서버 순서: Cancel → Despawn → Spawn, 그 뒤 스냅샷)
+	if (ReturnCancel.bActive && ReturnCancel.TargetId == Id && E->Kind == EntityKind::ReturnPoint)
+	{
+		ReturnCancel.bClosed = true;
 	}
 	if (Id == MyDroppedTreasureId)
 	{
@@ -1777,6 +1847,20 @@ void UVHServerGameSubsystem::ApplySnapshot(const SC_Snapshot& P)
 				Box->SetServerHp(S.hp);
 			}
 		}
+		if (E->Kind == EntityKind::Door && ((OldState ^ S.state) & ES_OPENED))
+		{
+			// 문: 바뀐 틱의 스냅샷으로 온다 (누가 열었든 — 나·다른 플레이어·경비원). 열림 상태는 이것으로만 바뀐다
+			const bool bOpen = (S.state & ES_OPENED) != 0;
+			if (UVHDoorSubsystem* Doors = GetWorld()->GetSubsystem<UVHDoorSubsystem>())
+			{
+				Doors->ApplyServerDoorState(E->Id, bOpen);
+			}
+			if (PendingDoor.DoorId == E->Id)
+			{
+				UE_LOG(LogVHServerGame, Log, TEXT("[문] 내 F 결과: 문 %u %s (보낸 뒤 %.0fms)"), E->Id, bOpen ? TEXT("열림") : TEXT("닫힘"), (Now - PendingDoor.SentTime) * 1000.0);
+				PendingDoor = FPendingDoor();
+			}
+		}
 		if (E->Id == SelfEntityId)
 		{
 			if (DebugSelfBits != 0 && Now > DebugSelfBitsUntil)
@@ -1807,6 +1891,11 @@ void UVHServerGameSubsystem::ApplySnapshot(const SC_Snapshot& P)
 			Sub->PostMessage(LOCTEXT("InterruptedByDamage", "공격받아 작업이 멈췄습니다"), true);
 		}
 	}
+	if (TickDespawnedReturnPoints.Num() > 1)
+	{
+		UE_LOG(LogVHServerGame, Log, TEXT("[반납] 한 틱에 반납지점 %d곳이 함께 사라짐"), TickDespawnedReturnPoints.Num());
+	}
+	TickDespawnedReturnPoints.Reset();	// 스냅샷 = 틱의 끝
 
 	// 남은 시간을 서버 값으로 (1초에 한 번 맞춤)
 	if (SnapshotsReceived % TICK_HZ == 1)
@@ -2274,8 +2363,18 @@ bool UVHServerGameSubsystem::ResolveReturnCancel(bool bHitInterrupted)
 	// 우선순위: 구역 닫힘 > 쓰러짐(쓰러짐 화면이 따로 있음) > 경직 > 맞음 > 내 행동 > 구역 밖
 	FText Text;
 	const TCHAR* Why = TEXT("");
-	// 닫힘: 같은 틱에 그 구역이 사라졌거나, 끊길 때 남은 수명이 거의 0 (사라짐 패킷 순서와 관계없이)
-	const bool bClosed = C.bClosed || C.RemainingAtCancel <= 0.3f;
+	// 닫힘: 같은 틱에 Despawn 된 반납지점 id 가 Cancel 의 target 과 같을 때만 (남은 수명 추정은 쓰지 않는다 — 2026-11-24)
+	const bool bClosed = C.bClosed;
+	if (TickDespawnedReturnPoints.Num() > 0)
+	{
+		TArray<FString> Ids;
+		for (const uint16 Gone : TickDespawnedReturnPoints)
+		{
+			Ids.Add(FString::Printf(TEXT("%u%s"), Gone, Gone == C.TargetId ? TEXT("(끊긴 구역)") : TEXT("")));
+		}
+		UE_LOG(LogVHServerGame, Log, TEXT("[반납] 끊긴 틱에 사라진 반납지점 %d곳 [%s], 끊긴 구역 %u → 구역 닫힘 %s"), Ids.Num(), *FString::Join(Ids, TEXT(", ")), C.TargetId,
+			bClosed ? TEXT("예") : TEXT("아니오"));
+	}
 	if (bClosed)
 	{
 		Why = TEXT("구역 닫힘");
@@ -2471,6 +2570,13 @@ void UVHServerGameSubsystem::OnDamage(const SC_Damage& P)
 	UE_LOG(LogVHServerGame, Log, TEXT("[서버] 대미지 %s → %s 무기 %s %u (HP %u, 보호막 %u)"),
 		*NameOfEntity(P.attacker), *NameOfEntity(P.target), WeaponName(P.weapon), P.amount, P.hp_after, P.shield_after);
 	++DamagesSeen;
+	if (P.attacker == SelfEntityId && P.target != SelfEntityId)
+	{
+		if (const FEntity* T = Entities.Find(P.target); T && T->Kind == EntityKind::Thief)
+		{
+			++DamageDealtToThieves;	// 시험 봇 -VHBotDoorShot: 닫힌 문 너머로 맞았는지
+		}
+	}
 	// 몸 동작: 맞은 사람이 움찔 (경직·쓰러짐·작업 중이면 그 동작이 우선)
 	if (UVHWeaponVisualComponent* Hit = VisualOfEntity(P.target))
 	{
@@ -2994,6 +3100,22 @@ void UVHServerGameSubsystem::OnReject(const SC_ActionReject& P)
 	{
 		return;
 	}
+	// 문 F 거절 (2026-11-24 팀 서버): 문은 작업(진행 게이지)이 아니라 상호작용 컴포넌트 상태와 무관 → 안내만
+	if (P.action == ActionType::InteractBegin && PendingDoor.Seq != 0 && PendingDoor.Seq == P.seq)
+	{
+		FText Text;
+		switch (P.reason)
+		{
+		case RejectReason::TargetBusy:	Text = LOCTEXT("DoorBusy", "문간에 누가 있어 닫을 수 없습니다"); break;
+		case RejectReason::OutOfRange:	Text = LOCTEXT("DoorFar", "문에서 너무 멉니다 — 문 앞 1.5m 안에서 F를 누르세요"); break;
+		default:						Text = Detail.IsEmpty() ? LOCTEXT("DoorRejected", "지금은 문을 열거나 닫을 수 없습니다") : Detail; break;
+		}
+		UE_LOG(LogVHServerGame, Log, TEXT("[문] 거절: 문 %u %s 요청 → reason %d \"%s\""), PendingDoor.DoorId, PendingDoor.bWantOpen ? TEXT("열기") : TEXT("닫기"),
+			(int32)P.reason, *Text.ToString());
+		Sub->PostMessage(Text, true);
+		PendingDoor = FPendingDoor();
+		return;
+	}
 	switch (P.action)
 	{
 	case ActionType::InteractBegin:
@@ -3107,6 +3229,31 @@ void UVHServerGameSubsystem::SendInteractBegin(UVHInteractionComponent* By, AVHI
 	{
 		UE_LOG(LogVHServerGame, Log, TEXT("→ 상호작용 시작 %s %u (seq %u%s)"), KindName(E.Kind), Id, Seq, Pending.bInstant ? TEXT(", 즉시") : TEXT(""));
 	}
+}
+
+void UVHServerGameSubsystem::SendDoorInteract(uint16 DoorEntityId, bool bWantOpen, const FString& DoorDesc)
+{
+	UVHNetSubsystem* N = Net.Get();
+	if (!N || !Entities.Contains(DoorEntityId))
+	{
+		UE_LOG(LogVHServerGame, Warning, TEXT("[문] 보내지 못함: 문 엔티티 %u (%s)"), DoorEntityId, *DoorDesc);
+		return;
+	}
+	// 서버는 마지막 CS_MOVE 위치로 거리(문 가운데 150cm)와 문간 점유를 잰다 → 지금 위치를 먼저 보낸다
+	SendCurrentPositionNow();
+	const uint16 Seq = N->SendAction(ActionType::InteractBegin, GetLookYaw(), DoorEntityId, GetAimPoint());
+	if (Seq == 0)
+	{
+		return;
+	}
+	PendingDoor.Seq = Seq;
+	PendingDoor.DoorId = DoorEntityId;
+	PendingDoor.bWantOpen = bWantOpen;
+	PendingDoor.SentTime = FPlatformTime::Seconds();
+	const APawn* Pawn = GetLocalPawn();
+	UE_LOG(LogVHServerGame, Log, TEXT("→ 문 %s 요청: 문 엔티티 %u %s (seq %u, 내 위치 %.0f, %.0f, 문 가운데까지 %.0fcm)"), bWantOpen ? TEXT("열기") : TEXT("닫기"),
+		DoorEntityId, *DoorDesc, Seq, Pawn ? Pawn->GetActorLocation().X : 0.f, Pawn ? Pawn->GetActorLocation().Y : 0.f,
+		Pawn ? FVector::Dist2D(Pawn->GetActorLocation(), Entities[DoorEntityId].Pos) : -1.f);
 }
 
 void UVHServerGameSubsystem::SendInteractCancel(UVHInteractionComponent* By)
@@ -4685,6 +4832,189 @@ bool UVHServerGameSubsystem::TickBotReturnPartner(APawn* Pawn, UVHInteractionCom
 	}
 }
 
+void UVHServerGameSubsystem::TickBotDoorShot(float DeltaTime)
+{
+	// 닫힌 문 사격 시험 (2026-11-24 팀 서버: 닫힌 문은 총알·근접·폭발을 막고 레일건만 뚫는다)
+	//  0) 무기 얻기: 바닥의 권총·레일건(아직 시험 안 한 것) → 없으면 무기 상자(type 1)를 연다
+	//  1) 문 앞(-VHDoorShotX/Y, 기본 3215,3150 = wall_119 복도 쪽)에서 +X 로 겨누고 문을 닫는다 → 쏜다 → 상대(문 너머 3375,3150)가 맞았는지
+	//  2) 권총이면 문을 열고 다시 쏜다 (맞아야 함). 끝나면 0) 으로 (다른 무기)
+	APawn* Pawn = GetLocalPawn();
+	UVHInteractionComponent* I = GetMyInteraction();
+	UVHDoorSubsystem* Doors = GetWorld()->GetSubsystem<UVHDoorSubsystem>();
+	if (!Pawn || !I || !MyStatus.bValid || !Doors || HasSelfState(ES_DOWNED))
+	{
+		return;
+	}
+	const double Now = FPlatformTime::Seconds();
+	if (Now < DoorShotNext)
+	{
+		return;
+	}
+	static float ShotX = -1.f, ShotY = 0.f;
+	if (ShotX < 0.f)
+	{
+		ShotX = 3215.f;
+		ShotY = 3150.f;
+		FParse::Value(FCommandLine::Get(), TEXT("VHDoorShotX="), ShotX);
+		FParse::Value(FCommandLine::Get(), TEXT("VHDoorShotY="), ShotY);
+	}
+	const float Half = GetPawnHalfHeight(Pawn);
+	const FVector Foot = Pawn->GetActorLocation() - FVector(0.f, 0.f, Half);
+	const uint8 Pistol = static_cast<uint8>(WeaponId::Pistol), Rail = static_cast<uint8>(WeaponId::Railgun);
+	auto SlotOf = [&](uint8 W) { return MyStatus.WeaponId[0] == W ? 0 : (MyStatus.WeaponId[1] == W ? 1 : -1); };
+	auto Wanted = [&](uint8 W) { return (W == Pistol && !bDoorShotPistolDone) || (W == Rail && !bDoorShotRailDone); };
+	auto Shot = [&](const TCHAR* Tag) { GEngine->Exec(GetWorld(), *FString::Printf(TEXT("vh.Shot doorshot_%s"), Tag)); };
+	auto Door = [&]() { return Doors->FindDoorFor(Pawn); };
+
+	switch (DoorShotStage)
+	{
+	case 0:
+	{
+		if (I->IsInteracting() || I->IsApproaching())
+		{
+			return;
+		}
+		for (const uint8 W : { Rail, Pistol })
+		{
+			const int32 Slot = SlotOf(W);
+			if (Slot >= 0 && Wanted(W))
+			{
+				if (MyStatus.ActiveSlot != Slot)
+				{
+					SendSwitchWeapon();
+					DoorShotNext = Now + 1.0;
+					return;
+				}
+				DoorShotWeapon = W;
+				DoorShotStage = 1;
+				DoorShotSub = 0;
+				UE_LOG(LogVHServerGame, Log, TEXT("[문 사격] %s 획득 (탄 %d) → 문 앞으로"), WeaponName(static_cast<WeaponId>(W)), MyStatus.WeaponAmmo[Slot]);
+				return;
+			}
+		}
+		const FEntity* Best = nullptr;
+		float BestDist = TNumericLimits<float>::Max();
+		for (const TPair<uint16, FEntity>& Pair : Entities)
+		{
+			const FEntity& E = Pair.Value;
+			const bool bPick = E.Kind == EntityKind::WeaponPickup && Wanted(static_cast<uint8>(E.TypeId)) && DoorShotTries.FindRef(E.Id) < 3;
+			const bool bBox = E.Kind == EntityKind::Box && E.TypeId == static_cast<uint16>(BoxType::Weapon) && DoorShotTries.FindRef(E.Id) < 2;
+			const float D = FVector::Dist2D(Foot, E.Pos) - (bPick ? 100000.f : 0.f);	// 바닥의 원하는 무기가 먼저
+			if ((bPick || bBox) && E.Object.IsValid() && D < BestDist)
+			{
+				BestDist = D;
+				Best = &E;
+			}
+		}
+		if (Best)
+		{
+			const FVector Cand = Best->Pos + FVector(Best->Kind == EntityKind::Box ? 150.f : 110.f, 0.f, 0.f);
+			Pawn->TeleportTo(Cand + FVector(0.f, 0.f, Half + 2.f), Pawn->GetActorRotation());
+			SendCurrentPositionNow();
+			DoorShotTries.FindOrAdd(Best->Id)++;
+			I->DebugSetHoverAt(Best->Object.Get());
+			I->InteractPressed();
+			UE_LOG(LogVHServerGame, Log, TEXT("[문 사격] %s %u %s"), KindName(Best->Kind), Best->Id, Best->Kind == EntityKind::Box ? TEXT("열기 (무기 상자)") : *FString::Printf(TEXT("줍기 (%s)"), WeaponName(static_cast<WeaponId>(Best->TypeId))));
+			DoorShotNext = Now + 1.2;
+		}
+		return;
+	}
+	case 1:
+	{
+		const int32 Slot = SlotOf(DoorShotWeapon);
+		if (Slot < 0)
+		{
+			DoorShotStage = 0;	// 탄을 다 써서 무기가 사라짐
+			return;
+		}
+		switch (DoorShotSub)
+		{
+		case 0:
+			Pawn->TeleportTo(FVector(ShotX, ShotY, Foot.Z + Half + 2.f), FRotator::ZeroRotator);
+			if (UVHAimComponent* Aim = Pawn->FindComponentByClass<UVHAimComponent>())
+			{
+				Aim->SnapLookYaw(0.f);
+			}
+			SendCurrentPositionNow();
+			DoorShotSub = 1;
+			DoorShotNext = Now + 0.8;
+			return;
+		case 1:
+			if (AVHDoor* D = Door(); D && D->IsOpen())
+			{
+				FText Why;
+				Doors->TryToggle(Pawn, D, Why);	// 닫기 (서버로)
+				DoorShotNext = Now + 0.8;
+				return;
+			}
+			DoorShotHitsBefore = DamageDealtToThieves;
+			UE_LOG(LogVHServerGame, Log, TEXT("[문 사격] 닫힌 문 %s 너머로 %s 발사"), Door() ? *Door()->Describe() : TEXT("(문 없음)"), WeaponName(static_cast<WeaponId>(DoorShotWeapon)));
+			GEngine->Exec(GetWorld(), TEXT("vh.Aim 0"));	// 창 위 실제 마우스가 조준을 덮지 않게 매번 고정
+			GEngine->Exec(GetWorld(), TEXT("vh.Press attack"));
+			DoorShotSub = 2;
+			DoorShotNext = Now + (DoorShotWeapon == Rail ? 1.25 : 0.12);
+			return;
+		case 2:
+			Shot(DoorShotWeapon == Rail ? TEXT("rail_closed") : TEXT("pistol_closed"));
+			if (DoorShotWeapon == Pistol)
+			{
+				GEngine->Exec(GetWorld(), TEXT("vh.Aim 0"));	// 창 위 실제 마우스가 조준을 덮지 않게 매번 고정
+			GEngine->Exec(GetWorld(), TEXT("vh.Press attack"));
+			}
+			DoorShotSub = 3;
+			DoorShotNext = Now + 2.0;
+			return;
+		case 3:
+		{
+			const int32 Hits = DamageDealtToThieves - DoorShotHitsBefore;
+			const bool bRail = DoorShotWeapon == Rail;
+			UE_LOG(LogVHServerGame, Log, TEXT("[문 사격] 결과: 닫힌 문 너머 %s → 상대에게 준 피해 %d번 (%s)"), WeaponName(static_cast<WeaponId>(DoorShotWeapon)), Hits,
+				bRail ? (Hits > 0 ? TEXT("뚫음 = 기대대로") : TEXT("안 맞음 = 기대와 다름!")) : (Hits == 0 ? TEXT("막힘 = 기대대로") : TEXT("맞음 = 기대와 다름!")));
+			if (bRail)
+			{
+				bDoorShotRailDone = true;
+				DoorShotStage = 0;
+				DoorShotNext = Now + 1.0;
+				return;
+			}
+			// 권총: 문을 열고 다시
+			if (AVHDoor* D = Door(); D && !D->IsOpen())
+			{
+				FText Why;
+				Doors->TryToggle(Pawn, D, Why);
+			}
+			DoorShotSub = 4;
+			DoorShotNext = Now + 1.0;
+			return;
+		}
+		case 4:
+			DoorShotHitsBefore = DamageDealtToThieves;
+			GEngine->Exec(GetWorld(), TEXT("vh.Aim 0"));	// 창 위 실제 마우스가 조준을 덮지 않게 매번 고정
+			GEngine->Exec(GetWorld(), TEXT("vh.Press attack"));
+			DoorShotSub = 5;
+			DoorShotNext = Now + 0.12;
+			return;
+		case 5:
+			Shot(TEXT("pistol_open"));
+			DoorShotSub = 6;
+			DoorShotNext = Now + 1.5;
+			return;
+		default:
+		{
+			const int32 Hits = DamageDealtToThieves - DoorShotHitsBefore;
+			UE_LOG(LogVHServerGame, Log, TEXT("[문 사격] 결과: 열린 문으로 권총 → 상대에게 준 피해 %d번 (%s)"), Hits, Hits > 0 ? TEXT("맞음 = 기대대로") : TEXT("안 맞음"));
+			bDoorShotPistolDone = true;
+			DoorShotStage = 0;
+			DoorShotNext = Now + 1.0;
+			return;
+		}
+		}
+	}
+	default:
+		return;
+	}
+}
+
 void UVHServerGameSubsystem::TickBotRailTest(float DeltaTime)
 {
 	// 실서버에서 레일건 충전 발사를 사람 손 없이 시험한다 (서버는 클라 위치를 검사하지 않으므로 순간 이동을 쓴다).
@@ -5061,6 +5391,14 @@ void UVHServerGameSubsystem::TickBotWalk(float DeltaTime)
 	if (bTaserStun)
 	{
 		TickBotTaserStun(DeltaTime);
+		return;
+	}
+
+	// 실행 옵션 -VHBotDoorShot: 닫힌 문 너머 사격 시험 (2026-11-24, 로그 [문 사격])
+	static const bool bDoorShot = FParse::Param(FCommandLine::Get(), TEXT("VHBotDoorShot"));
+	if (bDoorShot)
+	{
+		TickBotDoorShot(DeltaTime);
 		return;
 	}
 

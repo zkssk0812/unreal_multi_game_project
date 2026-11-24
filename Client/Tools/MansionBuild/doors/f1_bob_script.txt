@@ -1,0 +1,19 @@
+# 2026-11-24 서버 문 시험: Bob(도적2). 객실 5 쪽에서 Ann 의 문 조작을 본다
+1.0 vh.CeilingGo 3430 3150
+1.2 vh.Aim 180
+2.5 vh.Shot f1_bob_01_closed
+4.5 vh.DoorPeekInfo
+4.6 vh.Shot f1_bob_02_opened_by_ann
+# Bob 이 닫는다
+6.0 vh.PressF
+6.8 vh.Shot f1_bob_03_closed_by_bob
+# 문간에 선다 (Ann 이 10.0 에 닫으려 함 → TargetBusy)
+9.0 vh.CeilingGo 3300 3150
+10.5 vh.DoorInfo
+10.8 vh.Shot f1_bob_04_in_doorway
+# 비켜서 과녁이 된다 (닫힌 문 바로 너머)
+13.0 vh.CeilingGo 3375 3150
+18.2 vh.Shot f1_bob_05_after_baton_closed
+21.0 vh.Shot f1_bob_06_after_baton_open
+24.7 vh.Shot f1_bob_07_taser_door
+58.4 vh.Shot f1_bob_08_taser_open

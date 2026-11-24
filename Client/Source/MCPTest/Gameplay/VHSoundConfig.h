@@ -65,6 +65,7 @@ enum class EVHSound : uint8
 	// ── 2026-11-21 방 입구 문 (보이는 연출만) ──
 	DoorOpen			UMETA(DisplayName = "문 열림 (미닫이)"),
 	DoorClose			UMETA(DisplayName = "문 닫힘"),
+	DoorHit				UMETA(DisplayName = "닫힌 문에 총알·테이저가 맞음"),
 	Count				UMETA(Hidden),
 };
 

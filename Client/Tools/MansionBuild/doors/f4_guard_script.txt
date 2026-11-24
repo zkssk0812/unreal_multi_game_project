@@ -1,0 +1,7 @@
+# 2026-11-24 경비원이 닫힌 문을 열고 지나가는 장면: 경비원 스폰(식당 2500,-1200) 동쪽 문 wall_105(3300,-1200) 의 주방 쪽에서 연속 촬영
+0.8 vh.CeilingGo 3560 -1000
+1.0 vh.Aim 180
+1.5 vh.DoorBind
+2.0 vh.CeilingShots 24 0.25 f4_guard
+9.0 vh.DoorInfo
+9.5 vh.CeilingInfo

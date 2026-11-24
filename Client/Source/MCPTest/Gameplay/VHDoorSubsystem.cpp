@@ -4,6 +4,10 @@
 #include "Gameplay/VHGameplayConfig.h"
 #include "Gameplay/VHInteractionComponent.h"
 #include "Gameplay/VHInteractableBase.h"
+#include "Gameplay/VHInteractionSubsystem.h"
+#include "Gameplay/VHServerGameSubsystem.h"
+#include "Gameplay/VHSoundConfig.h"
+#include "Gameplay/VHWeaponFx.h"
 #include "Network/VHSettings.h"
 #include "MCPTest.h"
 
@@ -18,7 +22,7 @@
 
 namespace
 {
-	/** 지금 쓰는 출처: 내 클라. F 를 누르면 바로 바뀐다 (다른 클라와는 맞춰지지 않음 — 서버 상태가 생기면 바꿔 끼운다) */
+	/** 로컬 출처: 내 클라. F 를 누르면 바로 바뀐다 (가짜 서버처럼 서버 문이 없을 때. 다른 클라와는 맞춰지지 않음) */
 	class FVHLocalDoorStateSource final : public IVHDoorStateSource
 	{
 	public:
@@ -29,6 +33,39 @@ namespace
 			Sub.ApplyDoorState(&Door, bOpen, TEXT("로컬 F"));
 		}
 	};
+
+	/**
+	 * 서버 출처 (2026-11-24 팀 서버 9afd591): F = CS_ACTION InteractBegin(문 엔티티 id). 바로 바꾸지 않는다 —
+	 * 서버가 열고 닫으면 바뀐 틱의 스냅샷(ES_OPENED)이 와서 ApplyServerDoorState → ApplyDoorState. 거절은 SC_ACTION_REJECT
+	 */
+	class FVHServerDoorStateSource final : public IVHDoorStateSource
+	{
+	public:
+		virtual const TCHAR* GetName() const override { return TEXT("서버(Door 엔티티·ES_OPENED)"); }
+		virtual bool GetInitialOpen(const AVHDoor& Door) const override { return false; }	// 서버도 처음엔 모두 닫힘 (게임 시작 엔티티의 상태 비트로 다시 맞춘다)
+		virtual bool IsServer() const override { return true; }
+		virtual void RequestSetOpen(UVHDoorSubsystem& Sub, AVHDoor& Door, bool bOpen) override
+		{
+			UVHServerGameSubsystem* Game = Sub.GetWorld() ? Sub.GetWorld()->GetSubsystem<UVHServerGameSubsystem>() : nullptr;
+			if (Door.ServerEntityId == 0 || !Game)
+			{
+				UE_LOG(LogMCPTest, Warning, TEXT("[Door] %s: 서버 문 엔티티가 없어 요청하지 않음"), *Door.Describe());
+				return;
+			}
+			Game->SendDoorInteract(Door.ServerEntityId, bOpen, Door.Describe());
+		}
+	};
+
+	// vh.DoorBind : 서버 문 짝짓기 결과
+	FAutoConsoleCommandWithWorldAndArgs GVHDoorBindCommand(TEXT("vh.DoorBind"),
+		TEXT("개발용: vh.DoorBind — 서버 Door 엔티티와 클라 문의 짝짓기 결과를 로그에 쓴다."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			if (const UVHDoorSubsystem* Sub = World ? World->GetSubsystem<UVHDoorSubsystem>() : nullptr)
+			{
+				Sub->LogServerBindSummary();
+			}
+		}));
 
 	// vh.PressF : F 키를 한 번 누른 것과 같은 길 (상호작용 컴포넌트 InteractPressed → 물품이 없으면 문)
 	FAutoConsoleCommandWithWorldAndArgs GVHPressFCommand(TEXT("vh.PressF"),
@@ -138,12 +175,7 @@ void UVHDoorSubsystem::EnsureSource()
 	{
 		return;
 	}
-	const EVHDoorStateSource Want = UVHSettings::Get().GetGameplayConfig().DoorStateSource;
-	if (Want == EVHDoorStateSource::Server)
-	{
-		// 프로토콜에 문 상태가 아직 없다 → 서버용 출처를 만들 때까지 로컬로
-		UE_LOG(LogMCPTest, Warning, TEXT("[Door] 문 상태 출처 = 서버로 설정됐지만 프로토콜에 문 상태가 아직 없어 로컬로 동작합니다"));
-	}
+	// 처음엔 로컬. 서버가 Door 엔티티를 보내면(BindServerDoor) 설정이 Server 일 때 서버 출처로 바꾼다
 	Source = MakeUnique<FVHLocalDoorStateSource>();
 }
 
@@ -164,7 +196,17 @@ void UVHDoorSubsystem::CollectDoors()
 	{
 		Doors.Add(*It);
 		Locked += It->bLocked ? 1 : 0;
+		if (!It->bLocked)
+		{
+			InteriorByServerOrder.Add(*It);
+		}
 	}
+	// 서버 문 번호 = 맵 colliders.static 의 안쪽 above_door 순서 = wall_NNN 오름차순 (맵 v10 확인: 37개, 순서 같음)
+	InteriorByServerOrder.Sort([](const TWeakObjectPtr<AVHDoor>& A, const TWeakObjectPtr<AVHDoor>& B)
+	{
+		// FName 비교는 "wall_105" 를 "wall" + 숫자로 쪼개 비교해 순서가 틀린다 → 문자열로 비교 (2026-11-24 시험에서 발견)
+		return A->ServerId.ToString() < B->ServerId.ToString();
+	});
 	if (Doors.Num() > 0)
 	{
 		UE_LOG(LogMCPTest, Log, TEXT("[Door] 문 %d개 (잠김 %d), 상태 출처 %s, 처음엔 모두 닫힘, F로 열고 닫기"), Doors.Num(), Locked, GetSourceName());
@@ -234,6 +276,11 @@ AVHDoor* UVHDoorSubsystem::FindDoorFor(const APawn* Pawn) const
 		{
 			continue;
 		}
+		// 서버 문: 서버는 문 가운데에서 150cm(2D) 안만 받는다 → 그 밖이면 고르지 않는다 (DoorServerRange = 150 − 여유)
+		if (D->ServerEntityId != 0 && IsServerSource() && FVector::Dist2D(D->GetActorLocation(), Pawn->GetActorLocation()) > C.DoorServerRange)
+		{
+			continue;
+		}
 		const float Score = FMath::Max(0.f, Depth) + FMath::Max(0.f, Side) * 2.f;
 		if (Score < BestScore)
 		{
@@ -280,6 +327,139 @@ bool UVHDoorSubsystem::TryToggle(APawn* Pawn, AVHDoor* Door, FText& OutMessage)
 	}
 	RequestSetOpen(Door, bOpen);
 	return true;
+}
+
+// ───────────────────────── 서버 문 ─────────────────────────
+
+AVHDoor* UVHDoorSubsystem::BindServerDoor(uint16 EntityId, uint16 TypeId, const FVector& Pos, float Yaw, bool bOpen)
+{
+	CollectDoors();
+	EnsureSource();
+	if (!Source->IsServer() && UVHSettings::Get().GetGameplayConfig().DoorStateSource == EVHDoorStateSource::Server)
+	{
+		Source = MakeUnique<FVHServerDoorStateSource>();
+		UE_LOG(LogMCPTest, Log, TEXT("[Door] 서버가 문 엔티티를 보냄 → 문 상태 출처 = %s"), GetSourceName());
+	}
+	// 1) type_id 순서로 고른 문, 2) 위치(문 가운데 30cm)·방향(yaw 0 = ±X 로 지나감)으로 확인, 어긋나면 위치로 다시 찾는다
+	auto Matches = [&Pos, Yaw](const AVHDoor* D, float& OutDist, float& OutYawDiff)
+	{
+		OutDist = FVector::Dist2D(D->GetActorLocation(), Pos);
+		// 문 로컬 X(벽을 뚫는 방향) = 지나가는 방향. 180° 뒤집힌 것은 같은 문
+		OutYawDiff = FMath::Abs(FRotator::NormalizeAxis(D->GetActorRotation().Yaw - Yaw));
+		OutYawDiff = FMath::Min(OutYawDiff, 180.f - OutYawDiff);
+		return OutDist <= 30.f && OutYawDiff <= 10.f;
+	};
+	AVHDoor* Door = InteriorByServerOrder.IsValidIndex(TypeId) ? InteriorByServerOrder[TypeId].Get() : nullptr;
+	float Dist = 0.f, YawDiff = 0.f;
+	if (!Door || Door->ServerEntityId != 0 || !Matches(Door, Dist, YawDiff))
+	{
+		const FString Was = Door ? FString::Printf(TEXT("%s(거리 %.0fcm, 방향 차 %.0f°)"), *Door->ServerId.ToString(), Dist, YawDiff) : FString(TEXT("없음"));
+		AVHDoor* Best = nullptr;
+		float BestDist = TNumericLimits<float>::Max();
+		for (const TWeakObjectPtr<AVHDoor>& Weak : InteriorByServerOrder)
+		{
+			AVHDoor* D = Weak.Get();
+			float DD = 0.f, YD = 0.f;
+			if (D && D->ServerEntityId == 0 && Matches(D, DD, YD) && DD < BestDist)
+			{
+				Best = D;
+				BestDist = DD;
+			}
+		}
+		BindProblems.Add(FString::Printf(TEXT("서버 문 %u (엔티티 %u, 위치 %.0f,%.0f yaw %.0f): 순서상 %s → %s"), TypeId, EntityId, Pos.X, Pos.Y, Yaw, *Was,
+			Best ? *FString::Printf(TEXT("위치로 %s"), *Best->ServerId.ToString()) : TEXT("짝 없음")));
+		UE_LOG(LogMCPTest, Warning, TEXT("[Door] 짝 어긋남: %s"), *BindProblems.Last());
+		Door = Best;
+	}
+	if (!Door)
+	{
+		return nullptr;
+	}
+	Door->ServerEntityId = EntityId;
+	Door->ServerDoorIndex = TypeId;
+	ServerDoors.Add(EntityId, Door);
+	if (Door->IsOpen() != bOpen)
+	{
+		ApplyDoorState(Door, bOpen, TEXT("서버 시작 상태"));
+	}
+	return Door;
+}
+
+void UVHDoorSubsystem::ApplyServerDoorState(uint16 EntityId, bool bOpen)
+{
+	if (AVHDoor* Door = FindByServerEntity(EntityId))
+	{
+		ApplyDoorState(Door, bOpen, TEXT("서버"));
+	}
+	else
+	{
+		UE_LOG(LogMCPTest, Warning, TEXT("[Door] 짝 없는 서버 문 엔티티 %u 의 상태 %s"), EntityId, bOpen ? TEXT("열림") : TEXT("닫힘"));
+	}
+}
+
+AVHDoor* UVHDoorSubsystem::FindByServerEntity(uint16 EntityId) const
+{
+	const TWeakObjectPtr<AVHDoor>* Found = ServerDoors.Find(EntityId);
+	return Found ? Found->Get() : nullptr;
+}
+
+void UVHDoorSubsystem::LogServerBindSummary() const
+{
+	TArray<FString> NoServer;
+	int32 Open = 0;
+	for (const TWeakObjectPtr<AVHDoor>& Weak : Doors)
+	{
+		if (const AVHDoor* D = Weak.Get())
+		{
+			if (D->ServerEntityId == 0)
+			{
+				NoServer.Add(FString::Printf(TEXT("%s%s"), *D->ServerId.ToString(), D->bLocked ? TEXT("(잠김)") : TEXT("")));
+			}
+			Open += D->IsOpen() ? 1 : 0;
+		}
+	}
+	UE_LOG(LogMCPTest, Log, TEXT("[Door] 서버 문 짝짓기: 서버 문 %d개 ↔ 클라 문 %d개, 어긋남 %d, 서버에 없는 클라 문 %d개 [%s], 열림 %d, 상태 출처 %s"),
+		ServerDoors.Num(), Doors.Num(), BindProblems.Num(), NoServer.Num(), *FString::Join(NoServer, TEXT(", ")), Open, GetSourceName());
+	for (const FString& P : BindProblems)
+	{
+		UE_LOG(LogMCPTest, Warning, TEXT("[Door]   어긋남: %s"), *P);
+	}
+}
+
+bool UVHDoorSubsystem::TraceClosedDoor(const FVector& From, const FVector& To, FVector& OutHit, float& OutT, AVHDoor** OutDoor) const
+{
+	float Best = 2.f;
+	AVHDoor* BestDoor = nullptr;
+	for (const TWeakObjectPtr<AVHDoor>& Weak : Doors)
+	{
+		AVHDoor* D = Weak.Get();
+		float T = 0.f;
+		if (D && D->BlocksShots() && D->IntersectPanel(From, To, T) && T < Best)
+		{
+			Best = T;
+			BestDoor = D;
+		}
+	}
+	if (!BestDoor)
+	{
+		return false;
+	}
+	OutT = Best;
+	OutHit = FMath::Lerp(From, To, Best);
+	if (OutDoor)
+	{
+		*OutDoor = BestDoor;
+	}
+	return true;
+}
+
+void UVHDoorSubsystem::PlayDoorHitFx(const FVector& At, const FLinearColor& Color) const
+{
+	if (UVHWeaponFxSubsystem* Fx = UVHWeaponFxSubsystem::Get(this))
+	{
+		Fx->DoorHitSpark(At, Color);
+	}
+	UVHSoundConfig::Play(this, EVHSound::DoorHit, At);
 }
 
 #undef LOCTEXT_NAMESPACE

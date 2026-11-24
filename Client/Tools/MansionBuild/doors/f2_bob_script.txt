@@ -1,0 +1,75 @@
+# 2026-11-24 닫힌 문 사격 과녁: Bob 이 wall_119 너머(3375,3150)에 계속 선다 (쓰러져 다시 생겨도 8초마다 돌아옴)
+1.0 vh.CeilingGo 3375 3150
+1.2 vh.Aim 180
+9.0 vh.CeilingGo 3375 3150
+9.2 vh.Aim 180
+17.0 vh.CeilingGo 3375 3150
+17.2 vh.Aim 180
+25.0 vh.CeilingGo 3375 3150
+25.2 vh.Aim 180
+33.0 vh.CeilingGo 3375 3150
+33.2 vh.Aim 180
+41.0 vh.CeilingGo 3375 3150
+41.2 vh.Aim 180
+49.0 vh.CeilingGo 3375 3150
+49.2 vh.Aim 180
+57.0 vh.CeilingGo 3375 3150
+57.2 vh.Aim 180
+65.0 vh.CeilingGo 3375 3150
+65.2 vh.Aim 180
+73.0 vh.CeilingGo 3375 3150
+73.2 vh.Aim 180
+81.0 vh.CeilingGo 3375 3150
+81.2 vh.Aim 180
+89.0 vh.CeilingGo 3375 3150
+89.2 vh.Aim 180
+97.0 vh.CeilingGo 3375 3150
+97.2 vh.Aim 180
+105.0 vh.CeilingGo 3375 3150
+105.2 vh.Aim 180
+113.0 vh.CeilingGo 3375 3150
+113.2 vh.Aim 180
+121.0 vh.CeilingGo 3375 3150
+121.2 vh.Aim 180
+129.0 vh.CeilingGo 3375 3150
+129.2 vh.Aim 180
+137.0 vh.CeilingGo 3375 3150
+137.2 vh.Aim 180
+145.0 vh.CeilingGo 3375 3150
+145.2 vh.Aim 180
+153.0 vh.CeilingGo 3375 3150
+153.2 vh.Aim 180
+161.0 vh.CeilingGo 3375 3150
+161.2 vh.Aim 180
+169.0 vh.CeilingGo 3375 3150
+169.2 vh.Aim 180
+177.0 vh.CeilingGo 3375 3150
+177.2 vh.Aim 180
+185.0 vh.CeilingGo 3375 3150
+185.2 vh.Aim 180
+193.0 vh.CeilingGo 3375 3150
+193.2 vh.Aim 180
+201.0 vh.CeilingGo 3375 3150
+201.2 vh.Aim 180
+209.0 vh.CeilingGo 3375 3150
+209.2 vh.Aim 180
+217.0 vh.CeilingGo 3375 3150
+217.2 vh.Aim 180
+225.0 vh.CeilingGo 3375 3150
+225.2 vh.Aim 180
+233.0 vh.CeilingGo 3375 3150
+233.2 vh.Aim 180
+241.0 vh.CeilingGo 3375 3150
+241.2 vh.Aim 180
+249.0 vh.CeilingGo 3375 3150
+249.2 vh.Aim 180
+257.0 vh.CeilingGo 3375 3150
+257.2 vh.Aim 180
+265.0 vh.CeilingGo 3375 3150
+265.2 vh.Aim 180
+273.0 vh.CeilingGo 3375 3150
+273.2 vh.Aim 180
+281.0 vh.CeilingGo 3375 3150
+281.2 vh.Aim 180
+289.0 vh.CeilingGo 3375 3150
+289.2 vh.Aim 180

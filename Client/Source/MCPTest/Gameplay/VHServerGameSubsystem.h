@@ -151,6 +151,11 @@ public:
 	bool IsSameAsHeldConsumable(const AVHInteractableBase* Object) const;
 	void SendInteractBegin(UVHInteractionComponent* By, AVHInteractableBase* Target, const FVHInteractOffer& Offer);
 	void SendInteractCancel(UVHInteractionComponent* By);
+	/**
+	 * 문 F (2026-11-24 팀 서버): CS_ACTION InteractBegin(문 엔티티 id). 열림은 서버 스냅샷 ES_OPENED 로만 바뀐다(UVHDoorSubsystem).
+	 * 거절(SC_ACTION_REJECT)은 문 전용 안내 (TargetBusy = 문간에 누가 있음, OutOfRange = 150cm 밖)
+	 */
+	void SendDoorInteract(uint16 DoorEntityId, bool bWantOpen, const FString& DoorDesc);
 
 	// ── 플레이어 컨트롤러가 부른다 ──
 	/** 공격 키를 누름/뗌 (AttackStart / AttackStop). 누르는 동안 서버가 무기 간격마다 공격한다 */
@@ -304,12 +309,23 @@ protected:
 		uint16 TargetId = 0;
 		bool bOwn = false;							// 방금 내가 취소·공격·구르기·스킬·소비 아이템을 보냄
 		RobProto::ActionType OwnAction = RobProto::ActionType::None;
-		bool bClosed = false;						// 같은 틱에 그 구역이 사라짐(수명 끝) → 실패
-		float RemainingAtCancel = 0.f;				// Cancel 때 화면의 남은 수명(서버 timer_ms 기준)
+		bool bClosed = false;						// 같은 틱에 Despawn 된 반납지점 id 가 Cancel 의 target 과 같음 → 구역 닫혀 실패 (이것만 본다)
+		float RemainingAtCancel = 0.f;				// Cancel 때 화면의 남은 수명(서버 timer_ms 기준, 로그용)
 		bool bOutside = false;						// Cancel 때 내 위치가 구역 범위 밖
 		float DistanceAtCancel = 0.f;
 	};
 	FReturnCancel ReturnCancel;
+	/** 이번 틱(다음 스냅샷까지)에 사라진 반납지점 id (게임 시작 직후처럼 3곳이 함께 바뀌는 틱 확인용 로그) */
+	TArray<uint16> TickDespawnedReturnPoints;
+	/** 보낸 문 F (응답 = 스냅샷의 ES_OPENED 변화, 거절 = SC_ACTION_REJECT 같은 seq) */
+	struct FPendingDoor
+	{
+		uint16 Seq = 0;
+		uint16 DoorId = 0;
+		bool bWantOpen = false;
+		double SentTime = 0.0;
+	};
+	FPendingDoor PendingDoor;
 	bool bApplyingGameStart = false;			// ApplyGameStart 안에서 시작 엔티티를 만드는 중
 	float StartTimerLagSeconds = 0.f;			// SC_GAME_START 를 받은 뒤 적용까지 걸린 시간 (반납지점 남은 수명 보정)
 	/** 스냅샷(틱 끝)에서: 끊긴 반납이 있으면 이유를 골라 안내하고 true (일반 "공격받아 작업이 멈춤" 안내 대신) */
@@ -448,6 +464,21 @@ protected:
 	int32 TaserTestStage = 0;
 	double TaserTestT0 = 0.0;
 	uint16 TaserTestTarget = 0;
+	// 개발용 봇 -VHBotDoorShot (2026-11-24): 무기 상자를 열어 권총·레일건을 구한 뒤, 닫힌 문(-VHDoorShotX/Y, 기본 wall_119 앞) 너머
+	// 다른 플레이어를 쏜다 → 권총은 막혀야(피해 0) 하고 문을 열면 맞음, 레일건은 닫힌 문을 뚫어야 함. 로그 [문 사격]
+	void TickBotDoorShot(float DeltaTime);
+	int32 DoorShotStage = 0;
+	int32 DoorShotSub = 0;
+	double DoorShotNext = 0.0;
+	uint8 DoorShotWeapon = 0;				// 지금 시험하는 무기
+	int32 DoorShotHitsBefore = 0;
+	bool bDoorShotPistolDone = false;
+	bool bDoorShotRailDone = false;
+	TMap<uint16, int32> DoorShotTries;
+	int32 DamageDealtToThieves = 0;			// 내가 다른 플레이어에게 준 SC_DAMAGE 수 (보호막만 깎여도 센다)
+	/** 부서진 상자 (드롭 기록: 같은 자리에 1.5초 안에 생긴 아이템 = 그 상자에서 나온 것) */
+	struct FBrokenBox { FVector Pos; uint16 Type = 0; double Time = 0.0; };
+	TArray<FBrokenBox> BrokenBoxes;
 	int32 RailTestStage = 0;
 	int32 RailTestSub = 0;
 	double RailTestT0 = 0.0;

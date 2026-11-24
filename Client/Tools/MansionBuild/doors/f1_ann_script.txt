@@ -1,0 +1,47 @@
+# 2026-11-24 서버 문 시험: Ann(도적1). 문 wall_119 (3300,3150) 복도(x<3280) ↔ 객실 5(x>3320). 서버 문 가운데 150cm 안에서 F
+1.0 vh.CeilingGo 3170 3150
+1.2 vh.Aim 0
+2.4 vh.DoorBind
+2.5 vh.Shot f1_01_ann_closed
+# (1) Ann 이 연다 → Bob 화면에서도 열림
+3.0 vh.PressF
+4.2 vh.DoorPeekInfo
+4.3 vh.CeilingInfo
+4.4 vh.Shot f1_02_ann_opened
+# (2) Bob 이 6.0 에 닫는다 → Ann 화면에서도 닫힘
+7.0 vh.DoorPeekInfo
+7.1 vh.CeilingInfo
+7.2 vh.Shot f1_04_ann_closed_by_bob
+# (3) Ann 이 다시 열고, Bob 이 문간(9.0)에 선 채 Ann 이 닫기 → TargetBusy
+8.0 vh.PressF
+10.0 vh.PressF
+10.6 vh.Shot f1_05_ann_busy
+# (4) 150cm 밖에서 닫기 요청(vh.DoorSet 은 F 의 거리 거름을 거치지 않음) → OutOfRange
+11.0 vh.CeilingGo 3020 3150
+12.0 vh.DoorSet close near
+12.6 vh.Shot f1_06_ann_far
+# (5) 닫힌 문 너머 Bob(3375) 을 삼단봉으로 → 막힘(피해 없음). 13.0 에 Bob 이 문간에서 비킴
+13.5 vh.CeilingGo 3215 3150
+13.7 vh.Aim 0
+14.5 vh.PressF
+15.5 vh.DoorInfo
+16.0 vh.Press attack
+17.0 vh.Press attack
+18.0 vh.Shot f1_07_ann_baton_closed
+# 열고 다시 → 맞음
+19.0 vh.PressF
+20.0 vh.Press attack
+20.8 vh.Shot f1_08_ann_baton_open
+# (6) 사제 테이저: 닫힌 문에 쏘기 → 문에서 멈춤·문 불꽃·소리, Bob 경직 없음
+22.0 vh.PressF
+23.0 vh.Press skill
+24.0 vh.Shot f1_09_ann_taser_ready
+24.5 vh.Press attack
+24.6 vh.Shot f1_10_ann_taser_door
+25.5 vh.CeilingInfo
+# 쿨타임 30초 뒤 열린 문으로 쏘기 → Bob 경직
+56.0 vh.PressF
+57.0 vh.Press skill
+58.0 vh.Press attack
+58.2 vh.Shot f1_11_ann_taser_open
+59.5 vh.DoorBind

@@ -87,6 +87,20 @@ public:
 	/** 개발용 한 줄 */
 	FString Describe() const;
 
+	/**
+	 * 이 문이 지금 총알·근접·폭발을 막는가 (서버 규칙 2026-11-24: 닫힌 문 = 벽, 열림 = ES_OPENED).
+	 * 상태(IsOpen) 기준이고 문짝 움직임과는 무관하다. 잠긴 바깥 문은 늘 막는다. vh.Doors 0 이면 막지 않는다
+	 */
+	bool BlocksShots() const { return bEnabledApplied && (bLocked || !bWantOpen); }
+
+	/** 선분 From→To 가 문짝 자리(벽 두께 × 문 폭 × 입구 높이)를 지나면 true 와 처음 닿는 비율(0~1) */
+	bool IntersectPanel(const FVector& From, const FVector& To, float& OutT) const;
+
+	/** 서버 Door 엔티티 번호 (게임 중 UVHDoorSubsystem::BindServerDoor 가 짝지음. 0 = 서버에 없는 문, 예: 잠긴 바깥 문) */
+	uint16 ServerEntityId = 0;
+	/** 서버 문 번호 (Door 엔티티 type_id, 짝이 없으면 -1) */
+	int32 ServerDoorIndex = -1;
+
 	/** 문을 보이게/숨기게 (vh.Doors 0/1) */
 	void ApplyEnabled(bool bEnabled);
 

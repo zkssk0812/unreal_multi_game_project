@@ -131,6 +131,11 @@ PLAN.update({
     "DOOR_OPEN": (["RPG/doorOpen_1", "RPG/doorOpen_2"], 0.55, 1.05, 1.2, 0.15, False),
     "DOOR_CLOSE": (["RPG/doorClose_1", "RPG/doorClose_2", "RPG/doorClose_3", "RPG/doorClose_4"], 0.5, 1.0, 1.15, 0.15, False),
 })
+# 닫힌 문에 총알·테이저가 맞음 (2026-11-24, 서버가 닫힌 문을 벽처럼 침): 나무판 "턱" + 작은 금속음. 이미 받은 Kenney Impact 소리만 씀
+PLAN.update({
+    "DOOR_HIT": (["Impact/impactPlank_medium_000"], 0.75, 0.9, 1.1, 0.05, False,
+                 {"layers": [(["Impact/impactMetal_light_000", "Impact/impactMetal_light_001", "Impact/impactMetal_light_002"], 0.3, 1.3, 0.0)]}),
+})
 ATT_SMALL = DIR + "/ATT_VHSfxSmall"
 
 
@@ -248,12 +253,14 @@ def expand(files):
     return out
 
 
-def do_fill():
+def do_fill(only=None):
     da = EAL.load_asset(DA)
     sounds = da.get_editor_property("sounds")
     filled = 0
     small = ensure_small_att()
     for name, entry in PLAN.items():
+        if only and name not in only:
+            continue    # fillone: 이름을 준 칸만 다시 채운다 (다른 칸은 그대로)
         files, vol, pmin, pmax, gap, two_d = entry[:6]
         extra = entry[6] if len(entry) > 6 else {}
         key = getattr(unreal.VHSound, name)
@@ -303,13 +310,23 @@ def do_fill():
 
 
 def main(argv):
-    try:
-        if unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).is_in_play_in_editor():
-            unreal.log_error("[Sound] 플레이 중에는 돌리지 않습니다")
-            return
-    except Exception:
-        pass
+    # nocheck: 커맨드렛(-run=pythonscript)에서 돌릴 때. LevelEditorSubsystem 이 없어 확인 호출이 에디터를 죽인다
+    if "nocheck" in argv:
+        argv = [a for a in argv if a != "nocheck"]
+    else:
+        try:
+            if unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).is_in_play_in_editor():
+                unreal.log_error("[Sound] 플레이 중에는 돌리지 않습니다")
+                return
+        except Exception:
+            pass
     steps = argv or ["asset"]
+    if steps[0] == "fillone":
+        # py setup_sounds.py fillone DOOR_HIT [이름 …] : 그 칸만 만들고 채운다
+        names = steps[1:]
+        do_asset()
+        do_fill(set(names))
+        return
     if "all" in steps:
         steps = ["asset", "import", "fill"]
     for s in steps:

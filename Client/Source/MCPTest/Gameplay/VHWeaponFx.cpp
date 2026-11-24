@@ -1,5 +1,6 @@
 #include "Gameplay/VHWeaponFx.h"
 
+#include "Gameplay/VHDoorSubsystem.h"
 #include "Gameplay/VHFxActor.h"
 #include "Gameplay/VHWeaponCatalog.h"
 #include "Gameplay/VHWeaponVisualComponent.h"
@@ -197,6 +198,14 @@ void UVHWeaponFxSubsystem::HitSpark(const FLinearColor& Color, const FVector& Po
 	{
 		Ball->SetGrow(1.6f);
 	}
+}
+
+void UVHWeaponFxSubsystem::DoorHitSpark(const FVector& Pos, const FLinearColor& Color)
+{
+	// 닫힌 문 = 벽처럼 막힌 자리 (서버 2026-11-24): 무기 색 불꽃 + 나무 부스러기 색 작은 불꽃 + 짧은 빛
+	HitSpark(Color, Pos, 16.f);
+	HitSpark(FLinearColor(0.85f, 0.6f, 0.35f), Pos + FVector(0.f, 0.f, 6.f), 10.f);
+	Flash(Pos, Color, 2500.f, 220.f, 0.12f);
 }
 
 // ───────────────── 동작의 연출 순간 ─────────────────
@@ -606,7 +615,9 @@ void UVHWeaponFxSubsystem::OnFire(uint8 WeaponId, const FVector& Feet, float Yaw
 	{
 		Shooter->GetMuzzleLocation(Muzzle);
 	}
-	// 직선이 끝나는 곳: 맞은 대상(가슴) > 벽 > 사거리
+	// 직선이 끝나는 곳: 맞은 대상(가슴) > 벽·닫힌 문 > 사거리.
+	// 닫힌 문은 서버도 벽처럼 막는다(2026-11-24) → 문에서 멈추고 문에 맞은 불꽃·소리 (bDoorHit)
+	bool bDoorHit = false;
 	auto LineEnd = [&](float Range) -> FVector
 	{
 		if (HitFeet)
@@ -619,6 +630,16 @@ void UVHWeaponFxSubsystem::OnFire(uint8 WeaponId, const FVector& Feet, float Yaw
 		if (World->LineTraceSingleByChannel(Hit, Chest, End, ECC_WorldStatic, Query))
 		{
 			End = Hit.ImpactPoint;
+		}
+		const UVHDoorSubsystem* Doors = World->GetSubsystem<UVHDoorSubsystem>();
+		FVector DoorAt;
+		float DoorT = 0.f;
+		if (Doors && Doors->TraceClosedDoor(Chest, End, DoorAt, DoorT))
+		{
+			End = DoorAt;
+			bDoorHit = true;
+			Doors->PlayDoorHitFx(DoorAt, Color);
+			UE_LOG(LogVHWeaponFx, Log, TEXT("[문 막음] 무기 %u 직선이 닫힌 문 (%.0f, %.0f)에서 멈춤"), WeaponId, DoorAt.X, DoorAt.Y);
 		}
 		return End;
 	};
@@ -638,9 +659,9 @@ void UVHWeaponFxSubsystem::OnFire(uint8 WeaponId, const FVector& Feet, float Yaw
 		const FVector End = LineEnd(VHFx::PistolLength);
 		VHFx::ShapeBeam(World, Muzzle, End, 6.f, Color, 8.f, 0.08f);
 		VHFx::ShapeBeam(World, Muzzle, End, 2.5f, FLinearColor(1.f, 0.95f, 0.8f), 10.f, 0.05f);	// 밝은 심
-		if (!HitFeet)
+		if (!HitFeet && !bDoorHit)
 		{
-			HitSpark(FLinearColor(1.f, 0.8f, 0.4f), End, 14.f);	// 벽에 맞은 자리 작은 불꽃
+			HitSpark(FLinearColor(1.f, 0.8f, 0.4f), End, 14.f);	// 벽에 맞은 자리 작은 불꽃 (문은 문 불꽃을 이미 냈다)
 		}
 		break;
 	}

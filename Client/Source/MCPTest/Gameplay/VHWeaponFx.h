@@ -61,6 +61,8 @@ public:
 	void OnRailgunChargeChanged(UVHWeaponVisualComponent* V, bool bCharging);
 	/** 짧은 섬광 조명 (점광원이 Seconds 동안 꺼져 간다) */
 	void Flash(const FVector& Pos, const FLinearColor& Color, float Intensity, float Radius, float Seconds);
+	/** 닫힌 문에 총알·테이저가 맞은 자리의 불꽃 (소리는 UVHDoorSubsystem::PlayDoorHitFx) */
+	void DoorHitSpark(const FVector& Pos, const FLinearColor& Color);
 
 	/** 바닥에 놓는 평면 도형의 앞·오른쪽 보정 (Plane 메시의 UV 방향. 개발 명령 vh.FxPlane 으로 맞춘다) */
 	static float PlaneYawOffset;

@@ -14,8 +14,8 @@ class AVHSafe;
 UENUM(BlueprintType)
 enum class EVHDoorStateSource : uint8
 {
-	Local	UMETA(DisplayName = "내 클라 (지금)"),
-	Server	UMETA(DisplayName = "서버 메시지 (아직 없음 → 로컬)"),
+	Local	UMETA(DisplayName = "내 클라 (늘 로컬)"),
+	Server	UMETA(DisplayName = "서버 (서버가 문을 보내면 서버, 아니면 로컬)"),
 };
 
 /** 열린 문 너머 보이는 범위를 정하는 방법 [2026-11-24] */
@@ -215,9 +215,16 @@ public:
 	//    처음엔 모두 닫힘. 문 앞에서 F(상자·아이템·반납이 F 대상이 아닐 때만) = 열기/닫기. 잠긴 바깥 문은 안 열림.
 	//    문 상태는 UVHDoorSubsystem 한 곳에서 바뀐다 (DoorStateSource: 지금 = 내 클라, 나중 = 서버 메시지)
 
-	/** 문 상태가 오는 곳. Server 는 아직 프로토콜에 문 상태가 없어서 로컬로 동작한다(로그 경고) */
+	/**
+	 * 문 상태가 오는 곳. Server(기본) = 서버가 Door 엔티티를 보내면 F 는 서버로 요청만 하고 열림은 서버 스냅샷(ES_OPENED)을 따른다
+	 * (2026-11-24 팀 서버). 서버 문이 없으면(가짜 서버) 로컬. Local = 늘 내 클라에서 바로 (다른 클라와 안 맞음)
+	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door")
-	EVHDoorStateSource DoorStateSource = EVHDoorStateSource::Local;
+	EVHDoorStateSource DoorStateSource = EVHDoorStateSource::Server;
+
+	/** 서버 문: 문 가운데에서 이 거리(2D) 안에서만 F 로 고른다. 서버 판정 GameData::DoorRangeCm 150 에서 위치 차이 여유를 뺀 값 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door", meta = (ClampMin = 30, Units = "cm"))
+	float DoorServerRange = 140.f;
 
 	/** F로 문을 고를 수 있는 거리: 벽 면에서 앞뒤로 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Door", meta = (ClampMin = 30, Units = "cm"))
