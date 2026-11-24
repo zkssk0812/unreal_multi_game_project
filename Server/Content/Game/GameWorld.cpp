@@ -85,9 +85,9 @@ void GameWorld::Setup(const MapData& map, const std::vector<ThiefSlot>& thieves,
 
 	// 4) 금고 1개 (O-01), 상자 (A-02), 필드 아이템 (I-14)
 	PlaceSafe(startRooms);		// 의적이 시작하는 방에는 두지 않는다 (시작하자마자 열리지 않게)
-	for (size_t i = 0; i < GameData::BoxCount; ++i)
+	for (size_t i = 0; i < GameData::BoxCount; ++i)		// 무기 상자 14 · 환금 상자 6 (자리는 모두 무작위)
 		if (const auto cell = RandomFreeCell())
-			Spawn(EntityKind::Box, *cell);
+			Spawn(EntityKind::Box, *cell, static_cast<uint16_t>(i < GameData::ValuableBoxCount ? BoxType::Valuable : BoxType::Weapon));
 	for (size_t i = 0; i < GameData::FieldItemStart; ++i)
 		UpdateFieldItems();
 	_nextFieldItemMs = GameData::FieldItemEveryMs;

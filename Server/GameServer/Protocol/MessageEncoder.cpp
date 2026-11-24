@@ -109,6 +109,8 @@ VH_SAME_ENUM(Content::ConsumableId, ConsumableId, HealKit);
 VH_SAME_ENUM(Content::ConsumableId, ConsumableId, Smoke);
 VH_SAME_ENUM(Content::ConsumableId, ConsumableId, Flashbang);
 VH_SAME_ENUM(Content::ConsumableId, ConsumableId, Jetpack);
+VH_SAME_ENUM(Content::BoxType, BoxType, Weapon);
+VH_SAME_ENUM(Content::BoxType, BoxType, Valuable);
 VH_SAME_ENUM(Content::FieldItemId, FieldItemId, PotionS);
 VH_SAME_ENUM(Content::FieldItemId, FieldItemId, PotionM);
 VH_SAME_ENUM(Content::FieldItemId, FieldItemId, PotionL);

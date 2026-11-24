@@ -36,17 +36,15 @@ bool BoxAt(const GameWorld& world, const Vec3& pos)
 
 // ───────────────── 상자 드롭 비율 (클라 2026-11-22) ─────────────────
 
-TEST_CASE(Box_Drops_Weapon60_PistolTaserCommon_RailgunFlameRare)
+// 같은 종류 상자 n개를 삼단봉으로 하나씩 부수고, 나온 것을 (종류, typeId)별로 센다
+static std::map<std::pair<EntityKind, uint16_t>, int> BreakBoxes(BoxType type, int n)
 {
-	// 상자 600개를 삼단봉으로 부수고 나온 무기를 센다: 무기 60%, 권총·테이저건 각 20%, 레일건·화염방사기 각 5%
 	GameWorld world = Arena(1);
 	const Vec3 spot = Offset(HallW, 100, 0);
-	constexpr int boxes = 600;
-	int weapons = 0;
-	std::map<WeaponId, int> byWeapon;
-	for (int i = 0; i < boxes; ++i)
+	std::map<std::pair<EntityKind, uint16_t>, int> drops;
+	for (int i = 0; i < n; ++i)
 	{
-		world.AddNow(EntityKind::Box, spot);
+		world.AddNow(EntityKind::Box, spot, static_cast<uint16_t>(type));
 		world.TakeEvents();
 		Attack(world, A, 0.0f);
 		Run(world, 500);
@@ -54,22 +52,53 @@ TEST_CASE(Box_Drops_Weapon60_PistolTaserCommon_RailgunFlameRare)
 		for (const WorldEvent& event : RunCollect(world, 500))
 			if (const auto* spawn = std::get_if<Msg::EntitySpawn>(&event))
 				for (const Msg::EntityInfo& info : spawn->entities)
-					if (info.kind == EntityKind::WeaponPickup)
-					{
-						++weapons;
-						++byWeapon[static_cast<WeaponId>(info.typeId)];
-					}
+					if (info.kind != EntityKind::Box && info.kind != EntityKind::FieldItem)	// 다시 생긴 상자·20초 회복약 제외
+						++drops[{ info.kind, info.typeId }];
 		for (const Entity& e : world.Entities())				// 나온 것은 치운다 (다음 상자 판정에 끼지 않게)
 			if (e.kind != EntityKind::Thief && e.kind != EntityKind::Guard && e.kind != EntityKind::ReturnPoint)
 				world.Find(e.id)->removed = true;
 	}
-	const double weaponRate = static_cast<double>(weapons) / boxes;
-	CHECK(weaponRate > 0.52 && weaponRate < 0.68);
-	CHECK_EQ(byWeapon[WeaponId::Baton], 0);
-	const int common = byWeapon[WeaponId::Pistol] + byWeapon[WeaponId::Taser];
-	const int rare = byWeapon[WeaponId::Railgun] + byWeapon[WeaponId::Flamethrower];
+	return drops;
+}
+
+static int CountOf(const std::map<std::pair<EntityKind, uint16_t>, int>& drops, EntityKind kind)
+{
+	int n = 0;
+	for (const auto& [key, count] : drops)
+		if (key.first == kind)
+			n += count;
+	return n;
+}
+
+TEST_CASE(Box_WeaponBox_Weapon80_Consumable20_PistolTaserCommon_RailgunFlameRare)
+{
+	// 무기 상자 600개: 무기 80% · 소비 아이템 20%, 그 밖에는 안 나옴. 권총·테이저건 각 20%, 레일건·화염방사기 각 5% (클라 2026-11-24)
+	constexpr int boxes = 600;
+	auto drops = BreakBoxes(BoxType::Weapon, boxes);
+	const int weapons = CountOf(drops, EntityKind::WeaponPickup);
+	const int consumables = CountOf(drops, EntityKind::ConsumablePickup);
+	CHECK_EQ(weapons + consumables, boxes);						// 빈 상자 없음, 환금 아이템 없음
+	CHECK_EQ(CountOf(drops, EntityKind::Valuable), 0);
+	CHECK(consumables > boxes * 0.14 && consumables < boxes * 0.26);
+	CHECK_EQ((drops[{ EntityKind::WeaponPickup, static_cast<uint16_t>(WeaponId::Baton) }]), 0);
+	const auto byWeapon = [&](WeaponId w) { return drops[{ EntityKind::WeaponPickup, static_cast<uint16_t>(w) }]; };
+	const int common = byWeapon(WeaponId::Pistol) + byWeapon(WeaponId::Taser);
+	const int rare = byWeapon(WeaponId::Railgun) + byWeapon(WeaponId::Flamethrower);
 	CHECK(common > 3 * rare);									// 기대값 40% 대 10%
 	CHECK(rare > 0);
+}
+
+TEST_CASE(Box_ValuableBox_OnlyValuables_Common60_Advanced30_Rare10)
+{
+	constexpr int boxes = 600;
+	auto drops = BreakBoxes(BoxType::Valuable, boxes);
+	const auto quality = [&](ValuableQuality q) { return drops[{ EntityKind::Valuable, static_cast<uint16_t>(q) }]; };
+	CHECK_EQ(CountOf(drops, EntityKind::Valuable), boxes);		// 항상 환금 아이템 하나
+	CHECK_EQ(CountOf(drops, EntityKind::WeaponPickup) + CountOf(drops, EntityKind::ConsumablePickup), 0);
+	CHECK(quality(ValuableQuality::Common) > boxes * 0.52 && quality(ValuableQuality::Common) < boxes * 0.68);
+	CHECK(quality(ValuableQuality::Advanced) > boxes * 0.22 && quality(ValuableQuality::Advanced) < boxes * 0.38);
+	CHECK(quality(ValuableQuality::Rare) > boxes * 0.05 && quality(ValuableQuality::Rare) < boxes * 0.15);
+	CHECK_EQ(quality(ValuableQuality::Unique), 0);				// 보물은 금고에서만
 }
 
 // ───────────────── 무작위 배치 (Q-38, A-05) ─────────────────
@@ -107,6 +136,14 @@ TEST_CASE(Place_SafeAndBoxes_RandomRoomCells)
 		if (box)
 			firstBoxSpots.insert({ box->pos.x, box->pos.y });
 		CHECK_EQ(CountKind(world, EntityKind::Box), GameData::BoxCount);
+		size_t valuableBoxes = 0;
+		for (const Entity& e : world.Entities())
+			if (e.kind == EntityKind::Box)
+			{
+				CHECK(e.typeId == static_cast<uint16_t>(BoxType::Weapon) || e.typeId == static_cast<uint16_t>(BoxType::Valuable));
+				valuableBoxes += e.typeId == static_cast<uint16_t>(BoxType::Valuable);
+			}
+		CHECK_EQ(valuableBoxes, GameData::ValuableBoxCount);	// 무기 상자 14 : 환금 상자 6 (클라 2026-11-24)
 	}
 	CHECK(safeRooms.size() >= 10);			// 40판이면 여러 방에 고루 나옴
 	CHECK(firstBoxSpots.size() >= 30);
@@ -131,7 +168,7 @@ TEST_CASE(Item_Box_Damage20Accumulates_ThenRespawnsSameSpot)
 {
 	GameWorld world = Arena(1);
 	const Vec3 spot = Offset(HallW, 100, 0);
-	const uint16_t box = world.AddNow(EntityKind::Box, spot);
+	const uint16_t box = world.AddNow(EntityKind::Box, spot, static_cast<uint16_t>(BoxType::Valuable));
 	Attack(world, A, 0.0f);
 	CHECK(world.Find(box) != nullptr && world.Find(box)->hp == 10);
 	Run(world, 500);
@@ -141,6 +178,9 @@ TEST_CASE(Item_Box_Damage20Accumulates_ThenRespawnsSameSpot)
 	CHECK(!BoxAt(world, spot));
 	Run(world, 31000);
 	CHECK(BoxAt(world, spot));							// 30~60초 뒤 같은 자리 (O-14)
+	for (const Entity& e : world.Entities())
+		if (e.kind == EntityKind::Box && e.pos.x == spot.x && e.pos.y == spot.y)
+			CHECK_EQ(e.typeId, static_cast<uint16_t>(BoxType::Valuable));	// 같은 종류로
 }
 
 TEST_CASE(Item_Box_Interact3s_CancelResets)
@@ -172,27 +212,24 @@ TEST_CASE(Item_Interact_StopsWhenHit)
 	CHECK(world.Find(box) != nullptr);					// 멈췄으니 3초가 지나도 안 부서짐
 }
 
-TEST_CASE(Item_Box_DropsAtMostOneItem)
+TEST_CASE(Item_Box_AlwaysDropsExactlyOneItem)
 {
+	// 두 종류 모두 빈 상자는 없고 아이템은 딱 하나 (클라 2026-11-24)
 	GameWorld world = Arena(1);
-	size_t items = 0, empty = 0;
 	for (int i = 0; i < 30; ++i)		// 30 × 0.55초 < 20초: 필드 아이템 생성·상자 재생성과 겹치지 않게
 	{
 		const size_t before = world.Entities().size();
-		const uint16_t box = world.AddNow(EntityKind::Box, Offset(HallW, 100, 0));
+		const BoxType type = i % 2 == 0 ? BoxType::Weapon : BoxType::Valuable;
+		const uint16_t box = world.AddNow(EntityKind::Box, Offset(HallW, 100, 0), static_cast<uint16_t>(type));
 		world.Find(box)->hp = 1;
 		Attack(world, A, 0.0f);
 		Run(world, 500);
-		const size_t after = world.Entities().size();
-		CHECK(after + 1 >= before && after <= before + 1);	// 상자 하나가 아이템 0~1개로
-		(after == before + 1 ? items : empty)++;
+		CHECK_EQ(world.Entities().size(), before + 1);	// 상자 하나가 아이템 하나로
 		// 나온 아이템을 치운다 (다음 상자 판정과 섞이지 않게)
 		for (const Entity& e : world.Entities())
 			if (e.kind != EntityKind::Thief && e.kind != EntityKind::Guard && e.pos.x == Offset(HallW, 100, 0).x)
 				world.Find(e.id)->pos = Parking;
 	}
-	// 확률표 (O-12): 아이템이 나오는 쪽이 대부분 (95%). "없음"은 5%라 30개로는 안 나올 수도 있어 세지 않는다
-	CHECK(items > 0 && items > empty * 5);
 }
 
 // ───────────────── 소비 아이템 ─────────────────

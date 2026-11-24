@@ -167,22 +167,26 @@ constexpr uint32_t TreasureFirstValue = 2000;		// [명세 I-22]
 constexpr uint32_t NextTreasureValue(uint32_t value) { return (value * 12 + 99) / 100 * 10; }
 
 // ── 상자 (§11.5) [명세 O-11·O-12, 가정 A-02] ──
+// 상자는 두 종류 (클라 2026-11-24). Box의 typeId = BoxType
+//   무기 상자: 무기 80% · 소비 아이템 20%      환금 상자: 환금 아이템 100% (일반 60 · 고급 30 · 희귀 10)
+//   빈 상자·필드 아이템(회복약)은 상자에서 나오지 않는다 (회복약은 맵에 20초마다). 부서지면 같은 자리에 같은 종류로
+//   (전에는 한 종류: 무기 60 · 필드 10 · 없음 5 · 소비 15 · 일반 6 · 고급 3 · 희귀 1)
 constexpr int32_t BoxHp = 20;
 constexpr size_t BoxCount = 20;
+constexpr size_t ValuableBoxCount = 6;				// 무기 상자 14 : 환금 상자 6
+static_assert(ValuableBoxCount <= BoxCount);
 constexpr uint32_t BoxRespawnMinMs = 30000;
 constexpr uint32_t BoxRespawnMaxMs = 60000;
-// 드롭 확률(%): 무기 60 · 필드 10 · 없음 5 · 소비 15 · 일반 6 · 고급 3 · 희귀 1
-// (클라 2026-11-22: 무기를 더 자주. 전에는 무기 35 · 필드 20 · 없음 20)
-enum class BoxDrop : uint8_t { Weapon, FieldItem, Nothing, Consumable, Common, Advanced, Rare };
-struct BoxDropChance { BoxDrop drop; uint8_t percent; };
-inline constexpr BoxDropChance BoxDrops[] = {
-	{ BoxDrop::Weapon, 60 }, { BoxDrop::FieldItem, 10 }, { BoxDrop::Nothing, 5 }, { BoxDrop::Consumable, 15 },
-	{ BoxDrop::Common, 6 }, { BoxDrop::Advanced, 3 }, { BoxDrop::Rare, 1 },
-};
-consteval int SumBoxDrops() { int s = 0; for (const BoxDropChance& c : BoxDrops) s += c.percent; return s; }
-static_assert(SumBoxDrops() == 100, "상자 드롭 확률의 합은 100");
+constexpr uint8_t WeaponBoxConsumablePct = 20;		// 무기 상자에서 소비 아이템이 나올 확률 (나머지는 무기)
 
-// 상자에서 무기가 나왔을 때 무기별 비율(%). 권총·테이저건은 잘, 레일건·화염방사기는 드물게 (클라 2026-11-22).
+struct BoxValuableChance { ValuableQuality quality; uint8_t percent; };
+inline constexpr BoxValuableChance BoxValuables[] = {
+	{ ValuableQuality::Common, 60 }, { ValuableQuality::Advanced, 30 }, { ValuableQuality::Rare, 10 },
+};
+consteval int SumBoxValuables() { int s = 0; for (const BoxValuableChance& c : BoxValuables) s += c.percent; return s; }
+static_assert(SumBoxValuables() == 100, "환금 상자 품질 비율의 합은 100");
+
+// 무기 상자에서 무기가 나왔을 때 무기별 비율(%). 권총·테이저건은 잘, 레일건·화염방사기는 드물게 (클라 2026-11-22).
 // 삼단봉은 기본 무기라 나오지 않는다
 struct BoxWeaponChance { WeaponId weapon; uint8_t percent; };
 inline constexpr BoxWeaponChance BoxWeapons[] = {

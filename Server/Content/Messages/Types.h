@@ -34,7 +34,7 @@ enum class EntityKind : uint8_t
 	WeaponPickup,		// typeId = WeaponId, param = 남은 탄
 	ConsumablePickup,	// typeId = ConsumableId
 	FieldItem,			// typeId = FieldItemId (닿으면 효과)
-	Box,				// 부수면 아이템이 나옴
+	Box,				// 부수면 아이템이 나옴. typeId = BoxType
 	StickyTrap,			// 끈끈이 함정. owner = 설치자
 	Mine,				// typeId = WeaponId(BlastMine/ShockMine)
 	Smoke,				// 연막
@@ -66,6 +66,7 @@ enum class WeaponId : uint8_t
 enum class ConsumableId : uint8_t { None, HealKit, Smoke, Flashbang, Jetpack };
 enum class FieldItemId : uint8_t { None, PotionS, PotionM, PotionL };
 enum class ValuableQuality : uint8_t { Common, Advanced, Rare, Unique /*보물*/ };
+enum class BoxType : uint8_t { None, Weapon /*무기·소비 아이템*/, Valuable /*환금 아이템*/ };
 enum class SkillId : uint8_t { None, Taser, Sticky, Cloak };
 enum class SkillPhase : uint8_t { Cast, Active, End };
 enum class DownCause : uint8_t { Player, Guard };

@@ -379,7 +379,7 @@ private:
 	uint32_t _treasureValue = 0;		// 지금 보물의 가치 (반납되면 다음 보물 가치로)
 	std::optional<uint16_t> _lastSafeRoom;
 	std::vector<Thrown> _thrown;
-	struct BoxRespawn { Vec3 pos; uint32_t atMs = 0; };
+	struct BoxRespawn { Vec3 pos; uint32_t atMs = 0; uint16_t typeId = 0; };	// typeId = BoxType
 	std::vector<BoxRespawn> _boxRespawns;
 	uint32_t _nextFieldItemMs = 0;
 	std::vector<Vec3> _itemCells;		// 상자·필드 아이템을 놓을 수 있는 칸 (방 안, 걸을 수 있고 닿는 칸)

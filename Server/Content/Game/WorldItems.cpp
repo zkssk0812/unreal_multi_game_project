@@ -169,60 +169,48 @@ void GameWorld::BreakBox(Entity& box)
 	Remove(box);
 	// 같은 자리에 30~60초 뒤 다시 생김 (O-14, A-02)
 	const uint32_t wait = std::uniform_int_distribution<uint32_t>(GameData::BoxRespawnMinMs, GameData::BoxRespawnMaxMs)(_rng);
-	_boxRespawns.push_back({ box.pos, _nowMs + wait });
+	_boxRespawns.push_back({ box.pos, _nowMs + wait, box.typeId });	// 같은 종류로
 
-	// 드롭 표 (O-12). 각 분류 안의 아이템은 같은 확률
-	int roll = std::uniform_int_distribution<int>(0, 99)(_rng);
-	GameData::BoxDrop drop = GameData::BoxDrop::Nothing;
-	for (const GameData::BoxDropChance& chance : GameData::BoxDrops)
-	{
-		if (roll < chance.percent)
-		{
-			drop = chance.drop;
-			break;
-		}
-		roll -= chance.percent;
-	}
-
+	// 드롭 표 (O-12, 클라 2026-11-24): 상자 종류마다 항상 아이템 하나
 	const Vec3 pos = box.pos;
-	switch (drop)
+	if (static_cast<BoxType>(box.typeId) == BoxType::Valuable)
 	{
-	case GameData::BoxDrop::Weapon:
-	{
-		// 무기별 비율 GameData::BoxWeapons (권총·테이저건 20%, 레일건·화염방사기 5% …). 삼단봉은 나오지 않는다
+		// 환금 상자: 일반 60 · 고급 30 · 희귀 10
 		int pick = std::uniform_int_distribution<int>(0, 99)(_rng);
-		WeaponId weapon = GameData::BoxWeapons[0].weapon;
-		for (const GameData::BoxWeaponChance& chance : GameData::BoxWeapons)
+		ValuableQuality quality = GameData::BoxValuables[0].quality;
+		for (const GameData::BoxValuableChance& chance : GameData::BoxValuables)
 		{
 			if (pick < chance.percent)
 			{
-				weapon = chance.weapon;
+				quality = chance.quality;
 				break;
 			}
 			pick -= chance.percent;
 		}
-		const GameData::WeaponType* w = GameData::WeaponOf(weapon);
-		Spawn(EntityKind::WeaponPickup, pos, static_cast<uint16_t>(w->id), w->ammo);
-		break;
+		Spawn(EntityKind::Valuable, pos, static_cast<uint16_t>(quality), RandomValue(quality));
+		return;
 	}
-	case GameData::BoxDrop::FieldItem:
-		Spawn(EntityKind::FieldItem, pos, static_cast<uint16_t>(std::uniform_int_distribution<int>(1, 3)(_rng)));
-		break;
-	case GameData::BoxDrop::Consumable:
+
+	// 무기 상자 (종류가 없는 상자도 무기 상자로): 소비 아이템 20%, 나머지는 무기
+	if (std::uniform_int_distribution<int>(0, 99)(_rng) < GameData::WeaponBoxConsumablePct)
+	{
 		Spawn(EntityKind::ConsumablePickup, pos, static_cast<uint16_t>(std::uniform_int_distribution<int>(1, 4)(_rng)));
-		break;
-	case GameData::BoxDrop::Common:
-		Spawn(EntityKind::Valuable, pos, static_cast<uint16_t>(ValuableQuality::Common), RandomValue(ValuableQuality::Common));
-		break;
-	case GameData::BoxDrop::Advanced:
-		Spawn(EntityKind::Valuable, pos, static_cast<uint16_t>(ValuableQuality::Advanced), RandomValue(ValuableQuality::Advanced));
-		break;
-	case GameData::BoxDrop::Rare:
-		Spawn(EntityKind::Valuable, pos, static_cast<uint16_t>(ValuableQuality::Rare), RandomValue(ValuableQuality::Rare));
-		break;
-	case GameData::BoxDrop::Nothing:
-		break;
+		return;
 	}
+	// 무기별 비율 GameData::BoxWeapons (권총·테이저건 20%, 레일건·화염방사기 5% …). 삼단봉은 나오지 않는다
+	int pick = std::uniform_int_distribution<int>(0, 99)(_rng);
+	WeaponId weapon = GameData::BoxWeapons[0].weapon;
+	for (const GameData::BoxWeaponChance& chance : GameData::BoxWeapons)
+	{
+		if (pick < chance.percent)
+		{
+			weapon = chance.weapon;
+			break;
+		}
+		pick -= chance.percent;
+	}
+	const GameData::WeaponType* w = GameData::WeaponOf(weapon);
+	Spawn(EntityKind::WeaponPickup, pos, static_cast<uint16_t>(w->id), w->ammo);
 }
 
 void GameWorld::UpdateBoxRespawns()
@@ -231,7 +219,7 @@ void GameWorld::UpdateBoxRespawns()
 	{
 		if (_nowMs >= _boxRespawns[i].atMs)
 		{
-			Spawn(EntityKind::Box, _boxRespawns[i].pos);
+			Spawn(EntityKind::Box, _boxRespawns[i].pos, _boxRespawns[i].typeId);
 			_boxRespawns.erase(_boxRespawns.begin() + static_cast<std::ptrdiff_t>(i));
 			continue;
 		}
