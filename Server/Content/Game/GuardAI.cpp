@@ -13,10 +13,12 @@
 
 // 경비원 AI (docs/psd.md M3, 명세 §12). GameWorld의 멤버 함수를 파일만 나눠 둔 것.
 //
-//   순찰 ──플레이어가 보임──→ 추격 ──공격 범위(정면 60°) 안──→ 사격(멈춰서 0.1초마다)
-//    ↑                        │ ↑────────── 범위 밖으로 벗어남 ─┘
-//    └── 탐색(2초 둘러봄) ←── 3초 못 봄
-//   HP 0 → 자가 수리 5초(무적·정지) → 탐색 / 경직(섬광·테이저·제트팩·감전) → 풀리면 탐색
+// 행동 트리 (docs/경비원AI_행동트리.md, 2026-11-25에 FSM에서 바꿈). 매 틱 위에서부터 다시 평가:
+//   ? 경비원
+//     → 수리(HP 0, 5초 무적·정지)  → 경직(섬광·테이저·제트팩·감전)  → 깨어남(할 일만 정하고 아래로)
+//     → 전투(놓침 / 돌기·쏘기·움직이기)  → 발견(보이면 추격 + 동료 호출)  → 탐색  → 순찰
+//   하던 일(경로·탐색 지점·둘러보기)은 GuardBrain(블랙보드)에, brain.state는 SC_GUARD_ALERT로 클라에 간다.
+//   틀은 GuardBT.h, 트리는 아래 BuildGuardTree.
 //
 // 범위 (기획 그림): 탐지 범위 반지름 15m, 시야각 정면 90°(좌우 45°), 공격 범위 정면 60°(좌우 30°)
 // 몸은 초당 90°로만 돈다 (N-04): 타겟이 시야 안이어도 공격 범위 밖이면 돌아서 맞춘 뒤 쏜다 → 옆·뒤로 돌면 피할 수 있다.
@@ -92,225 +94,361 @@ void GameWorld::UpdateGuardTimers(Entity& guard)
 
 void GameWorld::ThinkGuard(Entity& guard, GuardBrain& brain, uint32_t dtMs)
 {
-	ClearBits(guard.state, StateBit::Running | StateBit::Attacking);	// 이번 틱에 달리거나 쏘면 다시 켠다
+	GuardCtx ctx{ *this, guard, brain, dtMs };
+	GuardTree().Tick(ctx);
+}
 
-	// 수리·경직: 아무것도 못 한다. 끝나면 그 자리를 둘러본다
-	if ((guard.state & StateBit::Repairing) != 0)
-	{
-		if (brain.state != GuardState::Repairing)
-			SetGuardState(guard, brain, GuardState::Repairing);
-		return;
-	}
-	if ((guard.state & StateBit::Stunned) != 0)
-	{
-		if (brain.state != GuardState::Stunned)
-		{
-			const uint16_t keep = brain.target;
-			const bool locked = brain.lockedByAttack;
-			const Vec3 vel = brain.seenVel;
-			SetGuardState(guard, brain, GuardState::Stunned);
-			brain.target = keep;				// 경직이 풀리면 같은 타겟을 다시 본다
-			brain.lockedByAttack = locked;
-			brain.seenVel = vel;				// 도망 방향 예측에 쓴다 (S-1·S-6)
-		}
-		return;
-	}
-	if (brain.state == GuardState::Repairing || brain.state == GuardState::Stunned)
-	{
-		const uint16_t keep = brain.target;
-		Entity* old = Find(keep);
-		if (old != nullptr && Detectable(*old) && CanSee(guard, *old))
-		{
-			const bool locked = brain.lockedByAttack;
-			SetGuardState(guard, brain, GuardState::Chase, keep);
-			brain.lockedByAttack = locked;
-		}
-		else if (_guardFeatures.stunMemory && brain.lastSeenMs != 0 && _nowMs - brain.lastSeenMs <= GameData::StunMemoryMs)
-		{
-			StartSearch(guard, brain, brain.lastSeenPos, true);	// S-6: 최근 6초 안에 본(맞은) 곳부터
-		}
-		else
-		{
-			StartSearch(guard, brain, guard.pos, false);			// 제자리를 둘러본다
-		}
-	}
+// ───────────────── 행동 트리 (docs/경비원AI_행동트리.md) ─────────────────
+//
+// ? 경비원 (매 틱 위에서부터 다시 평가)
+//   → 수리   → 경직   → 깨어남(할 일만 정하고 같은 틱에 아래로)   → 전투   → 발견   → 탐색   → 순찰
+// 하던 일(경로·탐색 지점·둘러보기)은 GuardBrain에 남아 있고, brain.state가 SC_GUARD_ALERT로 클라에 간다.
 
-	const float slow = (guard.state & StateBit::Slowed) != 0 ? GameData::StickySlow : 1.0f;	// 끈끈이 위 −50%
+const Bt::Node<GuardCtx>& GameWorld::GuardTree()
+{
+	static const std::unique_ptr<Bt::Node<GuardCtx>> tree = BuildGuardTree();
+	return *tree;
+}
 
-	// ── 쫓는 중: 타겟 유지 ──
-	if (brain.state == GuardState::Chase || brain.state == GuardState::Attack)
-	{
-		Entity* target = Find(brain.target);
-		const bool valid = target != nullptr && Detectable(*target);
-		const bool visible = valid && CanSee(guard, *target);
-		if (visible)
-			NoteTargetPos(brain, target->pos);
-		else
-			brain.lockedByAttack = false;		// 시야에서 벗어나면 고정이 풀림 (N-16)
+std::unique_ptr<Bt::Node<GuardCtx>> GameWorld::BuildGuardTree()
+{
+	using N = Bt::Node<GuardCtx>;
+	using Bt::Status;
+	using C = GuardCtx;
 
-		if (!valid || (!visible && _nowMs - brain.lastSeenMs > GameData::ChaseLoseMs))
-		{
-			// 놓침(3초) 또는 타겟이 쓰러짐·은신·연막 → 다른 사람이 보이면 그쪽, 아니면 마지막으로 본 곳 탐색
-			if (Entity* other = NearestVisibleThief(guard))
+	// ── 수리: HP 0 → 5초 제자리 (무적) ──
+	auto repair = N::Sequence("수리",
+		N::If("HP 0으로 수리 중", [](C& c) { return (c.guard.state & StateBit::Repairing) != 0; }),
+		N::Do("제자리에서 기다림", [](C& c) {
+			if (c.brain.state != GuardState::Repairing)
+				c.world.SetGuardState(c.guard, c.brain, GuardState::Repairing);
+			return Status::Running;
+		}));
+
+	// ── 경직: 타겟·도망 방향은 기억한다 ──
+	auto stun = N::Sequence("경직",
+		N::If("경직 중", [](C& c) { return (c.guard.state & StateBit::Stunned) != 0; }),
+		N::Do("기다림 (타겟 기억)", [](C& c) {
+			if (c.brain.state != GuardState::Stunned)
 			{
-				SetGuardState(guard, brain, GuardState::Chase, other->id);
-				NoteTargetPos(brain, other->pos);
-				return;
+				const uint16_t keep = c.brain.target;
+				const bool locked = c.brain.lockedByAttack;
+				const Vec3 vel = c.brain.seenVel;
+				c.world.SetGuardState(c.guard, c.brain, GuardState::Stunned);
+				c.brain.target = keep;				// 경직이 풀리면 같은 타겟을 다시 본다
+				c.brain.lockedByAttack = locked;
+				c.brain.seenVel = vel;				// 도망 방향 예측에 쓴다 (S-1·S-6)
 			}
-			return StartSearch(guard, brain, brain.lastSeenPos, true);
-		}
+			return Status::Running;
+		}));
 
-		if (visible)
-		{
-			const float toTarget = YawTo(guard.pos, target->pos);
-			TurnToward(guard, toTarget, dtMs);	// 초당 90°
-			const float dist = Dist2D(guard.pos, target->pos);
-			const bool inAttackCone = std::fabs(AngleDiff(toTarget, guard.yaw)) <= GameData::GuardAttackHalfAngleDeg &&
+	// ── 깨어남: 수리·경직이 끝난 틱. 할 일만 정하고 실패를 돌려줘서, 같은 틱에 아래 가지(전투·탐색)가 이어서 움직인다 ──
+	auto wake = N::Sequence("깨어남",
+		N::If("방금 수리·경직이 끝남", [](C& c) {
+			return c.brain.state == GuardState::Repairing || c.brain.state == GuardState::Stunned;
+		}),
+		N::Select("다시 할 일",
+			N::Do("기억하던 타겟이 보이면 추격", [](C& c) {
+				Entity* old = c.world.Find(c.brain.target);
+				if (old == nullptr || !Detectable(*old) || !c.world.CanSee(c.guard, *old))
+					return Status::Failure;
+				const bool locked = c.brain.lockedByAttack;
+				c.world.SetGuardState(c.guard, c.brain, GuardState::Chase, old->id);
+				c.brain.lockedByAttack = locked;
+				return Status::Success;
+			}),
+			N::Do("6초 안에 본 곳부터 탐색 (S-6)", [](C& c) {
+				GameWorld& w = c.world;
+				if (!w._guardFeatures.stunMemory || c.brain.lastSeenMs == 0 || w._nowMs - c.brain.lastSeenMs > GameData::StunMemoryMs)
+					return Status::Failure;
+				w.StartSearch(c.guard, c.brain, c.brain.lastSeenPos, true);
+				return Status::Success;
+			}),
+			N::Do("제자리부터 탐색", [](C& c) {
+				c.world.StartSearch(c.guard, c.brain, c.guard.pos, false);
+				return Status::Success;
+			})),
+		N::Do("아래 가지로 이어서", [](C&) { return Status::Failure; }));
+
+	// ── 전투: 놓침 ──
+	auto lost = N::Sequence("놓침",
+		N::If("쓰러짐·은신·연막, 또는 3초 못 봄", [](C& c) {
+			return !c.valid || (!c.visible && c.world._nowMs - c.brain.lastSeenMs > GameData::ChaseLoseMs);
+		}),
+		N::Select("다음 타겟",
+			N::Do("다른 플레이어가 보이면 그쪽 추격", [](C& c) {
+				Entity* other = c.world.NearestVisibleThief(c.guard);
+				if (other == nullptr)
+					return Status::Failure;
+				c.world.SetGuardState(c.guard, c.brain, GuardState::Chase, other->id);
+				c.world.NoteTargetPos(c.brain, other->pos);
+				return Status::Running;
+			}),
+			N::Do("마지막으로 본 곳 탐색", [](C& c) {
+				c.world.StartSearch(c.guard, c.brain, c.brain.lastSeenPos, true);
+				return Status::Running;
+			})));
+
+	// ── 전투: 쏘기 ──
+	auto shoot = N::Select("쏘기",
+		N::Sequence("정면 60° 안",
+			N::If("공격 범위 안", [](C& c) { return c.visible && c.inCone; }),
+			N::Do("0.1초마다 사격", [](C& c) {
+				// 멈추지 않고 아래에서 계속 쫓아간다 (12.2 이동, A-18)
+				GameWorld& w = c.world;
+				if (c.brain.state != GuardState::Attack)
+				{
+					const bool locked = c.brain.lockedByAttack;
+					w.SetGuardState(c.guard, c.brain, GuardState::Attack, c.target->id);
+					c.brain.lockedByAttack = locked;
+				}
+				c.guard.state |= StateBit::Attacking;
+				if (w._nowMs >= c.guard.nextGunMs)
+				{
+					c.guard.nextGunMs = w._nowMs + GameData::GuardGunEveryMs;
+					w.GuardShoot(c.guard, *c.target);
+				}
+				return Status::Success;
+			})),
+		N::Do("추격 알림", [](C& c) {
+			if (c.visible && c.brain.state != GuardState::Chase)
+			{
+				const bool locked = c.brain.lockedByAttack;
+				c.world.SetGuardState(c.guard, c.brain, GuardState::Chase, c.target->id);
+				c.brain.lockedByAttack = locked;
+			}
+			return Status::Success;
+		}));
+
+	// ── 전투: 움직이기 ──
+	auto move = N::Select("움직이기",
+		N::Sequence("물러나며 돌아서기 (A-2)",
+			N::If("4m 안 정면 밖·옆뒤에서 맞음", [](C& c) {
+				return c.world._guardFeatures.evade && c.world._nowMs < c.brain.evadeUntilMs;
+			}),
+			N::Do("대각선 뒤로 달림", [](C& c) {
+				// 타겟(안 보이면 짐작한 위치) 쪽으로 돌면서. 경로를 따르지 않으므로 끝나면 경로를 새로 찾는다
+				GameWorld& w = c.world;
+				const Vec3 threat = c.visible ? c.target->pos : w.GuessTargetPos(c.brain);
+				if (!c.visible)
+					w.TurnToward(c.guard, YawTo(c.guard.pos, threat), c.dtMs);
+				w.EvadeStep(c.guard, c.brain, threat, GameData::GuardRunSpeed * c.slow, c.dtMs);
+				c.brain.path.clear();
+				return Status::Running;
+			})),
+		N::Sequence("붙음",
+			N::If("보이고 몸이 닿음", [](C& c) {
+				return c.visible && Dist2D(c.guard.pos, c.target->pos) <= GameData::BodyRadiusCm * 2.0f;
+			}),
+			N::Do("더 다가가지 않음", [](C&) { return Status::Running; })),
+		N::Do("타겟·마지막으로 본 곳으로 달림", [](C& c) {
+			// 보이면 지금 위치로, 안 보이면 마지막으로 본 곳으로 (경로는 0.5초마다).
+			// 갈 수 없거나, 마지막으로 본 곳에 왔는데 없으면 탐색
+			GameWorld& w = c.world;
+			GuardBrain& brain = c.brain;
+			const Vec3 goal = c.visible ? c.target->pos : brain.lastSeenPos;
+			if ((brain.path.empty() || w._nowMs >= brain.repathAtMs) && !w.SetGoal(c.guard, brain, goal))
+			{
+				w.StartSearch(c.guard, brain, brain.lastSeenPos, true);
+				return Status::Running;
+			}
+			const bool arrived = w.FollowPath(c.guard, brain, GameData::GuardRunSpeed * c.slow, c.dtMs);
+			if (c.visible)
+			{
+				// 이번 틱에 너무 많이 가서 몸이 겹쳤으면 닿는 거리까지 물러난다
+				const float contact = GameData::BodyRadiusCm * 2.0f;
+				const float dx = c.guard.pos.x - c.target->pos.x, dy = c.guard.pos.y - c.target->pos.y;
+				const float d = std::sqrt(dx * dx + dy * dy);
+				if (d < contact && d > 0.001f)
+				{
+					c.guard.pos.x = c.target->pos.x + dx / d * contact;
+					c.guard.pos.y = c.target->pos.y + dy / d * contact;
+				}
+			}
+			if (arrived && !c.visible)
+			{
+				w.StartSearch(c.guard, brain, c.guard.pos, true);
+				return Status::Running;
+			}
+			if (!c.visible && brain.pathIndex < brain.path.size())
+				w.TurnToward(c.guard, YawTo(c.guard.pos, brain.path[brain.pathIndex]), c.dtMs);
+			return Status::Running;
+		}));
+
+	// ── 전투 ──
+	auto fight = N::Sequence("싸움",
+		N::Do("타겟 쪽으로 돌기", [](C& c) {
+			if (!c.visible)
+				return Status::Success;
+			GameWorld& w = c.world;
+			const float toTarget = YawTo(c.guard.pos, c.target->pos);
+			w.TurnToward(c.guard, toTarget, c.dtMs);	// 초당 90°
+			const float dist = Dist2D(c.guard.pos, c.target->pos);
+			c.inCone = std::fabs(AngleDiff(toTarget, c.guard.yaw)) <= GameData::GuardAttackHalfAngleDeg &&
 				dist <= GameData::GuardSightRangeCm;
-			if (_guardFeatures.evade)
+			if (w._guardFeatures.evade)
 			{
 				// A-2: 가까운(4m) 타겟이 정면 밖이면 물러나며 돌아서기 시작·연장. 정면에 두고 4m 넘게 벌어지면 끝
-				if (!inAttackCone && dist <= GameData::EvadeRangeCm)
-					brain.evadeUntilMs = _nowMs + GameData::EvadeMs;
-				else if (inAttackCone && dist > GameData::EvadeRangeCm)
-					brain.evadeUntilMs = 0;
+				if (!c.inCone && dist <= GameData::EvadeRangeCm)
+					c.brain.evadeUntilMs = w._nowMs + GameData::EvadeMs;
+				else if (c.inCone && dist > GameData::EvadeRangeCm)
+					c.brain.evadeUntilMs = 0;
 			}
-			if (inAttackCone)
-			{
-				// 공격 범위 안: 0.1초마다 단일 사격하고, 멈추지 않고 아래에서 계속 쫓아간다 (12.2 이동, A-18)
-				if (brain.state != GuardState::Attack)
-				{
-					const bool locked = brain.lockedByAttack;
-					SetGuardState(guard, brain, GuardState::Attack, target->id);
-					brain.lockedByAttack = locked;
-				}
-				guard.state |= StateBit::Attacking;
-				if (_nowMs >= guard.nextGunMs)
-				{
-					guard.nextGunMs = _nowMs + GameData::GuardGunEveryMs;
-					GuardShoot(guard, *target);
-				}
-			}
-			else if (brain.state != GuardState::Chase)
-			{
-				const bool locked = brain.lockedByAttack;
-				SetGuardState(guard, brain, GuardState::Chase, target->id);
-				brain.lockedByAttack = locked;
-			}
-		}
+			return Status::Success;
+		}),
+		std::move(shoot),
+		std::move(move));
 
-		// A-2 물러나며 돌아서기: 다가가는 대신 타겟(안 보이면 짐작한 위치) 쪽으로 돌면서 대각선 뒤로 달린다.
-		// 정면 60°에 들어오면 위에서 이미 쐈다. 경로를 따르지 않으므로 끝나면 경로를 새로 찾는다
-		if (_guardFeatures.evade && _nowMs < brain.evadeUntilMs)
-		{
-			const Vec3 threat = visible ? target->pos : GuessTargetPos(brain);
-			if (!visible)
-				TurnToward(guard, YawTo(guard.pos, threat), dtMs);
-			EvadeStep(guard, brain, threat, GameData::GuardRunSpeed * slow, dtMs);
-			brain.path.clear();
-			return;
-		}
+	auto combat = N::Sequence("전투",
+		N::If("타겟이 있음", [](C& c) { return c.brain.state == GuardState::Chase || c.brain.state == GuardState::Attack; }),
+		N::Do("타겟 확인", [](C& c) {
+			c.target = c.world.Find(c.brain.target);
+			c.valid = c.target != nullptr && Detectable(*c.target);
+			c.visible = c.valid && c.world.CanSee(c.guard, *c.target);
+			if (c.visible)
+				c.world.NoteTargetPos(c.brain, c.target->pos);
+			else
+				c.brain.lockedByAttack = false;		// 시야에서 벗어나면 고정이 풀림 (N-16)
+			return Status::Success;
+		}),
+		N::Select("전투 행동", std::move(lost), std::move(fight)));
 
-		// 쏘는 중이든 아니든: 보이면 지금 위치로, 안 보이면 마지막으로 본 곳으로 달린다 (경로는 0.5초마다)
-		if (visible && Dist2D(guard.pos, target->pos) <= GameData::BodyRadiusCm * 2.0f)
-			return;		// 몸이 닿았으면 더 다가가지 않음 (겹치지 않게)
-		const Vec3 goal = visible ? target->pos : brain.lastSeenPos;
-		if ((brain.path.empty() || _nowMs >= brain.repathAtMs) && !SetGoal(guard, brain, goal))
-			return StartSearch(guard, brain, brain.lastSeenPos, true);	// 갈 수 없는 곳
-		const bool arrived = FollowPath(guard, brain, GameData::GuardRunSpeed * slow, dtMs);
-		if (visible)
-		{
-			// 이번 틱에 너무 많이 가서 몸이 겹쳤으면 닿는 거리까지 물러난다
-			const float contact = GameData::BodyRadiusCm * 2.0f;
-			const float dx = guard.pos.x - target->pos.x, dy = guard.pos.y - target->pos.y;
-			const float d = std::sqrt(dx * dx + dy * dy);
-			if (d < contact && d > 0.001f)
-			{
-				guard.pos.x = target->pos.x + dx / d * contact;
-				guard.pos.y = target->pos.y + dy / d * contact;
-			}
-		}
-		if (arrived && !visible)
-			return StartSearch(guard, brain, guard.pos, true);		// 마지막으로 본 곳에 왔는데 없음
-		if (!visible && brain.pathIndex < brain.path.size())
-			TurnToward(guard, YawTo(guard.pos, brain.path[brain.pathIndex]), dtMs);
-		return;
-	}
+	// ── 발견: 순찰·탐색 중 보이면 추격 ──
+	auto spot = N::Sequence("발견",
+		N::If("플레이어가 보임", [](C& c) { c.seen = c.world.NearestVisibleThief(c.guard); return c.seen != nullptr; }),
+		N::Do("추격 시작 + 동료 호출 (S-5)", [](C& c) {
+			c.world.SetGuardState(c.guard, c.brain, GuardState::Chase, c.seen->id);
+			c.world.NoteTargetPos(c.brain, c.seen->pos);
+			c.world.CallAllies(c.guard, c.seen->pos);
+			return Status::Running;
+		}));
 
-	// ── 순찰·탐색: 보이면 추격 ──
-	if (Entity* seen = NearestVisibleThief(guard))
-	{
-		SetGuardState(guard, brain, GuardState::Chase, seen->id);
-		NoteTargetPos(brain, seen->pos);
-		CallAllies(guard, seen->pos);		// S-5
-		return;
-	}
+	// ── 탐색 ──
+	auto search = N::Sequence("탐색",
+		N::If("탐색 중", [](C& c) { return c.brain.state == GuardState::Search; }),
+		N::Do("탐색 지점 둘러보기", [](C& c) { c.world.SearchStep(c.guard, c.brain, c.slow, c.dtMs); return Status::Running; }));
 
-	if (brain.state == GuardState::Search)
-	{
-		// 탐색 지점을 차례로: 걸어가서 첫 지점은 한 바퀴(S-3), 주변 지점(S-4)은 좌우 훑기
-		if (!brain.looking)
-		{
-			const bool there = Dist2D(guard.pos, brain.searchPos) < 50.0f;
-			if (there || (brain.path.empty() && !SetGoal(guard, brain, brain.searchPos)) ||
-				FollowPath(guard, brain, GameData::GuardWalkSpeed * slow, dtMs))
+	// ── 순찰 ──
+	auto patrol = N::Sequence("순찰",
+		N::Do("둘러보기 마저 하고 다음 지점 고르기", [](C& c) {
+			GameWorld& w = c.world;
+			if (!c.brain.looking)
+				return Status::Success;
+			if (!w.UpdateLook(c.guard, c.brain, c.dtMs))
+				return Status::Running;
+			w.PickPatrolNode(c.guard, c.brain);		// P-1·P-2·P-5·P-7
+			c.brain.looking = false;
+			return Status::Success;
+		}),
+		N::Do("걸어가기, 도착하면 둘러보기", [](C& c) {
+			GameWorld& w = c.world;
+			GuardBrain& brain = c.brain;
+			if (w._map->patrolNodes.empty())
+				return Status::Running;
+			if (brain.path.empty() && !w.SetGoal(c.guard, brain, w._map->patrolNodes[brain.patrolNode]))
 			{
 				brain.looking = true;
+				w.StartSpin(brain, GameData::PatrolLookMs);
+				return Status::Running;
+			}
+			if (w.FollowPath(c.guard, brain, GameData::GuardWalkSpeed * c.slow, c.dtMs))
+			{
 				brain.path.clear();
-				if (brain.searchIndex == 0)
-					StartSpin(brain, _guardFeatures.fullSpin ? GameData::SearchSpinMs : GameData::SearchLookMs);
-				else
-					StartSweep(brain, guard.yaw, GameData::SearchSweepDeg, true);	// S-4: 왼쪽 → 오른쪽 → 가운데
+				w.ArrivePatrolNode(c.guard, brain);		// P-3 통과 · P-4 훑기 · P-6 돌아보기
 			}
 			else if (brain.pathIndex < brain.path.size())
 			{
-				TurnToward(guard, YawTo(guard.pos, brain.path[brain.pathIndex]), dtMs);
+				w.TurnToward(c.guard, YawTo(c.guard.pos, brain.path[brain.pathIndex]), c.dtMs);
 			}
-			return;
-		}
-		if (!UpdateLook(guard, brain, dtMs))
-			return;
-		if (++brain.searchIndex < brain.searchSpots.size())
-		{
-			brain.searchPos = brain.searchSpots[brain.searchIndex];
-			brain.looking = false;
-			brain.path.clear();
-			return;
-		}
-		const Vec3 missed = brain.searchSpots.empty() ? guard.pos : brain.searchSpots.front();
-		StartPatrol(guard, brain);		// 없다 → 가까운 순찰 지점부터 다시
-		if (_guardFeatures.alertPatrol)
-		{
-			brain.alertUntilMs = _nowMs + GameData::AlertPatrolMs;	// P-7: 30초 동안 놓친 곳 근처를 경계 순찰
-			brain.alertCenter = missed;
-		}
-		return;
-	}
+			return Status::Running;
+		}));
 
-	// 순찰
-	if (brain.looking)
+	return N::Sequence("경비원",
+		N::Do("틱 준비", [](C& c) {
+			ClearBits(c.guard.state, StateBit::Running | StateBit::Attacking);	// 이번 틱에 달리거나 쏘면 다시 켠다
+			c.slow = (c.guard.state & StateBit::Slowed) != 0 ? GameData::StickySlow : 1.0f;
+			return Status::Success;
+		}),
+		N::Select("할 일 (위에서부터)",
+			std::move(repair), std::move(stun), std::move(wake), std::move(combat),
+			std::move(spot), std::move(search), std::move(patrol)));
+}
+
+void GameWorld::SearchStep(Entity& guard, GuardBrain& brain, float slow, uint32_t dtMs)
+{
+	// 탐색 지점을 차례로 걸어가서 둘러본다.
+	//   S-7(기본): 첫 지점·방 안 지점 모두 좌우 45° 훑기, 지점 사이를 걸으며 좌우 40°를 번갈아 봄, 15초면 끝
+	//   S-7을 끄면: 첫 지점은 한 바퀴(S-3), 주변 지점(S-4)은 좌우 60° 훑기
+	const bool room = _guardFeatures.roomSearch;
+	if (room && _nowMs >= brain.searchEndMs)
+		return FinishSearch(guard, brain);
+
+	if (!brain.looking)
 	{
-		if (!UpdateLook(guard, brain, dtMs))
-			return;
-		PickPatrolNode(guard, brain);
+		const bool there = Dist2D(guard.pos, brain.searchPos) < 50.0f;
+		const bool noPath = !there && brain.path.empty() && !SetGoal(guard, brain, brain.searchPos);
+		if (room && !there && !noPath && brain.pathIndex < brain.path.size())
+		{
+			// S-7: 다음 지점이 등 뒤쪽(90° 넘게)이면 먼저 돌아선 뒤 걷는다 (뒷걸음질하며 돌지 않게)
+			const float moveYaw = YawTo(guard.pos, brain.path[brain.pathIndex]);
+			if (std::fabs(AngleDiff(moveYaw, guard.yaw)) > GameData::SearchTurnFirstDeg)
+			{
+				brain.moveYaw = moveYaw;
+				TurnToward(guard, moveYaw, dtMs);
+				return;
+			}
+		}
+		if (there || noPath || FollowPath(guard, brain, GameData::GuardWalkSpeed * slow, dtMs))
+		{
+			brain.looking = true;
+			brain.path.clear();
+			if (room)
+				StartSweep(brain, brain.searchIndex == 0 ? guard.yaw : brain.moveYaw,
+					brain.searchIndex == 0 ? GameData::SearchFirstSweepDeg : GameData::RoomSearchSweepDeg, false);
+			else if (brain.searchIndex == 0)
+				StartSpin(brain, _guardFeatures.fullSpin ? GameData::SearchSpinMs : GameData::SearchLookMs);
+			else
+				StartSweep(brain, guard.yaw, GameData::SearchSweepDeg, true);	// S-4: 왼쪽 → 오른쪽 → 가운데
+		}
+		else if (brain.pathIndex < brain.path.size())
+		{
+			const float moveYaw = YawTo(guard.pos, brain.path[brain.pathIndex]);
+			brain.moveYaw = moveYaw;
+			if (room && brain.searchIndex > 0)
+			{
+				// S-7: 걸으면서 걷는 방향의 왼쪽 40° ↔ 오른쪽 40°를 번갈아 본다 (몸 방향 = 시선, 90°/s)
+				const float look = AngleDiff(moveYaw + GameData::SearchGlanceDeg * brain.glanceSide, 0.0f);
+				TurnToward(guard, look, dtMs);
+				if (std::fabs(AngleDiff(look, guard.yaw)) < 1.0f)
+					brain.glanceSide = -brain.glanceSide;
+			}
+			else
+			{
+				TurnToward(guard, moveYaw, dtMs);		// 놓친 곳까지는 앞을 보고 간다
+			}
+		}
+		return;
+	}
+	if (!UpdateLook(guard, brain, dtMs))
+		return;
+	if (++brain.searchIndex < brain.searchSpots.size())
+	{
+		brain.searchPos = brain.searchSpots[brain.searchIndex];
 		brain.looking = false;
-	}
-	if (_map->patrolNodes.empty())
-		return;
-	if (brain.path.empty() && !SetGoal(guard, brain, _map->patrolNodes[brain.patrolNode]))
-	{
-		brain.looking = true;
-		StartSpin(brain, GameData::PatrolLookMs);
-		return;
-	}
-	if (FollowPath(guard, brain, GameData::GuardWalkSpeed * slow, dtMs))
-	{
 		brain.path.clear();
-		ArrivePatrolNode(guard, brain);
+		return;
 	}
-	else if (brain.pathIndex < brain.path.size())
+	FinishSearch(guard, brain);
+}
+
+void GameWorld::FinishSearch(Entity& guard, GuardBrain& brain)
+{
+	const Vec3 missed = brain.searchSpots.empty() ? guard.pos : brain.searchSpots.front();
+	StartPatrol(guard, brain);		// 없다 → 가까운 순찰 지점부터 다시
+	if (_guardFeatures.alertPatrol)
 	{
-		TurnToward(guard, YawTo(guard.pos, brain.path[brain.pathIndex]), dtMs);
+		brain.alertUntilMs = _nowMs + GameData::AlertPatrolMs;	// P-7: 30초 동안 놓친 곳 근처를 경계 순찰
+		brain.alertCenter = missed;
 	}
 }
 
@@ -396,8 +534,12 @@ void GameWorld::StartSearch(Entity& guard, GuardBrain& brain, const Vec3& center
 	brain.searchSpots.assign(1, first);
 	brain.searchIndex = 0;
 	brain.searchPos = first;
-	if (_guardFeatures.extraSpots)
-		AddSearchSpots(brain, first, hasFlee ? &flee : nullptr);
+	brain.searchEndMs = _nowMs + GameData::SearchMaxMs;
+	brain.glanceSide = 1.0f;
+	if (_guardFeatures.roomSearch)
+		AddRoomSearchSpots(brain, first, hasFlee ? &flee : nullptr);	// S-7
+	else if (_guardFeatures.extraSpots)
+		AddSearchSpots(brain, first, hasFlee ? &flee : nullptr);		// S-4
 }
 
 void GameWorld::AddSearchSpots(GuardBrain& brain, const Vec3& from, const Vec3* flee)
@@ -453,6 +595,87 @@ void GameWorld::AddSearchSpots(GuardBrain& brain, const Vec3& from, const Vec3* 
 		}
 		if (length <= Dist2D(from, c.pos) * GameData::SearchDetourMax)
 			brain.searchSpots.push_back(c.pos);
+	}
+}
+
+void GameWorld::AddRoomSearchSpots(GuardBrain& brain, const Vec3& from, const Vec3* flee)
+{
+	// S-7: 둘러볼 곳 최대 3곳. 후보 = 놓친 곳이 있는 방 안의 칸 + 주변 3~7m(문 너머 옆 방·모퉁이 포함).
+	// 도망 방향 쪽, 첫 지점에서 안 보이는 곳(가구 뒤·모퉁이·옆 방)을 먼저. 첫 지점·서로 3m 넘게 떨어지고,
+	// 걸어서 직선 거리의 2배 안에 닿는 곳만. 고른 뒤에는 가까운 곳부터 차례로 돈다
+	std::vector<Vec3> points;
+	const MapRoom* lostRoom = nullptr;
+	for (const MapRoom& r : _map->rooms)
+	{
+		if (r.returnCells.empty() || !r.Contains(from))
+			continue;
+		const size_t step = std::max<size_t>(1, r.returnCells.size() / GameData::RoomSearchCandidates);
+		for (size_t i = std::uniform_int_distribution<size_t>(0, step - 1)(_rng); i < r.returnCells.size(); i += step)
+			points.push_back(r.returnCells[i]);
+		lostRoom = &r;
+		break;
+	}
+	for (int a = 0; a < 12; ++a)
+		for (const float dist : { GameData::SearchSpotMinCm, (GameData::SearchSpotMinCm + GameData::SearchSpotMaxCm) * 0.5f, GameData::SearchSpotMaxCm })
+			points.push_back(Ahead(from, static_cast<float>(a) * 30.0f, dist));
+
+	struct Candidate { Vec3 pos; float score; bool inRoom; };
+	std::vector<Candidate> candidates;
+	std::uniform_real_distribution<float> jitter(0.0f, 0.3f);
+	const Vec3 eye{ from.x, from.y, from.z + GameData::GuardEyeCm };
+	for (const Vec3& p : points)
+	{
+		const float d = Dist2D(from, p);
+		if (d < GameData::SearchSpotGapCm || !_map->nav.IsWalkable(p) || !_map->nav.Connected(from, p))
+			continue;
+		float score = jitter(_rng);
+		if (flee != nullptr)
+			score += 1.0f + ((p.x - from.x) * flee->x + (p.y - from.y) * flee->y) / d;	// 도망 방향과 같을수록 (0~2)
+		const Vec3 body{ p.x, p.y, p.z + GameData::ThiefBodyCm };
+		if (!SeesThrough(eye, body, &_sightTests))
+			score += 1.0f;																// 첫 지점에서 안 보이는 곳
+		candidates.push_back({ p, score, lostRoom != nullptr && lostRoom->Contains(p) });
+	}
+	// 놓친 방 안의 가장 좋은 곳 하나를 맨 앞에: 방 안을 적어도 한 곳은 걸어 다니며 본다
+	std::sort(candidates.begin(), candidates.end(), [](const Candidate& l, const Candidate& r) { return l.score > r.score; });
+	if (auto inRoom = std::find_if(candidates.begin(), candidates.end(), [](const Candidate& c) { return c.inRoom; }); inRoom != candidates.end())
+		std::rotate(candidates.begin(), inRoom, inRoom + 1);
+
+	std::vector<Vec3> picked;
+	std::vector<Vec3> path;
+	size_t tries = 0;
+	for (const Candidate& c : candidates)
+	{
+		if (picked.size() >= GameData::RoomSearchSpots || tries >= GameData::SearchPathTries)
+			break;
+		bool tooClose = false;
+		for (const Vec3& s : picked)
+			tooClose = tooClose || Dist2D(s, c.pos) < GameData::SearchSpotGapCm;
+		if (tooClose)
+			continue;
+		++tries;
+		if (!FindPath(_map->nav, from, c.pos, path) || path.empty())
+			continue;
+		float length = 0.0f;
+		Vec3 prev = from;
+		for (const Vec3& q : path)
+		{
+			length += Dist2D(prev, q);
+			prev = q;
+		}
+		if (length <= Dist2D(from, c.pos) * GameData::SearchDetourMax)
+			picked.push_back(c.pos);
+	}
+
+	// 가까운 곳부터 (같은 곳을 오가지 않게)
+	Vec3 at = from;
+	while (!picked.empty())
+	{
+		auto next = std::min_element(picked.begin(), picked.end(),
+			[&](const Vec3& l, const Vec3& r) { return Dist2D(at, l) < Dist2D(at, r); });
+		at = *next;
+		brain.searchSpots.push_back(at);
+		picked.erase(next);
 	}
 }
 

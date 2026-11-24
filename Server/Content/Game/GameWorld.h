@@ -27,6 +27,7 @@
 #include <variant>
 #include <vector>
 
+#include "Content/Game/GuardBT.h"
 #include "Content/Game/MapData.h"
 #include "Content/Messages/Commands.h"
 #include "Content/Messages/Messages.h"
@@ -165,11 +166,12 @@ struct GuardFeatures
 	bool importantRooms = true;		// P-5 중요한 방 가중치
 	bool lookBack = true;			// P-6 가끔 뒤돌아보기
 	bool alertPatrol = true;		// P-7 탐색 후 경계 순찰
+	bool roomSearch = true;			// S-7 방 안을 돌아다니며 살피기 (켜면 S-3·S-4 대신)
 
 	static GuardFeatures All() { return {}; }
 	static GuardFeatures None()
 	{
-		return { false, false, false, false, false, false, false, false, false, false, false, false, false };
+		return { false, false, false, false, false, false, false, false, false, false, false, false, false, false };
 	}
 };
 
@@ -192,6 +194,9 @@ struct GuardBrain
 	uint32_t waitUntilMs = 0;			// 둘러보기 끝 (한 바퀴는 이 시각까지, 훑기는 안전장치)
 	std::vector<float> lookYaws;		// 훑기: 차례로 돌아볼 방향. 비어 있으면 한쪽으로 계속 돈다
 	size_t lookIndex = 0;
+	uint32_t searchEndMs = 0;			// S-7 이 시각이 지나면 탐색을 끝냄
+	float glanceSide = 1.0f;			// S-7 걸으며 살피기: 지금 보는 쪽 (+1 왼쪽, −1 오른쪽)
+	float moveYaw = 0.0f;				// S-7 마지막으로 걸어간 방향 (도착해서 훑기의 가운데)
 
 	std::vector<Vec3> path;				// 다음 점부터 목적지까지
 	size_t pathIndex = 0;
@@ -205,6 +210,23 @@ struct GuardBrain
 
 	AlertLevel alertLevel = AlertLevel::Patrol;	// 마지막으로 보낸 SC_GUARD_ALERT
 	uint16_t alertTarget = 0;
+};
+
+class GameWorld;
+
+// 경비원 행동 트리가 한 틱 동안 쓰는 것 (GuardAI.cpp). 오래 기억할 것은 GuardBrain(블랙보드)에, 이번 틱에만 쓰는 것은 여기에
+struct GuardCtx
+{
+	GameWorld& world;
+	Entity& guard;
+	GuardBrain& brain;
+	uint32_t dtMs = 0;
+	float slow = 1.0f;					// 끈끈이 위 −50%
+	Entity* target = nullptr;			// 전투: 지금 타겟
+	bool valid = false;					// 전투: 타겟이 감지할 수 있는 상태
+	bool visible = false;				// 전투: 타겟이 보임
+	bool inCone = false;				// 전투: 타겟이 공격 범위(정면 60°) 안
+	Entity* seen = nullptr;				// 발견: 보인 플레이어
 };
 
 class GameWorld
@@ -349,6 +371,9 @@ private:
 	void UpdateGuards(uint32_t dtMs);
 	void UpdateGuardTimers(Entity& guard);
 	void ThinkGuard(Entity& guard, GuardBrain& brain, uint32_t dtMs);
+	static std::unique_ptr<Bt::Node<GuardCtx>> BuildGuardTree();
+	static const Bt::Node<GuardCtx>& GuardTree();		// 경비원 행동 트리 (한 번 만들어 모두 같이 씀)
+	void SearchStep(Entity& guard, GuardBrain& brain, float slow, uint32_t dtMs);	// 탐색 가지의 행동
 	void SetGuardState(Entity& guard, GuardBrain& brain, GuardState state, uint16_t target = 0);
 	Entity* NearestVisibleThief(Entity& guard);
 	bool SetGoal(Entity& guard, GuardBrain& brain, const Vec3& goal);
@@ -362,6 +387,8 @@ private:
 	void EvadeStep(Entity& guard, const GuardBrain& brain, const Vec3& threat, float speed, uint32_t dtMs);	// A-2
 	void StartSearch(Entity& guard, GuardBrain& brain, const Vec3& center, bool useFlee);	// S-1·S-4
 	void AddSearchSpots(GuardBrain& brain, const Vec3& from, const Vec3* flee);			// S-4
+	void AddRoomSearchSpots(GuardBrain& brain, const Vec3& from, const Vec3* flee);		// S-7
+	void FinishSearch(Entity& guard, GuardBrain& brain);
 	void CallAllies(const Entity& caller, const Vec3& where);							// S-5
 	void StartSpin(GuardBrain& brain, uint32_t ms);
 	void StartSweep(GuardBrain& brain, float center, float halfDeg, bool backToCenter);	// 좌우 훑기

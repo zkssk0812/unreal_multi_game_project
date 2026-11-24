@@ -460,11 +460,19 @@ TEST_CASE(AI_S1_SearchStartsAheadOfFleeDirection)
 	CHECK(Content::WorldMath::Dist2D(old.BrainOf(guard)->searchSpots.front(), lastSeen) < 1.0f);
 }
 
+// S-3·S-4는 S-7(방 안 돌아다니며 살피기)을 끄면 쓰는 예전 탐색
+GuardFeatures WithoutRoomSearch()
+{
+	GuardFeatures f = GuardFeatures::All();
+	f.roomSearch = false;
+	return f;
+}
+
 TEST_CASE(AI_S4_ExtraSpotsNearbyAndReachable)
 {
 	uint16_t guard = 0;
 	Vec3 lastSeen;
-	GameWorld world = LoseRunningTarget(GuardFeatures::All(), guard, lastSeen);
+	GameWorld world = LoseRunningTarget(WithoutRoomSearch(), guard, lastSeen);
 	const auto& spots = world.BrainOf(guard)->searchSpots;
 	CHECK(spots.size() >= 2 && spots.size() <= 1 + GameData::SearchExtraSpots);
 	for (size_t i = 1; i < spots.size(); ++i)
@@ -480,7 +488,7 @@ TEST_CASE(AI_S3_FirstSpotFullTurn_ThenVisitsEverySpot)
 {
 	uint16_t guard = 0;
 	Vec3 lastSeen;
-	GameWorld world = LoseRunningTarget(GuardFeatures::All(), guard, lastSeen);
+	GameWorld world = LoseRunningTarget(WithoutRoomSearch(), guard, lastSeen);
 	CHECK(RunUntil(world, 10000, [&] { return world.BrainOf(guard)->looking; }));
 	// 첫 지점: 90°/s로 4초 = 360° 돈다
 	float turned = 0.0f;
@@ -498,6 +506,77 @@ TEST_CASE(AI_S3_FirstSpotFullTurn_ThenVisitsEverySpot)
 	const size_t spots = world.BrainOf(guard)->searchSpots.size();
 	CHECK(RunUntil(world, 30000, [&] { return StateOf(world, guard) == GuardState::Patrol; }));
 	(void)spots;
+}
+
+// ───────────────── S-7 방 안을 돌아다니며 살피기 (2026-11-25) ─────────────────
+
+TEST_CASE(AI_S7_Spots_AtLeastOneInLostRoom_3mApart)
+{
+	uint16_t guard = 0;
+	Vec3 lastSeen;
+	GameWorld world = LoseRunningTarget(GuardFeatures::All(), guard, lastSeen);
+	const auto& spots = world.BrainOf(guard)->searchSpots;
+	CHECK(spots.size() >= 3 && spots.size() <= 1 + GameData::RoomSearchSpots);	// 놓친 곳 + 2~4곳
+	const MapData& map = DefaultMap();
+	const int room = RoomOf(map, spots[0]);
+	CHECK(room >= 0);
+	size_t inRoom = 0;
+	for (size_t i = 1; i < spots.size(); ++i)
+	{
+		inRoom += RoomOf(map, spots[i]) == room;
+		CHECK(map.nav.IsWalkable(spots[i]) && map.nav.Connected(spots[i], spots[0]));
+		for (size_t j = 0; j < i; ++j)
+			CHECK(Content::WorldMath::Dist2D(spots[i], spots[j]) >= GameData::SearchSpotGapCm - 1.0f);	// 3m 넘게 떨어짐
+	}
+	CHECK(inRoom >= 1);																// 놓친 방 안을 적어도 한 곳은 걸어 다님
+}
+
+TEST_CASE(AI_S7_NoSpinInPlace_SweepsAndGlancesWhileWalking)
+{
+	using namespace Content::WorldMath;
+	uint16_t guard = 0;
+	Vec3 lastSeen;
+	GameWorld world = LoseRunningTarget(GuardFeatures::All(), guard, lastSeen);
+	const GuardBrain* brain = world.BrainOf(guard);
+	float turnedAtFirst = 0.0f, glanceLeft = 0.0f, glanceRight = 0.0f, walked = 0.0f;
+	size_t maxIndex = 0;
+	float prevYaw = world.Find(guard)->yaw;
+	Vec3 prevPos = world.Find(guard)->pos;
+	for (int t = 0; t < 400 && StateOf(world, guard) == GuardState::Search; ++t)
+	{
+		const bool firstLook = brain->looking && brain->searchIndex == 0;
+		const bool walkingBetween = !brain->looking && brain->searchIndex > 0;
+		Run(world, 50);
+		const Entity* g = world.Find(guard);
+		if (firstLook)
+			turnedAtFirst += std::fabs(AngleDiff(g->yaw, prevYaw));
+		if (walkingBetween && Dist2D(g->pos, prevPos) > 1.0f)
+		{
+			const float off = AngleDiff(g->yaw, YawTo(prevPos, g->pos));		// 걷는 방향에서 고개를 돌린 정도
+			glanceLeft = std::max(glanceLeft, off);
+			glanceRight = std::min(glanceRight, off);
+			walked += Dist2D(g->pos, prevPos);
+		}
+		maxIndex = std::max(maxIndex, brain->searchIndex);
+		prevYaw = g->yaw;
+		prevPos = g->pos;
+	}
+	CHECK(turnedAtFirst <= 3.0f * GameData::SearchFirstSweepDeg + 1.0f);			// 한 바퀴(360°)가 아니라 왼쪽 90° → 오른쪽 90° 훑기
+	CHECK(turnedAtFirst < 300.0f);
+	CHECK(maxIndex >= 2);															// 방 안 여러 곳을 걸어 다님
+	CHECK(walked > 300.0f);
+	CHECK(glanceLeft > 25.0f && glanceRight < -25.0f);								// 걸으며 양옆을 봄
+}
+
+TEST_CASE(AI_S7_SearchEndsWithin15s_ThenAlertPatrol)
+{
+	uint16_t guard = 0;
+	Vec3 lastSeen;
+	GameWorld world = LoseRunningTarget(GuardFeatures::All(), guard, lastSeen);
+	const uint32_t start = world.NowMs();
+	CHECK(RunUntil(world, GameData::SearchMaxMs + 500, [&] { return StateOf(world, guard) == GuardState::Patrol; }));
+	CHECK(world.NowMs() - start <= GameData::SearchMaxMs + 100);
+	CHECK(world.BrainOf(guard)->alertUntilMs > world.NowMs());						// P-7 경계 순찰
 }
 
 TEST_CASE(AI_S5_AllyWithin20mComesToSearch)
