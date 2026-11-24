@@ -362,24 +362,24 @@ public:
 	// ── 반납지점 (서버가 만들고 없앤다. 아래는 표시용) ──
 
 	/**
-	 * 서버가 반납지점에 경고(Warning 비트)를 켜는 시각 = 등장 후 55초, 남은 5초 (서버 GameData ReturnPointWarnMs = 55000, 2026-11-22).
-	 * 서버가 만든 반납지점은 빨강을 서버 신호(ES_WARNING)로만 켜고, 이 값은 그 순간 화면의 남은 시간을 서버에 맞추는 데 쓴다.
-	 * 서버 없이 놓인 반납지점(시험 레벨)은 이 시각에 스스로 빨개진다 [사용자 요청 2026-11-21: 경고 5초]
+	 * 서버 없이 놓인 반납지점(시험 레벨)만 쓰는 값: 등장 후 이 시각에 스스로 빨개진다 [사용자 요청 2026-11-21: 경고 5초].
+	 * 서버가 만든 반납지점은 빨강 = 서버 경고 비트(ES_WARNING), 남은 시간 = 서버가 알려 준 timer_ms 라 이 값을 쓰지 않는다
+	 * (2026-11-23 팀 서버: 수명 30초, 경고 25초)
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ReturnPoint", meta = (Units = "s"))
-	float ReturnPointRedSeconds = 55.f;
+	float ReturnPointRedSeconds = 25.f;
 
-	/** 반납지점 수명 60초 (서버 값과 같게). 서버가 알려 준 남은 수명으로 "언제 빨개지는가"를 계산할 때 쓴다 */
+	/** 서버 없이 놓인 반납지점의 수명 (서버가 만든 것은 서버 timer_ms 로 센다) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ReturnPoint", meta = (Units = "s"))
-	float ReturnPointLifetimeSeconds = 60.f;
+	float ReturnPointLifetimeSeconds = 30.f;
 
 	/** 정사각형 한 변 1m */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ReturnPoint", meta = (ClampMin = 10, Units = "cm"))
 	float ReturnPointSize = 100.f;
 
-	/** 반납 안내에 쓰는 동작 시간 (서버는 즉시 반납한다) */
+	/** 반납 작업 시간의 안내용 값. 실제 시간은 서버가 SC_INTERACT duration_ms 로 알려 준다 (2026-11-23 팀 서버 4초, 작업 속도 퍽과 관계없음) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ReturnPoint", meta = (ClampMin = 0, Units = "s"))
-	float ReturnSeconds = 0.5f;
+	float ReturnSeconds = 4.f;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ReturnPoint")
 	FLinearColor ReturnPointGreen = FLinearColor(0.05f, 1.f, 0.2f);

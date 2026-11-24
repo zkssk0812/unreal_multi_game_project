@@ -82,10 +82,11 @@ void AVHReturnPoint::BeginPlay()
 	UpdateColor();
 }
 
-void AVHReturnPoint::InitPoint(double InSpawnTime)
+void AVHReturnPoint::InitPoint(double InReceivedTime, float InRemainingSeconds)
 {
-	SpawnTime = InSpawnTime;
-	bServerDriven = true;	// InitPoint 는 서버 엔티티로 만들 때만 부른다 → 빨강은 서버 신호로만
+	SpawnTime = InReceivedTime;
+	ExpireTime = InReceivedTime + FMath::Max(0.f, InRemainingSeconds);
+	bServerDriven = true;	// InitPoint 는 서버 엔티티로 만들 때만 부른다 → 빨강은 서버 신호로만, 남은 시간은 서버 timer_ms 로만
 }
 
 void AVHReturnPoint::SetServerWarning(bool bWarning)
@@ -96,11 +97,6 @@ void AVHReturnPoint::SetServerWarning(bool bWarning)
 		return;
 	}
 	bServerWarning = bWarning;
-	if (bWarning)
-	{
-		// 서버는 등장 55초에 경고를 켠다 → 화면의 남은 시간("곧 이동 N초")을 그 시각에 맞춘다
-		SpawnTime = GetNow() - UVHSettings::Get().GetGameplayConfig().ReturnPointRedSeconds;
-	}
 	UE_LOG(LogTemp, Log, TEXT("[반납지점] %s 서버 경고 %s: 남은 %.1f초"), *GetName(), bWarning ? TEXT("켜짐 → 빨강") : TEXT("꺼짐"), GetRemainingSeconds());
 	UpdateColor();
 }
@@ -112,6 +108,10 @@ float AVHReturnPoint::GetAge() const
 
 float AVHReturnPoint::GetRemainingSeconds() const
 {
+	if (bServerDriven && ExpireTime > 0.0)
+	{
+		return static_cast<float>(FMath::Max(0.0, ExpireTime - GetNow()));	// 서버가 알려 준 남은 수명 기준
+	}
 	return FMath::Max(0.f, UVHSettings::Get().GetGameplayConfig().ReturnPointLifetimeSeconds - GetAge());
 }
 
@@ -119,7 +119,7 @@ bool AVHReturnPoint::IsRed() const
 {
 	if (bServerDriven)
 	{
-		return bServerWarning;	// 서버 신호 기준 (2026-11-22: 서버가 55초 = 남은 5초에 경고)
+		return bServerWarning;	// 서버 신호 기준 (서버가 사라지기 5초 전에 경고)
 	}
 	return GetAge() >= UVHSettings::Get().GetGameplayConfig().ReturnPointRedSeconds;
 }
@@ -145,7 +145,7 @@ void AVHReturnPoint::Tick(float DeltaSeconds)
 	if (IsRed() != bShownRed)
 	{
 		UE_LOG(LogTemp, Log, TEXT("[반납지점] %s %s: 등장 %.1f초, 남은 %.1f초"), *GetName(), IsRed() ? TEXT("빨강으로") : TEXT("초록으로"), GetAge(), GetRemainingSeconds());
-		UpdateColor();	// 서버 없이 놓인 반납지점: 등장 55초(남은 5초)가 지나면 빨간색 (서버 반납지점은 SetServerWarning)
+		UpdateColor();	// 서버 없이 놓인 반납지점: ReturnPointRedSeconds 가 지나면 빨간색 (서버 반납지점은 SetServerWarning)
 	}
 }
 
@@ -158,4 +158,15 @@ float AVHReturnPoint::GetInteractDistance(const FVector& From) const
 float AVHReturnPoint::GetInteractRange() const
 {
 	return UVHSettings::Get().GetInteractionConfig().ReturnPointInteractRadius;
+}
+
+FVector AVHReturnPoint::GetWorkPoint() const
+{
+	return GetActorLocation();	// 서버 판정 = 사각형 가운데에서의 수평 거리
+}
+
+float AVHReturnPoint::GetWorkApproachDistance() const
+{
+	// 범위(100cm) 가장자리에서 시작하면 조금만 밀려도 서버가 "구역 밖"으로 끊는다 → 범위의 절반 안까지 다가간다
+	return FMath::Min(Super::GetWorkApproachDistance(), GetInteractRange() * 0.5f);
 }

@@ -188,12 +188,14 @@ bool FVHInteractOfferTest::RunTest(const FString& Parameters)
 	Safe->ApplyOpened();
 	TestFalse(TEXT("열린 금고 = 안내 없음"), Auth->Evaluate(A.Interaction, Safe).bHasOffer);
 
-	// 7) 반납지점: 든 것이 없으면 막힘, 환금 아이템을 들면 가능
+	// 7) 반납지점: 든 것이 없으면 막힘, 환금 아이템을 들면 가능 — 2026-11-23 팀 서버부터 4초 시간 작업(금고·상자와 같은 Hold, 끊기면 처음부터)
 	Offer = Auth->Evaluate(A.Interaction, Point);
 	TestTrue(TEXT("빈손 = 반납 불가"), Offer.bHasOffer && !Offer.IsAvailable());
 	A.Carrier->ApplyAdd(FVHItemData::MakeTreasure(FText::FromString(TEXT("보물")), 2000));
 	Offer = Auth->Evaluate(A.Interaction, Point);
-	TestTrue(TEXT("환금 아이템을 들면 반납 가능"), Offer.IsAvailable() && Offer.Mode == EVHInteractMode::Tap);
+	TestTrue(TEXT("환금 아이템을 들면 반납 가능 = 시간 작업"), Offer.IsAvailable() && Offer.Mode == EVHInteractMode::Hold && !Offer.bKeepProgressOnCancel);
+	TestTrue(TEXT("반납 작업 지점 = 사각형 가운데, 범위 안쪽까지 다가감"),
+		Point->GetWorkPoint().Equals(Point->GetActorLocation()) && Point->GetWorkApproachDistance() < Point->GetInteractRange());
 	A.Carrier->ApplyServerCarried(2000);
 	TestEqual(TEXT("들고 있는 가치 = 서버 값"), A.Carrier->GetTotalValue(), 2000);
 	TestEqual(TEXT("반납(전부 내려놓기) 1개"), A.Carrier->ApplyRemoveAll().Num(), 1);

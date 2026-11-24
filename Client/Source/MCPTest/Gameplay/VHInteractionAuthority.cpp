@@ -83,11 +83,12 @@ FVHInteractOffer UVHLocalInteractionAuthority::BuildOffer(const UVHInteractionCo
 
 	case EVHEntityKind::ReturnPoint:
 	{
-		// 들고 있는 환금 아이템 전부 반납. "들고 있는가"는 서버용 담당이 SC_MONEY 값으로 다시 판단한다
+		// 들고 있는 환금 아이템 전부 반납. "들고 있는가"는 서버용 담당이 SC_MONEY 값으로 다시 판단한다.
+		// 2026-11-23 팀 서버: 구역 안에서 4초 머무는 시간 작업(금고·상자처럼 F 한 번 → 진행 게이지, 끊기면 처음부터)
 		const UVHGameplayConfig& G = UVHSettings::Get().GetGameplayConfig();
 		const UVHTreasureCarrierComponent* Carrier = FindOn<UVHTreasureCarrierComponent>(By);
 		const int32 Count = Carrier ? Carrier->GetCount() : 0;
-		FVHInteractOffer Offer = FVHInteractOffer::Make(EVHInteractMode::Tap, G.ReturnSeconds * Scale, false,
+		FVHInteractOffer Offer = FVHInteractOffer::Make(EVHInteractMode::Hold, G.ReturnSeconds, false,
 			Count > 0 ? FText::Format(LOCTEXT("ReturnDetail", "{0} ({1}개 · {2}$)"), G.ReturnText, Count, FText::AsNumber(Carrier->GetTotalValue()))
 				: G.ReturnText);
 		if (Count == 0)

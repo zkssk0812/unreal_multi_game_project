@@ -49,7 +49,7 @@ enum class PacketId : uint16_t {
 	CS_LEAVE_ROOM = 2007,
 	SC_LEAVE_ROOM = 2008,
 	SC_ROOM_STATE = 2009,
-	CS_SELECT_CHARACTER = 2010,		// 캐릭터 1~5 (스킬은 캐릭터에 고정)
+	CS_SELECT_CHARACTER = 2010,		// 캐릭터 1~3 (도적1·2·3, 스킬은 캐릭터에 고정)
 	CS_SELECT_PERKS = 2011,			// 퍽 1~7, 최대 3개
 	CS_READY = 2012,
 	SC_ROOM_ERROR = 2013,
@@ -138,7 +138,7 @@ enum class ActionType : uint8_t {
 
 enum class RejectReason : uint8_t {
 	InvalidState, Cooldown, NoStamina, OutOfRange, TargetBusy, NotAvailable,
-	Downed, Stunned, Locked /*레일건·제트팩 중*/, HpFull, OnlyOneWeapon,
+	Downed, Stunned, Locked /*레일건·제트팩 중, 사제 테이저건을 든 중(무기 교체·소비 아이템)*/, HpFull, OnlyOneWeapon,
 };
 
 enum class EndReason : uint8_t { TimeUp, Aborted };

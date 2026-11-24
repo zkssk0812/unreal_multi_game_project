@@ -56,12 +56,12 @@ public:
 	float BoxOpenSeconds = 3.f;
 
 	/**
-	 * 반납 방식 [사용자 임시 결정 2026-11-14, 기획자 확인 전].
-	 * 켜면 환금 아이템을 들고 반납지점 범위(ReturnPointInteractRadius)에 들어가는 순간 자동으로 반납을 요청한다(F 필요 없음).
-	 * 끄면 예전처럼 반납지점 위에서 F를 눌러야 한다.
+	 * 반납 방식. 2026-11-23 팀 서버부터 반납은 F로 시작하는 4초 시간 작업(SC_INTERACT, 한 구역에 한 명)이라 기본은 끔(F 방식).
+	 * 켜면 환금 아이템을 들고 반납지점 범위(ReturnPointInteractRadius)에 들어가는 순간 자동으로 반납 작업을 요청한다
+	 * (예전 사용자 임시 결정 2026-11-14 — 서버가 즉시 반납이던 때).
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction")
-	bool bAutoReturn = true;
+	bool bAutoReturn = false;
 
 	/** 자동 반납 요청을 다시 보내기까지의 간격 (응답을 기다리는 동안 매 프레임 보내지 않도록) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Interaction", meta = (ClampMin = 0.1, Units = "s"))

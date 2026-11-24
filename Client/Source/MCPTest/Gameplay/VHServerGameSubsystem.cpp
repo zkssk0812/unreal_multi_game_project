@@ -172,10 +172,10 @@ namespace
 
 	FVector ToVector(const Vec3& V) { return FVector(V.x, V.y, V.z); }
 
-	/** 즉시 끝나는 상호작용(줍기·반납): SC_INTERACT 없이 SC_PICKUP·SC_MONEY 로 결과가 온다 */
+	/** 즉시 끝나는 상호작용(줍기): SC_INTERACT 없이 SC_PICKUP 으로 결과가 온다. 반납은 2026-11-23 팀 서버부터 4초 시간 작업(SC_INTERACT) */
 	bool IsInstantKind(EntityKind K)
 	{
-		return K == EntityKind::Valuable || K == EntityKind::WeaponPickup || K == EntityKind::ConsumablePickup || K == EntityKind::ReturnPoint;
+		return K == EntityKind::Valuable || K == EntityKind::WeaponPickup || K == EntityKind::ConsumablePickup;
 	}
 
 	/** 서버 RejectReason → 클라 거절 이유 + 안내 문구 */
@@ -986,10 +986,19 @@ void UVHServerGameSubsystem::ApplyGameStart(const SC_GameStart& P)
 	}
 	SelfEntityId = P.self_entity_id;
 	DurationSeconds = P.duration_ms / 1000.f;
+	// SC_GAME_START 를 받은 뒤 레벨 로딩 등으로 늦게 적용하면, 그 사이 흐른 시간만큼 반납지점의 남은 수명(timer_ms)이 줄어 있다
+	StartTimerLagSeconds = 0.f;
+	if (const UVHNetSubsystem* N = Net.Get(); N && N->GetGameStartInfo().bValid && N->GetGameStartInfo().ReceivedSeconds > 0.0)
+	{
+		StartTimerLagSeconds = FMath::Clamp(static_cast<float>(FPlatformTime::Seconds() - N->GetGameStartInfo().ReceivedSeconds), 0.f, 10.f);
+	}
+	bApplyingGameStart = true;
 	for (int32 i = 0; i < P.entity_count; ++i)
 	{
 		AddEntity(P.entities[i], true);
 	}
+	bApplyingGameStart = false;
+	UE_LOG(LogVHServerGame, Log, TEXT("SC_GAME_START 를 받은 뒤 %.2f초 늦게 적용 (반납지점 남은 수명에서 뺌)"), StartTimerLagSeconds);
 	bStarted = true;
 	ApplyPlayerColors();
 
@@ -1135,9 +1144,9 @@ void UVHServerGameSubsystem::AddEntity(const EntitySpawn& S, bool bFromStart)
 				Transform, nullptr, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 			if (Point)
 			{
-				// 남은 수명으로 등장 시각을 거꾸로 계산해 화면의 남은 시간이 서버와 같게 한다
-				const double Age = FMath::Max(0.0, static_cast<double>(G.ReturnPointLifetimeSeconds) - E.TimerMs / 1000.0);
-				Point->InitPoint(Sub->GetNow() - (E.TimerMs > 0 ? Age : 0.0));
+				// 화면의 남은 시간 = 받은 시각 + 서버가 알려 준 남은 수명 (수명·경고 시각을 클라에 고정하지 않는다)
+				const float Lag = bApplyingGameStart ? StartTimerLagSeconds : 0.f;
+				Point->InitPoint(Sub->GetNow(), E.TimerMs > 0 ? E.TimerMs / 1000.f - Lag : G.ReturnPointLifetimeSeconds);
 				Point->FinishSpawning(Transform);
 #if WITH_EDITOR
 				Point->SetActorLabel(FString::Printf(TEXT("RP_%u"), E.Id));	// 개발 명령용 이름 (VHUse RP_12)
@@ -1314,6 +1323,10 @@ void UVHServerGameSubsystem::RemoveEntity(uint16 Id)
 	}
 	UE_LOG(LogVHServerGame, Log, TEXT("엔티티 사라짐 %u: %s"), Id, KindName(E->Kind));
 	CancelRailgunShot(Id, TEXT("쏜 사람이 사라짐"));
+	if (ReturnCancel.bActive && ReturnCancel.TargetId == Id)
+	{
+		ReturnCancel.bClosed = true;	// 반납이 끊긴 같은 틱에 그 구역이 사라짐 = 수명이 끝나 닫힘 (서버: 닫히기 직전 Cancel → 교체)
+	}
 	if (Id == MyDroppedTreasureId)
 	{
 		// 바닥의 내 보물을 누가 주웠다 → 미니맵·방향 표시를 지운다 (누가 주웠는지는 SC_TREASURE_TAKEN 알림·배너가 이미 알림)
@@ -1781,7 +1794,12 @@ void UVHServerGameSubsystem::ApplySnapshot(const SC_Snapshot& P)
 
 	// 이 틱의 이벤트(Cancel → 대미지 → 쓰러짐)와 방금 적용한 내 상태로 "공격받아 작업이 멈췄나"를 가리고, 다음 틱을 위해 비운다.
 	// 서버는 한 틱의 이벤트를 모두 보낸 뒤 스냅샷을 보내므로, 스냅샷이 틱의 끝이다
-	if (TickCause.EndTick(HasSelfState(ES_STUNNED), HasSelfState(ES_DOWNED)))
+	const bool bHitInterrupted = TickCause.EndTick(HasSelfState(ES_STUNNED), HasSelfState(ES_DOWNED));
+	if (ResolveReturnCancel(bHitInterrupted))
+	{
+		// 반납이 끊긴 이유는 반납 전용 문구로 안내했다
+	}
+	else if (bHitInterrupted)
 	{
 		UE_LOG(LogVHServerGame, Log, TEXT("[작업] 공격받아 작업이 멈춤"));
 		if (UVHInteractionSubsystem* Sub = GetInteraction())
@@ -2153,6 +2171,16 @@ void UVHServerGameSubsystem::OnInteract(const SC_Interact& P)
 	}
 	if (P.actor != SelfEntityId)
 	{
+		// 개발용 짝 봇(-VHBotReturnPartner): 다른 플레이어가 반납을 시작한 구역을 기억한다
+		if (P.state == InteractState::Begin)
+		{
+			if (const FEntity* T = Entities.Find(P.target); T && T->Kind == EntityKind::ReturnPoint)
+			{
+				PartnerZone = P.target;
+				PartnerActor = P.actor;
+				PartnerSeenTime = FPlatformTime::Seconds();
+			}
+		}
 		return;	// 다른 플레이어: 상태는 스냅샷(Interacting 비트)으로 보인다
 	}
 	UVHInteractionSubsystem* Sub = GetInteraction();
@@ -2163,8 +2191,9 @@ void UVHServerGameSubsystem::OnInteract(const SC_Interact& P)
 		return;
 	}
 	const FVHInteractOffer Offer = Pending.Target.Get() == Target ? Pending.Offer : Sub->GetAuthority()->Evaluate(By, Target);
-	// duration_ms 는 작업 속도 1.0 기준. 유용한 도구 퍽이면 실제로는 1.1배 빨리 끝난다
-	const float Speed = GetMyWorkSpeed();
+	// duration_ms 는 작업 속도 1.0 기준. 유용한 도구 퍽이면 실제로는 1.1배 빨리 끝난다 (반납은 퍽과 관계없이 늘 duration_ms 그대로, 2026-11-23 팀 서버)
+	AVHReturnPoint* ReturnTarget = Cast<AVHReturnPoint>(Target);
+	const float Speed = ReturnTarget ? 1.f : GetMyWorkSpeed();
 	const float Total = P.duration_ms / 1000.f / Speed;
 	const float Remaining = FMath::Max(0.f, (static_cast<float>(P.duration_ms) - static_cast<float>(P.progress_ms)) / 1000.f / Speed);
 	const EVHInteractMode Mode = P.duration_ms > 0 ? EVHInteractMode::Hold : Offer.Mode;
@@ -2172,6 +2201,10 @@ void UVHServerGameSubsystem::OnInteract(const SC_Interact& P)
 	{
 	case InteractState::Begin:
 		TickCause.OnInteractConfirmed();	// 작업이 실제로 시작됨 (은신 중이었다면 서버가 이때 은신을 푼다)
+		if (ReturnTarget)
+		{
+			UE_LOG(LogVHServerGame, Log, TEXT("[반납] 시작: 반납지점 %u, %.1f초 작업 (구역 남은 수명 %.1f초)"), P.target, Total, ReturnTarget->GetRemainingSeconds());
+		}
 		Sub->ApplyInteract(By, Target, EVHInteractState::Begin, Sub->GetNow(), Remaining, Total, Mode, Offer.bKeepProgressOnCancel, Offer.ActionText);
 		// 응답이 오기 전에 손을 뗐으면 바로 취소
 		if (Mode == EVHInteractMode::Hold && !By->IsInteractHeld())
@@ -2182,14 +2215,116 @@ void UVHServerGameSubsystem::OnInteract(const SC_Interact& P)
 	case InteractState::Cancel:
 		Sub->ApplyInteract(By, Target, EVHInteractState::Cancel, Sub->GetNow(), 0.f, Total, Mode, Offer.bKeepProgressOnCancel, Offer.ActionText);
 		Pending = FPending();
+		if (ReturnTarget)
+		{
+			// 왜 끊겼는지는 이 틱의 스냅샷이 올 때 고른다 (ResolveReturnCancel)
+			ReturnCancel = FReturnCancel();
+			ReturnCancel.bActive = true;
+			ReturnCancel.TargetId = P.target;
+			ReturnCancel.bOwn = SentOwnActionRecently();
+			ReturnCancel.OwnAction = LastOwnAction;
+			ReturnCancel.RemainingAtCancel = ReturnTarget->GetRemainingSeconds();
+			if (const APawn* RetPawn = GetLocalPawn())
+			{
+				ReturnCancel.DistanceAtCancel = ReturnTarget->GetInteractDistance(RetPawn->GetActorLocation());
+				ReturnCancel.bOutside = ReturnCancel.DistanceAtCancel > ReturnTarget->GetInteractRange();
+			}
+			UE_LOG(LogVHServerGame, Log, TEXT("[반납] 서버가 끊음: 반납지점 %u, 진행 %u/%ums, 구역 남은 %.2f초, 거리 %.0fcm, 방금 내 행동 %s"), P.target, P.progress_ms, P.duration_ms,
+				ReturnCancel.RemainingAtCancel, ReturnCancel.DistanceAtCancel, ReturnCancel.bOwn ? *FString::Printf(TEXT("있음(%d)"), (int32)LastOwnAction) : TEXT("없음"));
+		}
 		// 왜 멈췄는지는 이 틱의 스냅샷이 올 때 가린다: 이 Cancel 뒤에 같은 틱의 SC_DAMAGE가 오면 공격받아 멈춘 것 [서버 IN-05, Q-41]
 		TickCause.OnInteractCancel(SentOwnActionRecently());
 		break;
 	case InteractState::Complete:
 		Sub->ApplyInteract(By, Target, EVHInteractState::Complete, Sub->GetNow(), 0.f, Total, Mode, Offer.bKeepProgressOnCancel, Offer.ActionText);
 		Pending = FPending();
+		if (ReturnTarget)
+		{
+			UE_LOG(LogVHServerGame, Log, TEXT("[반납] 완료: 반납지점 %u (금액은 SC_MONEY)"), P.target);
+			RetResult = TEXT("완료");
+		}
 		break;
 	}
+}
+
+FText UVHServerGameSubsystem::ReturnRejectText(RejectReason Reason) const
+{
+	if (!Cast<AVHReturnPoint>(Pending.Target.Get()))
+	{
+		return FText::GetEmpty();
+	}
+	switch (Reason)
+	{
+	case RejectReason::TargetBusy:		return LOCTEXT("ReturnBusy", "다른 사람이 이 구역에서 반납 중입니다 — 끝나거나 끊길 때까지 기다리세요");
+	case RejectReason::NotAvailable:	return LOCTEXT("ReturnClosing", "곧 사라지는 구역이라 반납할 수 없습니다 — 다른 반납 구역으로 가세요");
+	case RejectReason::InvalidState:	return LOCTEXT("ReturnNothing", "반납할 환금 아이템이 없습니다");
+	case RejectReason::OutOfRange:		return LOCTEXT("ReturnOutOfRange", "반납 구역 안으로 들어가서 F를 누르세요");
+	default:							return FText::GetEmpty();	// 경직·쓰러짐 등은 공통 문구
+	}
+}
+
+bool UVHServerGameSubsystem::ResolveReturnCancel(bool bHitInterrupted)
+{
+	if (!ReturnCancel.bActive)
+	{
+		return false;
+	}
+	const FReturnCancel C = ReturnCancel;
+	ReturnCancel = FReturnCancel();
+	// 우선순위: 구역 닫힘 > 쓰러짐(쓰러짐 화면이 따로 있음) > 경직 > 맞음 > 내 행동 > 구역 밖
+	FText Text;
+	const TCHAR* Why = TEXT("");
+	// 닫힘: 같은 틱에 그 구역이 사라졌거나, 끊길 때 남은 수명이 거의 0 (사라짐 패킷 순서와 관계없이)
+	const bool bClosed = C.bClosed || C.RemainingAtCancel <= 0.3f;
+	if (bClosed)
+	{
+		Why = TEXT("구역 닫힘");
+		Text = LOCTEXT("ReturnClosed", "반납 실패: 반납이 끝나기 전에 구역이 닫혔습니다");
+	}
+	else if (HasSelfState(ES_DOWNED))
+	{
+		Why = TEXT("쓰러짐");
+	}
+	else if (HasSelfState(ES_STUNNED))
+	{
+		Why = TEXT("경직");
+		Text = LOCTEXT("ReturnStunned", "경직되어 반납이 끊겼습니다 — 다시 F (처음부터)");
+	}
+	else if (bHitInterrupted)
+	{
+		Why = TEXT("맞음");
+		Text = LOCTEXT("ReturnHit", "공격받아 반납이 끊겼습니다 — 다시 F (처음부터)");
+	}
+	else if (C.bOwn)
+	{
+		switch (C.OwnAction)
+		{
+		case ActionType::AttackStart:	Why = TEXT("내 공격");	Text = LOCTEXT("ReturnOwnAttack", "공격해서 반납이 끊겼습니다 — 다시 F (처음부터)"); break;
+		case ActionType::Dodge:			Why = TEXT("내 구르기");	Text = LOCTEXT("ReturnOwnDodge", "구르기로 반납이 끊겼습니다 — 다시 F (처음부터)"); break;
+		case ActionType::InteractCancel: Why = TEXT("F·이동으로 취소"); Text = LOCTEXT("ReturnOwnCancel", "반납을 멈췄습니다 — 다시 F (처음부터)"); break;
+		default:						Why = TEXT("내 행동");	Text = LOCTEXT("ReturnOwnOther", "반납이 끊겼습니다 — 다시 F (처음부터)"); break;
+		}
+	}
+	else if (C.bOutside)
+	{
+		Why = TEXT("구역 밖");
+		Text = LOCTEXT("ReturnLeft", "반납 구역을 벗어나 반납이 끊겼습니다 — 구역 안에서 끝까지 버티세요");
+	}
+	else
+	{
+		Why = TEXT("알 수 없음");
+		Text = LOCTEXT("ReturnCanceled", "반납이 끊겼습니다 — 다시 F (처음부터)");
+	}
+	UE_LOG(LogVHServerGame, Log, TEXT("[반납] 끊긴 이유: %s (반납지점 %u, 남은 수명 %.2f초, 거리 %.0fcm) → \"%s\""), Why, C.TargetId, C.RemainingAtCancel, C.DistanceAtCancel, *Text.ToString());
+	RetResult = Why;
+	if (!Text.IsEmpty())
+	{
+		if (UVHInteractionSubsystem* Sub = GetInteraction())
+		{
+			Sub->PostMessage(Text, true);
+		}
+	}
+	return true;
 }
 
 bool UVHServerGameSubsystem::SentOwnActionRecently() const
@@ -2863,6 +2998,19 @@ void UVHServerGameSubsystem::OnReject(const SC_ActionReject& P)
 	{
 	case ActionType::InteractBegin:
 	case ActionType::InteractCancel:
+		if (P.action == ActionType::InteractBegin)
+		{
+			// 반납 시작 거절은 반납 전용 문구로 (다른 사람이 반납 중·곧 닫히는 구역 등)
+			const FText ReturnText = Pending.Seq == P.seq ? ReturnRejectText(P.reason) : FText::GetEmpty();
+			if (!ReturnText.IsEmpty())
+			{
+				UE_LOG(LogVHServerGame, Log, TEXT("[반납] 시작 거절 (reason %d): %s"), (int32)P.reason, *ReturnText.ToString());
+				Detail = ReturnText;
+				static const TCHAR* ReasonNames[] = { TEXT("InvalidState"), TEXT("Cooldown"), TEXT("NoStamina"), TEXT("OutOfRange"), TEXT("TargetBusy"), TEXT("NotAvailable") };
+				const int32 R = static_cast<int32>(P.reason);
+				RetResult = FString::Printf(TEXT("거절 %s"), R < UE_ARRAY_COUNT(ReasonNames) ? ReasonNames[R] : TEXT("기타"));
+			}
+		}
 		Sub->ApplyReject(GetMyInteraction(), Reason, Detail);
 		if (Pending.Seq == P.seq)
 		{
@@ -2969,6 +3117,7 @@ void UVHServerGameSubsystem::SendInteractCancel(UVHInteractionComponent* By)
 		return;
 	}
 	LastOwnActionSentTime = FPlatformTime::Seconds();	// 내가 멈춘 것 (서버가 멈춘 것과 구분)
+	LastOwnAction = ActionType::InteractCancel;
 	// 클라 진행 막대가 (거의) 다 찬 뒤에 손을 떼면, 서버는 이미 완료했거나 곧 완료한다(지연·틱 차이).
 	// 이때 취소를 보내면 서버가 완료 직후의 취소로 받아 금고 열기가 끊긴다
 	// → 바로 보내지 않고 서버 완료를 기다린다. 오지 않으면 Tick 에서 취소를 보낸다.
@@ -3140,6 +3289,7 @@ void UVHServerGameSubsystem::SendAttackHeld(bool bHeld)
 			bAttackHeldSent = true;
 			bTaserShotPress = true;
 			LastOwnActionSentTime = FPlatformTime::Seconds();
+			LastOwnAction = ActionType::AttackStart;
 			UE_LOG(LogVHServerGame, Log, TEXT("[테이저] 든 채 공격 키 → AttackStart (서버가 테이저 발사) yaw %.0f"), GetLookYaw());
 		}
 		ApplyMyAttackHeldVisual();
@@ -3175,6 +3325,7 @@ void UVHServerGameSubsystem::SendAttackHeld(bool bHeld)
 			bRailAwaitFire = true;
 			RailClickTime = FPlatformTime::Seconds();
 			LastOwnActionSentTime = RailClickTime;
+			LastOwnAction = ActionType::AttackStart;
 			UE_LOG(LogVHServerGame, Log, TEXT("[레일건] 클릭 → 공격 신호 바로 전송 (AttackStart seq %u, yaw %.0f) — 충전은 서버 SC_FIRE 부터 1초"), Seq, Yaw);
 		}
 		return;
@@ -3186,6 +3337,7 @@ void UVHServerGameSubsystem::SendAttackHeld(bool bHeld)
 		if (N->SendAction(ActionType::AttackStart, GetLookYaw(), 0, GetAimPoint()) != 0)
 		{
 			LastOwnActionSentTime = FPlatformTime::Seconds();	// 공격하면 서버가 내 작업을 멈춘다
+			LastOwnAction = ActionType::AttackStart;
 			bAttackHeldSent = true;
 			UE_LOG(LogVHServerGame, Log, TEXT("→ 공격 시작 (꾹 누르기) yaw %.0f"), GetLookYaw());
 		}
@@ -3296,17 +3448,43 @@ void UVHServerGameSubsystem::SendDodge()
 	{
 		N->SendAction(ActionType::Dodge, GetLookYaw(), 0);
 		LastOwnActionSentTime = FPlatformTime::Seconds();	// 구르면 서버가 내 작업을 멈춘다
+		LastOwnAction = ActionType::Dodge;
 		UE_LOG(LogVHServerGame, Log, TEXT("→ 구르기"));
 	}
 }
 
+bool UVHServerGameSubsystem::BlockWhileTaserHeld(const TCHAR* What)
+{
+	// 사제 테이저건을 든 동안(서버 ES_TASER_READY)은 무기 교체·소비 아이템이 서버에서 Locked (2026-11-23 팀 서버).
+	// 보내 봐야 거절되므로 보내지 않고 아무 일도 없게, 짧은 안내만 (같은 안내를 연달아 띄우지 않음)
+	if (!bSkillTaserHeld && !HasSelfState(ES_TASER_READY))
+	{
+		return false;
+	}
+	UE_LOG(LogVHServerGame, Log, TEXT("[테이저] 든 채 %s → 보내지 않음 (서버가 Locked 로 막음)"), What);
+	const double Now = FPlatformTime::Seconds();
+	if (Now - LastTaserBlockNoticeTime > 1.5)
+	{
+		LastTaserBlockNoticeTime = Now;
+		if (UVHMatchSubsystem* Match = GetMatch())
+		{
+			Match->PushNotice(LOCTEXT("TaserHolsterFirst", "테이저건을 든 동안은 안 됩니다 — Q로 먼저 집어넣으세요"));
+		}
+	}
+	return true;
+}
+
 void UVHServerGameSubsystem::SendSwitchWeapon()
 {
-	// 테이저건을 든 채 휠: 서버가 무기를 바꾸고 테이저건을 집어넣는다(SC_SKILL End, 쿨타임 없음). 레일건 충전·발사 중이면 서버가 Locked 로 거절한다
+	// 레일건 충전·발사 중이면 서버가 Locked 로 거절한다
 	if (UVHNetSubsystem* N = Net.Get(); N && bActive)
 	{
+		if (BlockWhileTaserHeld(TEXT("휠(무기 교체)")))
+		{
+			return;
+		}
 		N->SendAction(ActionType::SwitchWeapon, GetLookYaw(), 0);
-		UE_LOG(LogVHServerGame, Log, TEXT("→ 무기 교체%s"), bSkillTaserHeld ? TEXT(" (테이저건 든 상태 → 서버가 집어넣음)") : TEXT(""));
+		UE_LOG(LogVHServerGame, Log, TEXT("→ 무기 교체"));
 	}
 }
 
@@ -3317,6 +3495,7 @@ void UVHServerGameSubsystem::SendUseSkill()
 		SendCurrentPositionNow();
 		N->SendAction(ActionType::UseSkill, GetLookYaw(), 0, GetAimPoint());
 		LastOwnActionSentTime = FPlatformTime::Seconds();	// 은신을 켜면 서버가 내 작업을 멈춘다
+		LastOwnAction = ActionType::UseSkill;
 		UE_LOG(LogVHServerGame, Log, TEXT("→ 스킬"));
 	}
 }
@@ -3384,9 +3563,14 @@ void UVHServerGameSubsystem::SendUseConsumable()
 {
 	if (UVHNetSubsystem* N = Net.Get(); N && bActive)
 	{
+		if (BlockWhileTaserHeld(TEXT("E(소비 아이템)")))
+		{
+			return;
+		}
 		SendCurrentPositionNow();
 		N->SendAction(ActionType::UseConsumable, GetLookYaw(), 0, GetAimPoint());
 		LastOwnActionSentTime = FPlatformTime::Seconds();	// 제트팩을 쓰면 서버가 내 작업을 멈춘다
+		LastOwnAction = ActionType::UseConsumable;
 		UE_LOG(LogVHServerGame, Log, TEXT("→ 소비 아이템 사용"));
 	}
 }
@@ -3414,6 +3598,7 @@ void UVHServerGameSubsystem::Tick(float DeltaTime)
 		{
 			N->SendAction(ActionType::InteractCancel, GetLookYaw(), 0);
 			LastOwnActionSentTime = FPlatformTime::Seconds();
+			LastOwnAction = ActionType::InteractCancel;
 			UE_LOG(LogVHServerGame, Log, TEXT("→ 상호작용 취소 (서버 완료가 %.1f초 안에 오지 않음)"), CancelWaitSeconds);
 		}
 		Pending.bCancelDeferred = false;
@@ -3546,8 +3731,11 @@ void UVHServerGameSubsystem::TickBotHeist(float DeltaTime)
 	//  -VHBotLoot  : 바닥 아이템 줍기(환금·무기·소비) → 상자 열기 → 필드 아이템 밟기 → 들고 있으면 반납
 	// 반납은 설정(bAutoReturn)이 켜져 있으면 반납지점 위에 서기만 해도 된다(F를 눌러도 아무 일 없음).
 	//  -VHBotPickTest : 상자를 열어 소비 아이템을 모으며 연막탄 줍기 세 경우(빈손·다른 것·연막탄)를 차례로 만든다 (로그 [줍기시험])
+	//  -VHBotReturnTest / -VHBotReturnPartner : 줍기(-VHBotLoot 처럼)로 환금 아이템을 든 뒤 4초 반납 시험 (TickBotReturnTest / TickBotReturnPartner)
 	static const bool bPickTest = FParse::Param(FCommandLine::Get(), TEXT("VHBotPickTest"));
-	static const bool bLoot = bPickTest || FParse::Param(FCommandLine::Get(), TEXT("VHBotLoot"));
+	static const bool bReturnTest = FParse::Param(FCommandLine::Get(), TEXT("VHBotReturnTest"));
+	static const bool bReturnPartner = FParse::Param(FCommandLine::Get(), TEXT("VHBotReturnPartner"));
+	static const bool bLoot = bPickTest || bReturnTest || bReturnPartner || FParse::Param(FCommandLine::Get(), TEXT("VHBotLoot"));
 	static const bool bShotLoot = FParse::Param(FCommandLine::Get(), TEXT("VHShotLoot"));
 	static bool bStageRead = false;
 	if (bPickTest && !bStageRead)
@@ -3583,6 +3771,19 @@ void UVHServerGameSubsystem::TickBotHeist(float DeltaTime)
 			UE_LOG(LogVHServerGame, Log, TEXT("[쓰러짐 시험] 모든 경우 끝 (%d개)"), DownCases.Num());
 		}
 		return;
+	}
+	if (bReturnTest || bReturnPartner)
+	{
+		const FVHServerMoneyRow* RetMine = Match->GetMyServerMoney();
+		const bool bRetCarrying = RetMine && RetMine->Carried > 0;
+		if (bReturnTest && TickBotReturnTest(Pawn, I, bRetCarrying))
+		{
+			return;
+		}
+		if (bReturnPartner && bRetCarrying && TickBotReturnPartner(Pawn, I))
+		{
+			return;
+		}
 	}
 	if (I->IsInteracting() || I->IsApproaching())
 	{
@@ -4016,6 +4217,23 @@ void UVHServerGameSubsystem::TickBotTaserTest(float DeltaTime)
 			bSkillTaserHeld ? 1 : 0, HasSelfState(ES_TASER_READY) ? 1 : 0, GetSkillCooldownRemaining(),
 			*NameForPlayer(Target ? Target->Owner : 0), Target ? (int32)Target->Hp : -1, (Target && (Target->State & ES_STUNNED)) ? 1 : 0);
 	};
+	static const bool bStunWait = FParse::Param(FCommandLine::Get(), TEXT("VHTaserStunWait"));	// 끝난 뒤 쿨타임이 돌면 다시 들고 경직(-VHBotTaserStun 상대)을 기다린다
+	auto MoveNearTarget = [&]()
+	{
+		if (!Target)
+		{
+			return;
+		}
+		const float Half = GetPawnHalfHeight(Pawn);
+		for (int32 Try = 0; Try < 8; ++Try)
+		{
+			const FVector Cand = Target->Pos + FRotator(0.f, 45.f * Try, 0.f).Vector() * 200.f;
+			if (Pawn->TeleportTo(Cand + FVector(0.f, 0.f, Half + 2.f), Pawn->GetActorRotation()))
+			{
+				break;
+			}
+		}
+	};
 	switch (TaserTestStage)
 	{
 	case 0:
@@ -4054,11 +4272,32 @@ void UVHServerGameSubsystem::TickBotTaserTest(float DeltaTime)
 		return;
 	}
 	case 1: if (T >= 1.f) { Report(TEXT("1) Q 누르기 전")); PressSkillKey(); TaserTestStage = 2; } return;
-	case 2: if (T >= 2.f) { Report(TEXT("2) Q 들기 1초 뒤 (든 상태 1이어야) → Q 다시")); PressSkillKey(); TaserTestStage = 3; } return;
-	case 3: if (T >= 3.f) { Report(TEXT("3) Q 넣기 1초 뒤 (든 상태 0, 쿨타임 0이어야) → Q 들기")); PressSkillKey(); TaserTestStage = 4; } return;
+	case 2:
+		if (T >= 2.f)
+		{
+			// 2026-11-23 팀 서버: 든 동안 무기 교체·소비 아이템은 Locked → 클라가 보내지 않고 안내만 (로그 "[테이저] 든 채 … 보내지 않음")
+			Report(TEXT("2) Q 들기 1초 뒤 (든 상태 1이어야) → 휠·E (보내지 않아야)"));
+			const uint8 SlotBefore = MyStatus.ActiveSlot;
+			SendSwitchWeapon();
+			SendUseConsumable();
+			UE_LOG(LogVHServerGame, Log, TEXT("[테이저 시험] 2-1) 든 채 휠·E 누름: 든 무기 칸 %d → %d (그대로여야), 소비 아이템 %s"), SlotBefore, MyStatus.ActiveSlot,
+				ConsumableName(static_cast<ConsumableId>(MyStatus.Consumable)));
+			TaserTestStage = 21;
+		}
+		return;
+	case 21:
+		if (T >= 2.6f)
+		{
+			Report(TEXT("2-2) 휠·E 0.6초 뒤 (든 상태 1 그대로여야) → Q 넣기"));
+			PressSkillKey();
+			TaserTestStage = 3;
+		}
+		return;
+	case 3: if (T >= 3.f) { Report(TEXT("3) Q 넣기 0.4초 뒤 (든 상태 0, 쿨타임 0이어야) → Q 들기")); PressSkillKey(); TaserTestStage = 4; } return;
 	case 4:
 		if (T >= 4.f)
 		{
+			MoveNearTarget();	// 대상이 움직이는 봇이면 다시 2m 앞으로
 			Face();
 			Report(TEXT("4) 들고 1초 (든 상태 1) → 공격 키"));
 			SendAttackHeld(true);
@@ -4068,9 +4307,381 @@ void UVHServerGameSubsystem::TickBotTaserTest(float DeltaTime)
 	case 5: if (T >= 4.1f) { SendAttackHeld(false); TaserTestStage = 6; } return;
 	case 6: if (T >= 4.6f) { Report(TEXT("5) 발사 0.5초 뒤 (든 상태 0, 쿨타임 약 29.5초, 대상 경직 1이어야)")); TaserTestStage = 7; } return;
 	case 7: if (T >= 5.f) { Report(TEXT("6) 쿨타임 중 Q (서버에 보내지 않고 알림만)")); PressSkillKey(); TaserTestStage = 8; } return;
-	case 8: if (T >= 7.f) { Report(TEXT("7) 끝 (대상 경직 2초가 풀렸어야)")); TaserTestStage = 9; } return;
+	case 8: if (T >= 7.f) { Report(TEXT("7) 끝 (대상 경직 2초가 풀렸어야)")); TaserTestStage = bStunWait ? 10 : 9; } return;
+	case 10:
+		// 경직 취소 시험: 쿨타임이 끝나면 다시 들고, 상대(-VHBotTaserStun)가 테이저건 무기로 나를 경직시키기를 기다린다
+		if (GetSkillCooldownRemaining() <= 0.f && !HasSelfState(ES_DOWNED) && !HasSelfState(ES_STUNNED))
+		{
+			Report(TEXT("8) 쿨타임 끝 → Q 들기, 경직을 기다림"));
+			PressSkillKey();
+			TaserTestT0 = Now;
+			TaserTestStage = 11;
+		}
+		return;
+	case 11:
+		if (HasSelfState(ES_STUNNED))
+		{
+			Report(TEXT("9) 경직됨 (든 상태 0, 쿨타임 약 30초여야 — 서버가 경직 취소에 쿨타임 시작)"));
+			TaserTestT0 = Now;
+			TaserTestStage = 12;
+		}
+		else if (!bSkillTaserHeld && T > 1.5f && !HasSelfState(ES_DOWNED) && GetSkillCooldownRemaining() <= 0.f)
+		{
+			Report(TEXT("8-1) 든 상태가 풀림 (경직 아님) → 다시 시도"));
+			TaserTestStage = 10;
+		}
+		return;
+	case 12: if (T >= 1.f) { Report(TEXT("10) 경직 1초 뒤 (쿨타임이 줄어야)")); TaserTestStage = 13; } return;
+	case 13: if (T >= 3.f) { Report(TEXT("11) 경직 3초 뒤 (경직 풀림, 쿨타임 약 27초)")); TaserTestStage = 14; } return;
+	case 14: if (T >= 3.5f) { Report(TEXT("12) 쿨타임 중 Q (보내지 않고 알림만)")); PressSkillKey(); TaserTestStage = 15; } return;
 	default:
 		return;
+	}
+}
+
+void UVHServerGameSubsystem::TickBotTaserStun(float DeltaTime)
+{
+	// 상자를 열어 테이저건(무기, 탄 1)을 얻고, 사제 테이저건을 든(ES_TASER_READY) 다른 플레이어를 1.5m 앞에서 쏜다 → 그 사람은 경직(2초)
+	APawn* Pawn = GetLocalPawn();
+	UVHInteractionComponent* I = GetMyInteraction();
+	if (!Pawn || !I || !MyStatus.bValid || HasSelfState(ES_DOWNED))
+	{
+		return;
+	}
+	const double Now = FPlatformTime::Seconds();
+	if (Now < TaserStunNext || I->IsInteracting() || I->IsApproaching())
+	{
+		return;
+	}
+	const float Half = GetPawnHalfHeight(Pawn);
+	const FVector Foot = Pawn->GetActorLocation() - FVector(0.f, 0.f, Half);
+	const uint8 Taser = static_cast<uint8>(WeaponId::Taser);
+	const int32 Slot = MyStatus.WeaponId[0] == Taser ? 0 : (MyStatus.WeaponId[1] == Taser ? 1 : -1);
+	auto TeleportNear = [&](const FVector& Pos, float Dist) -> FVector
+	{
+		for (int32 Try = 0; Try < 8; ++Try)
+		{
+			const FVector Cand = Pos + FRotator(0.f, 45.f * Try, 0.f).Vector() * Dist;
+			if (Pawn->TeleportTo(Cand + FVector(0.f, 0.f, Half + 2.f), Pawn->GetActorRotation()))
+			{
+				SendCurrentPositionNow();
+				return Cand;
+			}
+		}
+		return Foot;
+	};
+	auto Nearest = [&](TFunctionRef<bool(const FEntity&)> Want) -> const FEntity*
+	{
+		const FEntity* Best = nullptr;
+		float BestDist = TNumericLimits<float>::Max();
+		for (const TPair<uint16, FEntity>& Pair : Entities)
+		{
+			const float D = FVector::Dist2D(Foot, Pair.Value.Pos);
+			if (Want(Pair.Value) && D < BestDist)
+			{
+				BestDist = D;
+				Best = &Pair.Value;
+			}
+		}
+		return Best;
+	};
+	if (Slot < 0)
+	{
+		// 테이저건 얻기: 바닥의 것 → 없으면 가까운 상자 (상자 하나에 약 12%: 무기 60% × 테이저건 20%)
+		if (const FEntity* Pick = Nearest([&](const FEntity& E) { return E.Kind == EntityKind::WeaponPickup && E.TypeId == Taser && E.Object.IsValid() && TaserStunTries.FindRef(E.Id) < 3; }))
+		{
+			TeleportNear(Pick->Pos, 110.f);
+			TaserStunTries.FindOrAdd(Pick->Id)++;
+			I->DebugSetHoverAt(Pick->Object.Get());
+			I->InteractPressed();
+			UE_LOG(LogVHServerGame, Log, TEXT("[테이저 경직 시험] 바닥의 테이저건 %u 줍기"), Pick->Id);
+			TaserStunNext = Now + 1.5;
+			return;
+		}
+		if (const FEntity* Box = Nearest([&](const FEntity& E) { return E.Kind == EntityKind::Box && E.Object.IsValid() && TaserStunTries.FindRef(E.Id) < 2; }))
+		{
+			TeleportNear(Box->Pos, 150.f);
+			TaserStunTries.FindOrAdd(Box->Id)++;
+			I->DebugSetHoverAt(Box->Object.Get());
+			I->InteractPressed();
+			UE_LOG(LogVHServerGame, Log, TEXT("[테이저 경직 시험] 상자 %u 열기"), Box->Id);
+			TaserStunNext = Now + 1.0;
+		}
+		return;
+	}
+	if (MyStatus.ActiveSlot != Slot)
+	{
+		SendSwitchWeapon();
+		TaserStunNext = Now + 0.8;
+		return;
+	}
+	const FEntity* Target = Nearest([&](const FEntity& E)
+	{
+		return E.Kind == EntityKind::Thief && E.Id != SelfEntityId && (E.State & ES_TASER_READY) != 0 && !(E.State & (ES_DOWNED | ES_LEFT_GAME | ES_STUNNED));
+	});
+	if (!Target)
+	{
+		TaserStunNext = Now + 0.3;	// 사제 테이저건을 든 사람을 기다린다
+		return;
+	}
+	const FVector Me = TeleportNear(Target->Pos, 150.f);
+	const float Yaw = (Target->Pos - Me).Rotation().Yaw;
+	if (UVHAimComponent* Aim = Pawn->FindComponentByClass<UVHAimComponent>())
+	{
+		Aim->SnapLookYaw(Yaw);
+	}
+	Pawn->SetActorRotation(FRotator(0.f, Yaw, 0.f));
+	SendCurrentPositionNow();
+	++TaserStunShots;
+	UE_LOG(LogVHServerGame, Log, TEXT("[테이저 경직 시험] %d번째: 사제 테이저건을 든 %s 를 1.5m 앞에서 테이저건(무기)으로 쏨"), TaserStunShots, *NameForPlayer(Target->Owner));
+	SendAttackHeld(true);
+	TWeakObjectPtr<UVHServerGameSubsystem> Weak(this);
+	FTimerHandle Handle;
+	GetWorld()->GetTimerManager().SetTimer(Handle, FTimerDelegate::CreateLambda([Weak]()
+	{
+		if (Weak.IsValid())
+		{
+			Weak->SendAttackHeld(false);
+		}
+	}), 0.15f, false);
+	TaserStunNext = Now + 4.0;
+}
+
+bool UVHServerGameSubsystem::TickBotReturnTest(APawn* Pawn, UVHInteractionComponent* I, bool bCarrying)
+{
+	// 4초 반납 시험 (2026-11-23 팀 서버). 경우마다 환금 아이템을 든 채 반납 구역 가운데에 서서 F:
+	//  0 구역 밖: 시작 1.5초 뒤 3m 밖으로 → "구역 밖"으로 끊겨야
+	//  1 바쁨+맞음: "신호 자리"(가운데에서 45cm)에서 시작 → 짝 봇(-VHBotReturnPartner)이 같은 구역 F(TargetBusy), 1.2초 뒤 나를 공격 → "맞음"으로 끊겨야
+	//  2 늦음: 남은 수명 1.6초 이하인 구역에서 F → NotAvailable 거절이어야
+	//  3 닫힘: 남은 수명 3.2초인 구역에서 F → 시작되지만 4초가 차기 전에 구역이 닫혀 실패해야
+	//  4 완료: 남은 수명 9초 이상인 구역 → 4초 뒤 완료, 반납 금액 증가
+	// 다 끝나면 false (보통 털이 봇처럼 계속 — 한 판 회귀용)
+	static const TCHAR* CaseNames[] = { TEXT("구역 밖"), TEXT("바쁨+맞음"), TEXT("늦음"), TEXT("닫힘"), TEXT("완료") };
+	static const TCHAR* Expect[] = { TEXT("구역 밖"), TEXT("맞음"), TEXT("거절 NotAvailable"), TEXT("구역 닫힘"), TEXT("완료") };
+	constexpr int32 CaseCount = UE_ARRAY_COUNT(CaseNames);
+	if (RetCase >= CaseCount)
+	{
+		return false;
+	}
+	static const bool bShots = FParse::Param(FCommandLine::Get(), TEXT("VHReturnShots"));
+	const double Now = FPlatformTime::Seconds();
+	const float T = static_cast<float>(Now - RetT0);
+	const float Half = GetPawnHalfHeight(Pawn);
+	const FEntity* Zone = RetZone ? Entities.Find(RetZone) : nullptr;
+	const AVHReturnPoint* ZonePoint = Zone ? Cast<AVHReturnPoint>(Zone->Object.Get()) : nullptr;
+	auto Shot = [&](const TCHAR* Tag)
+	{
+		if (!bShots)
+		{
+			return;
+		}
+		const FString File = FPaths::ProjectSavedDir() / TEXT("V3Test") / FString::Printf(TEXT("ret_%d_%02d_%s.png"), RetCase, ++RetShotIndex, Tag);
+		FScreenshotRequest::RequestScreenshot(File, true, false);
+		UE_LOG(LogVHServerGame, Log, TEXT("[반납 시험] 화면 %s"), *FPaths::GetCleanFilename(File));
+	};
+	auto Status = [&]() -> FString
+	{
+		const FVHServerMoneyRow* Mine = GetMatch() ? GetMatch()->GetMyServerMoney() : nullptr;
+		return FString::Printf(TEXT("구역 %u 남은 %.1f초, 작업 중 %d 남은 작업 %.1f초, 들고 %d$ 반납 %d$"), RetZone, ZonePoint ? ZonePoint->GetRemainingSeconds() : -1.f,
+			I->IsInteracting() ? 1 : 0, I->IsInteracting() ? I->GetActiveRemainingSeconds() : 0.f, Mine ? Mine->Carried : 0, Mine ? Mine->Banked : 0);
+	};
+	switch (RetStage)
+	{
+	case 0:
+	{
+		// 구역 고르기 (환금 아이템을 들고 있을 때만, 아니면 털이 봇이 줍는다)
+		if (!bCarrying || I->IsInteracting() || I->IsApproaching() || HasSelfState(ES_DOWNED) || HasSelfState(ES_STUNNED))
+		{
+			return false;
+		}
+		const FEntity* Best = nullptr;
+		float BestScore = TNumericLimits<float>::Max();
+		for (const TPair<uint16, FEntity>& Pair : Entities)
+		{
+			const AVHReturnPoint* P = Pair.Value.Kind == EntityKind::ReturnPoint ? Cast<AVHReturnPoint>(Pair.Value.Object.Get()) : nullptr;
+			if (!P)
+			{
+				continue;
+			}
+			const float Left = P->GetRemainingSeconds();
+			const bool bOk = RetCase == 2 ? (Left > 2.4f && Left < 14.f) : (RetCase == 3 ? (Left > 3.8f && Left < 16.f) : Left >= 9.f);
+			const float Score = (RetCase == 2 || RetCase == 3) ? Left : -Left;	// 늦음·닫힘은 곧 닫히는 것부터
+			if (bOk && Score < BestScore)
+			{
+				BestScore = Score;
+				Best = &Pair.Value;
+			}
+		}
+		if (!Best)
+		{
+			return true;	// 알맞은 구역이 생길 때까지 기다린다 (다른 일은 하지 않음)
+		}
+		RetZone = Best->Id;
+		// 바쁨+맞음은 가운데에서 45cm 옆(짝 봇이 알아보는 신호, 범위 100cm 안·다가가기 50cm 안), 나머지는 가운데
+		const FVector Dest = Best->Pos + (RetCase == 1 ? FVector(45.f, 0.f, 0.f) : FVector::ZeroVector);
+		Pawn->TeleportTo(Dest + FVector(0.f, 0.f, Half + 2.f), FRotator::ZeroRotator);
+		SendCurrentPositionNow();
+		I->DebugSetHoverAt(Best->Object.Get());
+		RetResult.Reset();
+		bRetMoved = false;
+		RetShotIndex = 0;
+		RetT0 = Now;
+		RetStage = 1;
+		Zone = Best;
+		ZonePoint = Cast<AVHReturnPoint>(Best->Object.Get());
+		UE_LOG(LogVHServerGame, Log, TEXT("[반납 시험] 경우 %d %s (%d번째 시도): 구역으로 이동 — %s"), RetCase, CaseNames[RetCase], RetTries + 1, *Status());
+		return true;
+	}
+	case 1:
+	{
+		if (!ZonePoint)
+		{
+			UE_LOG(LogVHServerGame, Log, TEXT("[반납 시험] 기다리는 동안 구역이 사라짐 → 다시 고름"));
+			RetStage = 0;
+			return true;
+		}
+		const float Left = ZonePoint->GetRemainingSeconds();
+		const bool bPress = RetCase == 2 ? Left <= 1.6f : (RetCase == 3 ? Left <= 3.2f : T >= 0.6f);
+		if (!bPress)
+		{
+			return true;
+		}
+		UE_LOG(LogVHServerGame, Log, TEXT("[반납 시험] 경우 %d %s: F 누름 — %s"), RetCase, CaseNames[RetCase], *Status());
+		I->InteractPressed();
+		RetT0 = Now;
+		RetStage = 2;
+		return true;
+	}
+	case 2:
+	{
+		// 진행 중 연속 화면 (0.3·1.3·2.3·3.3초)
+		const int32 ShotsWanted = I->IsInteracting() ? FMath::Min(4, FMath::FloorToInt((T + 0.7f))) : 0;
+		if (I->IsInteracting() && RetShotIndex < ShotsWanted)
+		{
+			UE_LOG(LogVHServerGame, Log, TEXT("[반납 시험] 진행 %.1f초 — %s"), T, *Status());
+			Shot(*FString::Printf(TEXT("t%.0f"), T));
+		}
+		if (RetCase == 0 && !bRetMoved && I->IsInteracting() && T >= 1.5f && Zone)
+		{
+			bRetMoved = true;
+			for (int32 Try = 0; Try < 8; ++Try)
+			{
+				const FVector Cand = Zone->Pos + FRotator(0.f, 45.f * Try, 0.f).Vector() * 300.f;
+				if (Pawn->TeleportTo(Cand + FVector(0.f, 0.f, Half + 2.f), Pawn->GetActorRotation()))
+				{
+					break;
+				}
+			}
+			SendCurrentPositionNow();
+			UE_LOG(LogVHServerGame, Log, TEXT("[반납 시험] 구역 밖으로 3m 이동 — %s"), *Status());
+		}
+		if (!RetResult.IsEmpty())
+		{
+			const bool bPass = RetResult == Expect[RetCase];
+			UE_LOG(LogVHServerGame, Log, TEXT("[반납 시험] 경우 %d %s 결과: \"%s\" (기대 \"%s\") → %s — %s"), RetCase, CaseNames[RetCase], *RetResult, Expect[RetCase],
+				bPass ? TEXT("통과") : TEXT("다름"), *Status());
+			Shot(TEXT("result"));
+			++RetTries;
+			if (bPass || RetTries >= 3)
+			{
+				RetCase++;
+				RetTries = 0;
+			}
+			RetT0 = Now;
+			RetStage = 3;
+			return true;
+		}
+		if (T > 9.f)
+		{
+			UE_LOG(LogVHServerGame, Log, TEXT("[반납 시험] 경우 %d %s: 9초 동안 결과 없음 → 다시 — %s"), RetCase, CaseNames[RetCase], *Status());
+			++RetTries;
+			RetStage = 3;
+			RetT0 = Now;
+		}
+		return true;
+	}
+	case 3:
+		// 안내 문구가 보이도록 잠깐 그대로, 그다음 경우로
+		if (T >= 2.f)
+		{
+			I->DebugSetHoverAt(nullptr);
+			RetStage = 0;
+			if (RetCase >= CaseCount)
+			{
+				UE_LOG(LogVHServerGame, Log, TEXT("[반납 시험] 모든 경우 끝 → 보통 털이 봇으로 계속"));
+			}
+		}
+		return true;
+	default:
+		return false;
+	}
+}
+
+bool UVHServerGameSubsystem::TickBotReturnPartner(APawn* Pawn, UVHInteractionComponent* I)
+{
+	// 환금 아이템을 든 채 제자리에서 기다리다, 다른 플레이어가 신호 자리(구역 가운데에서 30~60cm)에서 반납을 시작하면 끼어든다
+	const double Now = FPlatformTime::Seconds();
+	const float Half = GetPawnHalfHeight(Pawn);
+	const FEntity* Zone = PartnerZone ? Entities.Find(PartnerZone) : nullptr;
+	const FEntity* Other = PartnerActor ? Entities.Find(PartnerActor) : nullptr;
+	switch (PartnerStage)
+	{
+	case 0:
+		if (Zone && Other && Now - PartnerSeenTime < 0.6 && !I->IsInteracting())
+		{
+			const float Signal = FVector::Dist2D(Other->Pos, Zone->Pos);
+			if (Signal >= 30.f && Signal <= 60.f)
+			{
+				// 같은 구역의 반대쪽(가운데에서 40cm, 범위 안)에 서서 F → 서버는 TargetBusy
+				Pawn->TeleportTo(Zone->Pos + FVector(-40.f, 0.f, Half + 2.f), FRotator::ZeroRotator);
+				SendCurrentPositionNow();
+				I->DebugSetHoverAt(Zone->Object.Get());
+				UE_LOG(LogVHServerGame, Log, TEXT("[반납 짝] %s 가 구역 %u 에서 반납 시작(신호 %.0fcm) → 같은 구역에서 F (TargetBusy 기대)"), *NameForPlayer(Other->Owner), PartnerZone, Signal);
+				PartnerT0 = Now;
+				PartnerStage = 1;
+			}
+			else
+			{
+				UE_LOG(LogVHServerGame, Log, TEXT("[반납 짝] %s 반납 시작(구역 %u, 가운데에서 %.0fcm) — 신호 자리가 아니라 지켜만 봄"), *NameForPlayer(Other->Owner), PartnerZone, Signal);
+			}
+			PartnerSeenTime = 0.0;
+		}
+		return true;
+	case 1:
+		if (Now - PartnerT0 >= 0.3)
+		{
+			I->InteractPressed();
+			PartnerStage = 2;
+		}
+		return true;
+	case 2:
+		if (Now - PartnerT0 >= 1.5 && Other)
+		{
+			// 반납 중인 사람을 삼단봉으로 때린다 → 그 사람 반납이 "맞아서" 끊긴다
+			I->DebugSetHoverAt(nullptr);
+			const FVector Foot = Pawn->GetActorLocation() - FVector(0.f, 0.f, Half);
+			const float Yaw = (Other->Pos - Foot).Rotation().Yaw;
+			if (UVHAimComponent* Aim = Pawn->FindComponentByClass<UVHAimComponent>())
+			{
+				Aim->SnapLookYaw(Yaw);
+			}
+			Pawn->SetActorRotation(FRotator(0.f, Yaw, 0.f));
+			SendCurrentPositionNow();
+			UE_LOG(LogVHServerGame, Log, TEXT("[반납 짝] 반납 중인 %s 를 공격 (거리 %.0fcm)"), *NameForPlayer(Other->Owner), FVector::Dist2D(Foot, Other->Pos));
+			SendAttackHeld(true);
+			PartnerStage = 3;
+		}
+		return true;
+	case 3:
+		if (Now - PartnerT0 >= 1.85)
+		{
+			SendAttackHeld(false);
+			PartnerStage = 0;
+			UE_LOG(LogVHServerGame, Log, TEXT("[반납 짝] 끝 → 다시 기다림"));
+		}
+		return true;
+	default:
+		return true;
 	}
 }
 
@@ -4445,6 +5056,13 @@ void UVHServerGameSubsystem::TickBotWalk(float DeltaTime)
 		TickBotTaserTest(DeltaTime);
 		return;
 	}
+	// 실행 옵션 -VHBotTaserStun: 테이저건(무기)을 구해 사제 테이저건을 든 사람을 경직시킨다 (2026-11-24, 로그 [테이저 경직 시험])
+	static const bool bTaserStun = FParse::Param(FCommandLine::Get(), TEXT("VHBotTaserStun"));
+	if (bTaserStun)
+	{
+		TickBotTaserStun(DeltaTime);
+		return;
+	}
 
 	// 실행 옵션 -VHBotRailTest: 레일건 충전 발사 시험 (2026-11-20, 로그 [레일건 시험])
 	static const bool bRailTest = FParse::Param(FCommandLine::Get(), TEXT("VHBotRailTest"));
@@ -4474,7 +5092,8 @@ void UVHServerGameSubsystem::TickBotWalk(float DeltaTime)
 
 	// 실행 옵션 -VHBotHeist: 금고 열기 → 보물 줍기 → 반납을 되풀이한다 (상호작용 시험용)
 	static const bool bHeist = FParse::Param(FCommandLine::Get(), TEXT("VHBotHeist")) || FParse::Param(FCommandLine::Get(), TEXT("VHBotLoot"))
-		|| FParse::Param(FCommandLine::Get(), TEXT("VHBotPickTest"));
+		|| FParse::Param(FCommandLine::Get(), TEXT("VHBotPickTest"))
+		|| FParse::Param(FCommandLine::Get(), TEXT("VHBotReturnTest")) || FParse::Param(FCommandLine::Get(), TEXT("VHBotReturnPartner"));
 
 	// 실행 옵션 -VHScript=파일: 게임에 들어온 뒤 "초 명령" 줄들을 시간에 맞춰 실행한다 (봇은 제자리. 촬영·화면 확인용, # 줄은 설명)
 	static FString ScriptPath;

@@ -293,6 +293,32 @@ protected:
 	int32 FramesSeen = 0;			// [성능] 로그용: 5초 동안 그린 프레임 수
 	FVHTickCause TickCause;					// 이번 틱에 받은 이벤트로 "공격받아 중단"·"상호작용으로 은신 해제"를 가린다
 	double LastOwnActionSentTime = 0.0;			// 내가 취소·공격·구르기·스킬·소비 아이템을 보낸 때
+	RobProto::ActionType LastOwnAction = RobProto::ActionType::None;	// 그때 보낸 것 (반납이 끊긴 이유 안내용)
+	/**
+	 * 반납 작업이 끊긴 틱의 기록 (2026-11-23 팀 서버: 반납 = 4초 시간 작업). 서버 Cancel 에는 이유가 없으므로
+	 * 같은 틱의 일(구역 사라짐·경직·쓰러짐·맞음·내 행동·구역 밖)을 보고 스냅샷이 올 때 안내 문구를 고른다 (ResolveReturnCancel)
+	 */
+	struct FReturnCancel
+	{
+		bool bActive = false;
+		uint16 TargetId = 0;
+		bool bOwn = false;							// 방금 내가 취소·공격·구르기·스킬·소비 아이템을 보냄
+		RobProto::ActionType OwnAction = RobProto::ActionType::None;
+		bool bClosed = false;						// 같은 틱에 그 구역이 사라짐(수명 끝) → 실패
+		float RemainingAtCancel = 0.f;				// Cancel 때 화면의 남은 수명(서버 timer_ms 기준)
+		bool bOutside = false;						// Cancel 때 내 위치가 구역 범위 밖
+		float DistanceAtCancel = 0.f;
+	};
+	FReturnCancel ReturnCancel;
+	bool bApplyingGameStart = false;			// ApplyGameStart 안에서 시작 엔티티를 만드는 중
+	float StartTimerLagSeconds = 0.f;			// SC_GAME_START 를 받은 뒤 적용까지 걸린 시간 (반납지점 남은 수명 보정)
+	/** 스냅샷(틱 끝)에서: 끊긴 반납이 있으면 이유를 골라 안내하고 true (일반 "공격받아 작업이 멈춤" 안내 대신) */
+	bool ResolveReturnCancel(bool bHitInterrupted);
+	/** 반납 시작 거절 안내 (TargetBusy·NotAvailable 등). 반납 대상이 아니면 빈 문구 */
+	FText ReturnRejectText(RobProto::RejectReason Reason) const;
+	/** 사제 테이저건을 든 동안이면 보내지 않고 "Q로 먼저 집어넣으세요" 안내 후 true (무기 교체·소비 아이템, 2026-11-23 팀 서버 Locked) */
+	bool BlockWhileTaserHeld(const TCHAR* What);
+	double LastTaserBlockNoticeTime = 0.0;
 	uint16 SelfEntityId = 0;
 	uint32 SelfState = 0;
 	float DurationSeconds = 300.f;
@@ -396,6 +422,29 @@ protected:
 	void TickBotRailTest(float DeltaTime);
 	// 개발용 봇 -VHBotTaserTest (2026-11-22): 다른 플레이어 앞에서 Q 들기 → Q 넣기(쿨타임 없음) → Q 들기 → 공격 키 발사(쿨타임 시작)
 	void TickBotTaserTest(float DeltaTime);
+	// 개발용 봇 -VHBotTaserStun (2026-11-24): 상자에서 테이저건(무기)을 구해, 사제 테이저건을 든 다른 플레이어를 쏴서 경직시킨다 (든 테이저건이 경직으로 취소 → 쿨타임 시험)
+	void TickBotTaserStun(float DeltaTime);
+	int32 TaserStunShots = 0;
+	double TaserStunNext = 0.0;
+	TMap<uint16, int32> TaserStunTries;
+	// 개발용 봇 -VHBotReturnTest (2026-11-24): 4초 반납 시험 — 구역 밖 → 바쁨+맞음(짝 봇) → 늦음(NotAvailable) → 도중에 닫힘 → 완료. 로그 [반납 시험]
+	bool TickBotReturnTest(APawn* Pawn, UVHInteractionComponent* I, bool bCarrying);
+	// 개발용 봇 -VHBotReturnPartner (2026-11-24): 환금 아이템 하나를 든 채 기다리다, 다른 플레이어가 "신호 자리"(구역 가운데에서 30~60cm)에서 반납을 시작하면
+	// 같은 구역에서 F(→ TargetBusy) → 1.2초 뒤 그 사람을 공격(→ 반납이 맞아서 끊김). 로그 [반납 짝]
+	bool TickBotReturnPartner(APawn* Pawn, UVHInteractionComponent* I);
+	int32 RetCase = 0;
+	int32 RetStage = 0;
+	int32 RetTries = 0;
+	double RetT0 = 0.0;
+	uint16 RetZone = 0;
+	bool bRetMoved = false;
+	int32 RetShotIndex = 0;
+	FString RetResult;						// 마지막 반납 결과 (완료 / 끊긴 이유 / 거절 이유) — 시험 봇이 기대값과 비교
+	uint16 PartnerZone = 0;					// 짝 봇: 다른 플레이어가 반납을 시작한 구역
+	uint16 PartnerActor = 0;
+	double PartnerSeenTime = 0.0;
+	int32 PartnerStage = 0;
+	double PartnerT0 = 0.0;
 	int32 TaserTestStage = 0;
 	double TaserTestT0 = 0.0;
 	uint16 TaserTestTarget = 0;

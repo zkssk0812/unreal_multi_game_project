@@ -710,8 +710,8 @@ void FVHMockServer::HandleLoadComplete(const uint8* Data, int32 Size)
 	{
 		Add(EntityKind::Guard, 0, -300.f, -700.f, 90.f);											// 중앙 홀 (서버 guard_spawn_3)
 		Add(EntityKind::Safe, 0, -900.f, 1500.f, 0.f);												// 중앙 홀
-		Add(EntityKind::ReturnPoint, 0, 300.f, 1600.f, 0.f, 0, 60000);								// 중앙 홀
-		Add(EntityKind::ReturnPoint, 0, -1000.f, -1500.f, 0.f, 0, 60000);							// 사무실
+		Add(EntityKind::ReturnPoint, 0, 300.f, 1600.f, 0.f, 0, 30000);								// 중앙 홀
+		Add(EntityKind::ReturnPoint, 0, -1000.f, -1500.f, 0.f, 0, 30000);							// 사무실
 		Add(EntityKind::Box, 0, 800.f, 1500.f, 0.f);												// 중앙 홀
 		Add(EntityKind::Box, 0, 900.f, 300.f, 0.f);
 		Add(EntityKind::Box, 0, -1200.f, -300.f, 0.f);
@@ -726,8 +726,8 @@ void FVHMockServer::HandleLoadComplete(const uint8* Data, int32 Size)
 	{
 		Add(EntityKind::Guard, 0, 5331.f, -6152.f, 0.f);											// guard_spawn_3
 		Add(EntityKind::Safe, 0, 2895.f, -2920.f, 180.f);											// vault_slot_06 (Safe_06)
-		Add(EntityKind::ReturnPoint, 0, 5600.f, -3600.f, 0.f, 0, 60000);							// 큰 홀
-		Add(EntityKind::ReturnPoint, 0, 4410.f, -5014.f, 0.f, 0, 60000);							// 방 17
+		Add(EntityKind::ReturnPoint, 0, 5600.f, -3600.f, 0.f, 0, 30000);							// 큰 홀
+		Add(EntityKind::ReturnPoint, 0, 4410.f, -5014.f, 0.f, 0, 30000);							// 방 17
 		Add(EntityKind::Box, 0, 6173.f, -4622.f, 0.f);												// box_slot_09
 		Add(EntityKind::Box, 0, 6913.f, -4069.f, 0.f);												// box_slot_07
 		Add(EntityKind::Box, 0, 2865.f, -1461.f, 0.f);												// box_slot_10
