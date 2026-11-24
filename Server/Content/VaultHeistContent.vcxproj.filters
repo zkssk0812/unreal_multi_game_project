@@ -66,6 +66,9 @@
     <ClInclude Include="Game\PathFinder.h">
       <Filter>Game</Filter>
     </ClInclude>
+    <ClInclude Include="Game\GuardBT.h">
+      <Filter>Game</Filter>
+    </ClInclude>
     <ClInclude Include="Game\Sight.h">
       <Filter>Game</Filter>
     </ClInclude>

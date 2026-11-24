@@ -96,6 +96,7 @@
     <ClInclude Include="Game\GameWorld.h" />
     <ClInclude Include="Game\WorldMath.h" />
     <ClInclude Include="Game\PathFinder.h" />
+    <ClInclude Include="Game\GuardBT.h" />
     <ClInclude Include="Game\Sight.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

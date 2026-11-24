@@ -27,6 +27,7 @@
 #include <variant>
 #include <vector>
 
+#include "Content/Game/GuardBT.h"
 #include "Content/Game/MapData.h"
 #include "Content/Messages/Commands.h"
 #include "Content/Messages/Messages.h"
@@ -207,6 +208,23 @@ struct GuardBrain
 	uint16_t alertTarget = 0;
 };
 
+class GameWorld;
+
+// 경비원 행동 트리가 한 틱 동안 쓰는 것 (GuardAI.cpp). 오래 기억할 것은 GuardBrain(블랙보드)에, 이번 틱에만 쓰는 것은 여기에
+struct GuardCtx
+{
+	GameWorld& world;
+	Entity& guard;
+	GuardBrain& brain;
+	uint32_t dtMs = 0;
+	float slow = 1.0f;					// 끈끈이 위 −50%
+	Entity* target = nullptr;			// 전투: 지금 타겟
+	bool valid = false;					// 전투: 타겟이 감지할 수 있는 상태
+	bool visible = false;				// 전투: 타겟이 보임
+	bool inCone = false;				// 전투: 타겟이 공격 범위(정면 60°) 안
+	Entity* seen = nullptr;				// 발견: 보인 플레이어
+};
+
 class GameWorld
 {
 public:
@@ -349,6 +367,9 @@ private:
 	void UpdateGuards(uint32_t dtMs);
 	void UpdateGuardTimers(Entity& guard);
 	void ThinkGuard(Entity& guard, GuardBrain& brain, uint32_t dtMs);
+	static std::unique_ptr<Bt::Node<GuardCtx>> BuildGuardTree();
+	static const Bt::Node<GuardCtx>& GuardTree();		// 경비원 행동 트리 (한 번 만들어 모두 같이 씀)
+	void SearchStep(Entity& guard, GuardBrain& brain, float slow, uint32_t dtMs);	// 탐색 가지의 행동
 	void SetGuardState(Entity& guard, GuardBrain& brain, GuardState state, uint16_t target = 0);
 	Entity* NearestVisibleThief(Entity& guard);
 	bool SetGoal(Entity& guard, GuardBrain& brain, const Vec3& goal);
