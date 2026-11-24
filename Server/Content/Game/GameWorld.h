@@ -166,11 +166,12 @@ struct GuardFeatures
 	bool importantRooms = true;		// P-5 중요한 방 가중치
 	bool lookBack = true;			// P-6 가끔 뒤돌아보기
 	bool alertPatrol = true;		// P-7 탐색 후 경계 순찰
+	bool roomSearch = true;			// S-7 방 안을 돌아다니며 살피기 (켜면 S-3·S-4 대신)
 
 	static GuardFeatures All() { return {}; }
 	static GuardFeatures None()
 	{
-		return { false, false, false, false, false, false, false, false, false, false, false, false, false };
+		return { false, false, false, false, false, false, false, false, false, false, false, false, false, false };
 	}
 };
 
@@ -193,6 +194,9 @@ struct GuardBrain
 	uint32_t waitUntilMs = 0;			// 둘러보기 끝 (한 바퀴는 이 시각까지, 훑기는 안전장치)
 	std::vector<float> lookYaws;		// 훑기: 차례로 돌아볼 방향. 비어 있으면 한쪽으로 계속 돈다
 	size_t lookIndex = 0;
+	uint32_t searchEndMs = 0;			// S-7 이 시각이 지나면 탐색을 끝냄
+	float glanceSide = 1.0f;			// S-7 걸으며 살피기: 지금 보는 쪽 (+1 왼쪽, −1 오른쪽)
+	float moveYaw = 0.0f;				// S-7 마지막으로 걸어간 방향 (도착해서 훑기의 가운데)
 
 	std::vector<Vec3> path;				// 다음 점부터 목적지까지
 	size_t pathIndex = 0;
@@ -383,6 +387,8 @@ private:
 	void EvadeStep(Entity& guard, const GuardBrain& brain, const Vec3& threat, float speed, uint32_t dtMs);	// A-2
 	void StartSearch(Entity& guard, GuardBrain& brain, const Vec3& center, bool useFlee);	// S-1·S-4
 	void AddSearchSpots(GuardBrain& brain, const Vec3& from, const Vec3* flee);			// S-4
+	void AddRoomSearchSpots(GuardBrain& brain, const Vec3& from, const Vec3* flee);		// S-7
+	void FinishSearch(Entity& guard, GuardBrain& brain);
 	void CallAllies(const Entity& caller, const Vec3& where);							// S-5
 	void StartSpin(GuardBrain& brain, uint32_t ms);
 	void StartSweep(GuardBrain& brain, float center, float halfDeg, bool backToCenter);	// 좌우 훑기

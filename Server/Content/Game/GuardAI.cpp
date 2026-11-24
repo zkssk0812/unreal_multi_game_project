@@ -376,23 +376,56 @@ std::unique_ptr<Bt::Node<GuardCtx>> GameWorld::BuildGuardTree()
 
 void GameWorld::SearchStep(Entity& guard, GuardBrain& brain, float slow, uint32_t dtMs)
 {
-	// 탐색 지점을 차례로: 걸어가서 첫 지점은 한 바퀴(S-3), 주변 지점(S-4)은 좌우 훑기
+	// 탐색 지점을 차례로 걸어가서 둘러본다.
+	//   S-7(기본): 첫 지점·방 안 지점 모두 좌우 45° 훑기, 지점 사이를 걸으며 좌우 40°를 번갈아 봄, 15초면 끝
+	//   S-7을 끄면: 첫 지점은 한 바퀴(S-3), 주변 지점(S-4)은 좌우 60° 훑기
+	const bool room = _guardFeatures.roomSearch;
+	if (room && _nowMs >= brain.searchEndMs)
+		return FinishSearch(guard, brain);
+
 	if (!brain.looking)
 	{
 		const bool there = Dist2D(guard.pos, brain.searchPos) < 50.0f;
-		if (there || (brain.path.empty() && !SetGoal(guard, brain, brain.searchPos)) ||
-			FollowPath(guard, brain, GameData::GuardWalkSpeed * slow, dtMs))
+		const bool noPath = !there && brain.path.empty() && !SetGoal(guard, brain, brain.searchPos);
+		if (room && !there && !noPath && brain.pathIndex < brain.path.size())
+		{
+			// S-7: 다음 지점이 등 뒤쪽(90° 넘게)이면 먼저 돌아선 뒤 걷는다 (뒷걸음질하며 돌지 않게)
+			const float moveYaw = YawTo(guard.pos, brain.path[brain.pathIndex]);
+			if (std::fabs(AngleDiff(moveYaw, guard.yaw)) > GameData::SearchTurnFirstDeg)
+			{
+				brain.moveYaw = moveYaw;
+				TurnToward(guard, moveYaw, dtMs);
+				return;
+			}
+		}
+		if (there || noPath || FollowPath(guard, brain, GameData::GuardWalkSpeed * slow, dtMs))
 		{
 			brain.looking = true;
 			brain.path.clear();
-			if (brain.searchIndex == 0)
+			if (room)
+				StartSweep(brain, brain.searchIndex == 0 ? guard.yaw : brain.moveYaw,
+					brain.searchIndex == 0 ? GameData::SearchFirstSweepDeg : GameData::RoomSearchSweepDeg, false);
+			else if (brain.searchIndex == 0)
 				StartSpin(brain, _guardFeatures.fullSpin ? GameData::SearchSpinMs : GameData::SearchLookMs);
 			else
 				StartSweep(brain, guard.yaw, GameData::SearchSweepDeg, true);	// S-4: 왼쪽 → 오른쪽 → 가운데
 		}
 		else if (brain.pathIndex < brain.path.size())
 		{
-			TurnToward(guard, YawTo(guard.pos, brain.path[brain.pathIndex]), dtMs);
+			const float moveYaw = YawTo(guard.pos, brain.path[brain.pathIndex]);
+			brain.moveYaw = moveYaw;
+			if (room && brain.searchIndex > 0)
+			{
+				// S-7: 걸으면서 걷는 방향의 왼쪽 40° ↔ 오른쪽 40°를 번갈아 본다 (몸 방향 = 시선, 90°/s)
+				const float look = AngleDiff(moveYaw + GameData::SearchGlanceDeg * brain.glanceSide, 0.0f);
+				TurnToward(guard, look, dtMs);
+				if (std::fabs(AngleDiff(look, guard.yaw)) < 1.0f)
+					brain.glanceSide = -brain.glanceSide;
+			}
+			else
+			{
+				TurnToward(guard, moveYaw, dtMs);		// 놓친 곳까지는 앞을 보고 간다
+			}
 		}
 		return;
 	}
@@ -405,6 +438,11 @@ void GameWorld::SearchStep(Entity& guard, GuardBrain& brain, float slow, uint32_
 		brain.path.clear();
 		return;
 	}
+	FinishSearch(guard, brain);
+}
+
+void GameWorld::FinishSearch(Entity& guard, GuardBrain& brain)
+{
 	const Vec3 missed = brain.searchSpots.empty() ? guard.pos : brain.searchSpots.front();
 	StartPatrol(guard, brain);		// 없다 → 가까운 순찰 지점부터 다시
 	if (_guardFeatures.alertPatrol)
@@ -496,8 +534,12 @@ void GameWorld::StartSearch(Entity& guard, GuardBrain& brain, const Vec3& center
 	brain.searchSpots.assign(1, first);
 	brain.searchIndex = 0;
 	brain.searchPos = first;
-	if (_guardFeatures.extraSpots)
-		AddSearchSpots(brain, first, hasFlee ? &flee : nullptr);
+	brain.searchEndMs = _nowMs + GameData::SearchMaxMs;
+	brain.glanceSide = 1.0f;
+	if (_guardFeatures.roomSearch)
+		AddRoomSearchSpots(brain, first, hasFlee ? &flee : nullptr);	// S-7
+	else if (_guardFeatures.extraSpots)
+		AddSearchSpots(brain, first, hasFlee ? &flee : nullptr);		// S-4
 }
 
 void GameWorld::AddSearchSpots(GuardBrain& brain, const Vec3& from, const Vec3* flee)
@@ -553,6 +595,87 @@ void GameWorld::AddSearchSpots(GuardBrain& brain, const Vec3& from, const Vec3* 
 		}
 		if (length <= Dist2D(from, c.pos) * GameData::SearchDetourMax)
 			brain.searchSpots.push_back(c.pos);
+	}
+}
+
+void GameWorld::AddRoomSearchSpots(GuardBrain& brain, const Vec3& from, const Vec3* flee)
+{
+	// S-7: 둘러볼 곳 최대 3곳. 후보 = 놓친 곳이 있는 방 안의 칸 + 주변 3~7m(문 너머 옆 방·모퉁이 포함).
+	// 도망 방향 쪽, 첫 지점에서 안 보이는 곳(가구 뒤·모퉁이·옆 방)을 먼저. 첫 지점·서로 3m 넘게 떨어지고,
+	// 걸어서 직선 거리의 2배 안에 닿는 곳만. 고른 뒤에는 가까운 곳부터 차례로 돈다
+	std::vector<Vec3> points;
+	const MapRoom* lostRoom = nullptr;
+	for (const MapRoom& r : _map->rooms)
+	{
+		if (r.returnCells.empty() || !r.Contains(from))
+			continue;
+		const size_t step = std::max<size_t>(1, r.returnCells.size() / GameData::RoomSearchCandidates);
+		for (size_t i = std::uniform_int_distribution<size_t>(0, step - 1)(_rng); i < r.returnCells.size(); i += step)
+			points.push_back(r.returnCells[i]);
+		lostRoom = &r;
+		break;
+	}
+	for (int a = 0; a < 12; ++a)
+		for (const float dist : { GameData::SearchSpotMinCm, (GameData::SearchSpotMinCm + GameData::SearchSpotMaxCm) * 0.5f, GameData::SearchSpotMaxCm })
+			points.push_back(Ahead(from, static_cast<float>(a) * 30.0f, dist));
+
+	struct Candidate { Vec3 pos; float score; bool inRoom; };
+	std::vector<Candidate> candidates;
+	std::uniform_real_distribution<float> jitter(0.0f, 0.3f);
+	const Vec3 eye{ from.x, from.y, from.z + GameData::GuardEyeCm };
+	for (const Vec3& p : points)
+	{
+		const float d = Dist2D(from, p);
+		if (d < GameData::SearchSpotGapCm || !_map->nav.IsWalkable(p) || !_map->nav.Connected(from, p))
+			continue;
+		float score = jitter(_rng);
+		if (flee != nullptr)
+			score += 1.0f + ((p.x - from.x) * flee->x + (p.y - from.y) * flee->y) / d;	// 도망 방향과 같을수록 (0~2)
+		const Vec3 body{ p.x, p.y, p.z + GameData::ThiefBodyCm };
+		if (!SeesThrough(eye, body, &_sightTests))
+			score += 1.0f;																// 첫 지점에서 안 보이는 곳
+		candidates.push_back({ p, score, lostRoom != nullptr && lostRoom->Contains(p) });
+	}
+	// 놓친 방 안의 가장 좋은 곳 하나를 맨 앞에: 방 안을 적어도 한 곳은 걸어 다니며 본다
+	std::sort(candidates.begin(), candidates.end(), [](const Candidate& l, const Candidate& r) { return l.score > r.score; });
+	if (auto inRoom = std::find_if(candidates.begin(), candidates.end(), [](const Candidate& c) { return c.inRoom; }); inRoom != candidates.end())
+		std::rotate(candidates.begin(), inRoom, inRoom + 1);
+
+	std::vector<Vec3> picked;
+	std::vector<Vec3> path;
+	size_t tries = 0;
+	for (const Candidate& c : candidates)
+	{
+		if (picked.size() >= GameData::RoomSearchSpots || tries >= GameData::SearchPathTries)
+			break;
+		bool tooClose = false;
+		for (const Vec3& s : picked)
+			tooClose = tooClose || Dist2D(s, c.pos) < GameData::SearchSpotGapCm;
+		if (tooClose)
+			continue;
+		++tries;
+		if (!FindPath(_map->nav, from, c.pos, path) || path.empty())
+			continue;
+		float length = 0.0f;
+		Vec3 prev = from;
+		for (const Vec3& q : path)
+		{
+			length += Dist2D(prev, q);
+			prev = q;
+		}
+		if (length <= Dist2D(from, c.pos) * GameData::SearchDetourMax)
+			picked.push_back(c.pos);
+	}
+
+	// 가까운 곳부터 (같은 곳을 오가지 않게)
+	Vec3 at = from;
+	while (!picked.empty())
+	{
+		auto next = std::min_element(picked.begin(), picked.end(),
+			[&](const Vec3& l, const Vec3& r) { return Dist2D(at, l) < Dist2D(at, r); });
+		at = *next;
+		brain.searchSpots.push_back(at);
+		picked.erase(next);
 	}
 }
 

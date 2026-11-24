@@ -267,6 +267,14 @@ constexpr float SearchSpotGapCm = 300.0f;			// S-4 지점끼리 이만큼은 떨
 constexpr float SearchDetourMax = 2.0f;				// S-4 걸어서 직선 거리의 2배를 넘게 돌아가면 뺀다
 constexpr size_t SearchPathTries = 8;				// S-4 경로 찾기 최대 횟수 (탐색을 시작할 때만)
 constexpr float SearchSweepDeg = 60.0f;				// S-4 주변 지점에서 좌우 60° 훑기 (약 2.7초)
+// S-7 방 안을 돌아다니며 살피기 (2026-11-25, docs/경비원AI_행동트리.md 5장). 켜면 S-3 한 바퀴·S-4 주변 지점 대신
+constexpr size_t RoomSearchSpots = 4;				// S-7 더 둘러볼 곳: 놓친 방 안 1곳 이상 + 주변 3~7m(옆 방·모퉁이). 도망 방향·안 보이는 곳 먼저
+constexpr size_t RoomSearchCandidates = 40;			// S-7 방의 칸 중 후보로 볼 수 (큰 방은 고르게 건너뛰며)
+constexpr float RoomSearchSweepDeg = 45.0f;			// S-7 지점마다 왼쪽 45° → 오른쪽 45° 훑기 (90°/s로 1.5초)
+constexpr float SearchFirstSweepDeg = 90.0f;			// S-7 첫 지점(놓친 곳)에서는 왼쪽 90° → 오른쪽 90° 훑기 (90°/s로 3초)
+constexpr float SearchGlanceDeg = 40.0f;			// S-7 지점 사이를 걸으며 걷는 방향 좌우 40°를 번갈아 봄 (한 번에 약 0.9초)
+constexpr float SearchTurnFirstDeg = 60.0f;			// S-7 걷는 방향이 시선에서 이보다 벌어지면 먼저 돌아선 뒤 걷는다
+constexpr uint32_t SearchMaxMs = 20000;				// S-7 탐색을 시작하고 이만큼 지나면 순찰로 (P-7 경계 순찰)
 constexpr float AllyCallRangeCm = 2000.0f;			// S-5 이 거리 안의 순찰·탐색 중인 동료를 부른다
 constexpr uint32_t StunMemoryMs = 6000;				// S-6 경직·수리가 풀렸을 때 이 시간 안에 본(맞은) 곳을 탐색
 constexpr uint32_t PatrolJitterMs = 20000;			// P-1 "오래 안 간 곳"에 섞는 무작위 폭 (예측당하지 않게)
