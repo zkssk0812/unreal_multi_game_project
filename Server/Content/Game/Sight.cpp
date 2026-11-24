@@ -60,6 +60,22 @@ bool SegmentCircle(float ax, float ay, float dx, float dy, const MapCollider& c,
 
 } // namespace
 
+bool SegmentBlockedBy(const MapCollider& c, const Vec3& from, const Vec3& to)
+{
+	const float dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;
+	const bool box = c.shape == MapCollider::Shape::Box;
+	const float cminX = box ? c.xmin : c.cx - c.r, cmaxX = box ? c.xmax : c.cx + c.r;
+	const float cminY = box ? c.ymin : c.cy - c.r, cmaxY = box ? c.ymax : c.cy + c.r;
+	if (cmaxX < std::min(from.x, to.x) || cminX > std::max(from.x, to.x) || cmaxY < std::min(from.y, to.y) || cminY > std::max(from.y, to.y))
+		return false;
+	float t0 = 0.0f, t1 = 0.0f;
+	const bool hit = box ? SegmentBox(from.x, from.y, dx, dy, c, t0, t1) : SegmentCircle(from.x, from.y, dx, dy, c, t0, t1);
+	if (!hit)
+		return false;
+	const float z0 = from.z + dz * t0, z1 = from.z + dz * t1;
+	return std::max(z0, z1) >= c.zMin && std::min(z0, z1) <= c.zMax;
+}
+
 bool HasLineOfSight(const MapData& map, const Vec3& from, const Vec3& to, uint32_t* tests)
 {
 	const float dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z;

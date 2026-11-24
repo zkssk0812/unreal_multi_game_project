@@ -58,6 +58,7 @@ VH_SAME_ENUM(Content::EntityKind, EntityKind, Box);
 VH_SAME_ENUM(Content::EntityKind, EntityKind, StickyTrap);
 VH_SAME_ENUM(Content::EntityKind, EntityKind, Mine);
 VH_SAME_ENUM(Content::EntityKind, EntityKind, Smoke);
+VH_SAME_ENUM(Content::EntityKind, EntityKind, Door);
 
 VH_SAME_ENUM(Content::ActionType, ActionType, None);
 VH_SAME_ENUM(Content::ActionType, ActionType, AttackStart);
@@ -109,6 +110,8 @@ VH_SAME_ENUM(Content::ConsumableId, ConsumableId, HealKit);
 VH_SAME_ENUM(Content::ConsumableId, ConsumableId, Smoke);
 VH_SAME_ENUM(Content::ConsumableId, ConsumableId, Flashbang);
 VH_SAME_ENUM(Content::ConsumableId, ConsumableId, Jetpack);
+VH_SAME_ENUM(Content::BoxType, BoxType, Weapon);
+VH_SAME_ENUM(Content::BoxType, BoxType, Valuable);
 VH_SAME_ENUM(Content::FieldItemId, FieldItemId, PotionS);
 VH_SAME_ENUM(Content::FieldItemId, FieldItemId, PotionM);
 VH_SAME_ENUM(Content::FieldItemId, FieldItemId, PotionL);

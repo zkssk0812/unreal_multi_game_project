@@ -423,7 +423,7 @@ void GameWorld::AddSearchSpots(GuardBrain& brain, const Vec3& from, const Vec3* 
 				score += 1.0f + std::cos(r) * flee->x + std::sin(r) * flee->y;		// 도망 방향과 같을수록 (0~2)
 			}
 			const Vec3 body{ p.x, p.y, p.z + GameData::ThiefBodyCm };
-			if (!HasLineOfSight(*_map, eye, body, &_sightTests))
+			if (!SeesThrough(eye, body, &_sightTests))
 				score += 1.0f;															// 첫 지점에서 안 보이는 곳
 			candidates.push_back({ p, score });
 		}
@@ -696,6 +696,7 @@ void GameWorld::EvadeStep(Entity& guard, const GuardBrain& brain, const Vec3& th
 		const Vec3 to = Ahead(guard.pos, yaw, step);
 		if (!_map->nav.IsWalkable(to) || !_map->nav.IsWalkable(Ahead(guard.pos, yaw, step + GameData::EvadeLookAheadCm)))
 			continue;
+		OpenDoorsOnWay(guard.pos, Ahead(guard.pos, yaw, step + GameData::GuardDoorLookAheadCm));
 		guard.pos.x = to.x;
 		guard.pos.y = to.y;
 		guard.state |= StateBit::Running;
@@ -743,7 +744,7 @@ bool GameWorld::CanSee(const Entity& guard, const Entity& thief)
 		return false;
 	if (dx * dx + dy * dy > 1.0f && std::fabs(AngleDiff(YawTo(eye, body), guard.yaw)) > GameData::GuardSightHalfAngleDeg)
 		return false;
-	return _map == nullptr || HasLineOfSight(*_map, eye, body, &_sightTests);
+	return SeesThrough(eye, body, &_sightTests);		// 벽·닫힌 문
 }
 
 Entity* GameWorld::NearestVisibleThief(Entity& guard)
@@ -779,6 +780,21 @@ bool GameWorld::FollowPath(Entity& guard, GuardBrain& brain, float speed, uint32
 {
 	// 이번 틱에 갈 수 있는 거리만큼 경로의 점들을 차례로 지나간다. 몸 방향은 TurnToward가 천천히 돌린다
 	float budget = speed * static_cast<float>(dtMs) / 1000.0f;
+
+	// 이번 틱에 갈 거리 + 1m 앞까지 경로에 닫힌 문이 있으면 열고 지나간다 (클라 2026-11-24, 문은 열어 둠)
+	if (!_doorOpen.empty())
+	{
+		float ahead = budget + GameData::GuardDoorLookAheadCm;
+		Vec3 from = guard.pos;
+		for (size_t i = brain.pathIndex; i < brain.path.size() && ahead > 0.0f; ++i)
+		{
+			const Vec3& to = brain.path[i];
+			OpenDoorsOnWay(from, to);
+			ahead -= Dist2D(from, to);
+			from = to;
+		}
+	}
+
 	while (budget > 0.0f && brain.pathIndex < brain.path.size())
 	{
 		const Vec3& next = brain.path[brain.pathIndex];

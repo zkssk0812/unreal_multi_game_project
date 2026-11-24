@@ -17,4 +17,7 @@ namespace Content {
 // from과 to 사이에 시야를 막는 것이 없으면 true. tests가 있으면 실제로 선분 검사를 한 충돌체 수를 더한다(비용 측정)
 bool HasLineOfSight(const MapData& map, const Vec3& from, const Vec3& to, uint32_t* tests = nullptr);
 
+// 충돌체 하나가 선분 from → to를 가리나 (dynamic·blocks_sight와 관계없이). 닫힌 문처럼 판마다 바뀌는 것에 쓴다
+bool SegmentBlockedBy(const MapCollider& c, const Vec3& from, const Vec3& to);
+
 } // namespace Content

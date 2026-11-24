@@ -65,6 +65,15 @@ struct MapCollider				// 벽·가구. P5 시야 검사(3D)에 쓴다
 	bool dynamic = false;							// 창고 문·탈출구처럼 열리고 닫히는 것
 };
 
+// 방 사이 문 (클라 2026-11-24): 맵의 안쪽 above_door(문 위 벽) 자리. 닫히면 문간 [0, 문 위 벽 아래]가 벽처럼
+// 시야·공격을 막는다. 열림·닫힘은 판마다 다르므로 GameWorld가 들고, 맵에는 모양만 둔다
+struct MapDoor
+{
+	MapCollider panel;		// 닫혔을 때 막는 문짝 (above_door와 같은 바닥 모양, 높이 0 ~ 문 위 벽 아래)
+	Vec3 center;			// 문 가운데 (바닥)
+	float yaw = 0.0f;		// 지나가는 방향: 0 = ±X로 지나감(문짝이 Y로 놓임), 90 = ±Y로 지나감
+};
+
 enum class PatrolNodeKind : uint8_t	// 순찰 지점이 놓인 곳 (JSON의 patrol.nodes[].room)
 {
 	Room,			// 방 안 (반납 지점을 둘 수 있는 방)
@@ -122,6 +131,7 @@ struct MapData
 	std::vector<int16_t> patrolRooms;		// 지점이 놓인 방 (rooms의 위치, 없으면 -1). patrolKinds와 같음
 	std::vector<MapPatrolEdge> patrolEdges;
 	std::vector<MapCollider> colliders;
+	std::vector<MapDoor> doors;				// 열고 닫는 문 (Door 엔티티 typeId = 이 배열의 위치). 잠긴 바깥 문은 colliders의 벽
 	std::vector<MapArea> floors;			// 바닥 (FBX의 바닥판). 있으면 이 위의 칸만 걸을 수 있다 (건물 밖은 막힘)
 	NavGrid nav;
 

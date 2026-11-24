@@ -56,6 +56,9 @@
     <ClCompile Include="GuardBenchTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="DoorTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="GuardAITests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>

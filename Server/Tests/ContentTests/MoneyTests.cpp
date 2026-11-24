@@ -207,6 +207,55 @@ TEST_CASE(Money_Return_ZoneClosesMidway_Fails)
 	CHECK_EQ(world.ThiefOf(A)->interactTarget, uint16_t{ 0 });
 }
 
+TEST_CASE(Money_Return_ZoneClosed_CancelThenDespawnThenSpawn_SameTick)
+{
+	// 클라는 "같은 틱에 Cancel(target = 구역) → 그 구역 Despawn → 새 구역 Spawn"을 보고 "구역이 닫혀서 실패"로 구분한다
+	// (클라 2026-11-24). 방은 한 틱의 이벤트를 쌓인 순서대로 보내므로(GameRoom::Tick) 월드의 이벤트 순서를 지킨다
+	GameWorld world = MakeWorld(2);
+	const uint16_t point = CarryToPoint(world);
+	Run(world, GameData::ReturnPointLifeMs - 3000);
+	Act(world, A, ActionType::InteractBegin, point);
+	world.TakeEvents();
+
+	std::vector<WorldEvent> tick;
+	for (int t = 0; t < 80 && world.Find(point) != nullptr; ++t)
+	{
+		world.Update(0.05f);
+		tick = world.TakeEvents();
+		CHECK(world.Find(point) == nullptr || !First<Msg::Interact>(tick));	// 닫히기 전에는 취소되지 않음
+	}
+	CHECK(world.Find(point) == nullptr);
+
+	int cancelAt = -1, despawnAt = -1, spawnAt = -1;
+	for (int i = 0; i < static_cast<int>(tick.size()); ++i)
+	{
+		if (const auto* m = std::get_if<Msg::Interact>(&tick[i]); m && m->state == InteractState::Cancel && m->target == point && m->progressMs == 0)
+			cancelAt = i;
+		else if (const auto* d = std::get_if<Msg::EntityDespawn>(&tick[i]); d && d->entityIds.size() == 1 && d->entityIds[0] == point)
+			despawnAt = i;
+		else if (const auto* s = std::get_if<Msg::EntitySpawn>(&tick[i]); s && despawnAt >= 0 && spawnAt < 0 &&
+			s->entities.size() == 1 && s->entities[0].kind == EntityKind::ReturnPoint && s->entities[0].entityId != point)
+			spawnAt = i;
+	}
+	// 한 틱에 바로 이어서. 처음 3곳은 함께 생겨 같은 틱에 함께 교체되므로, 클라는 Cancel의 target과 Despawn id를 맞춰 본다
+	CHECK(cancelAt >= 0 && despawnAt == cancelAt + 1 && spawnAt == despawnAt + 1);
+}
+
+TEST_CASE(Money_Return_OtherCancels_ZoneStays)
+{
+	// 구역 밖·F 취소 같은 다른 취소에서는 구역이 그대로라 Despawn이 따라오지 않는다
+	GameWorld world = MakeWorld(2);
+	const uint16_t point = CarryToPoint(world);
+	Act(world, A, ActionType::InteractBegin, point);
+	Run(world, 1000);
+	world.TakeEvents();
+	Act(world, A, ActionType::InteractCancel);
+	const auto events = RunCollect(world, 50);
+	CHECK(First<Msg::Interact>(events) && First<Msg::Interact>(events)->state == InteractState::Cancel);
+	CHECK(!First<Msg::EntityDespawn>(events));
+	CHECK(world.Find(point) != nullptr);
+}
+
 TEST_CASE(Money_DownByPlayer_DropsAllValuables_Loses10Percent)
 {
 	GameWorld world = MakeWorld(2);

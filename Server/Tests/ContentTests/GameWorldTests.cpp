@@ -23,7 +23,7 @@ TEST_CASE(World_Setup_CreatesEntities)
 
 	// 지운 오브젝트(숨는 곳·창고 문·탈출구)는 없다: 종류는 v3 목록뿐
 	for (const Entity& e : world.Entities())
-		CHECK(static_cast<int>(e.kind) <= static_cast<int>(EntityKind::Smoke));
+		CHECK(static_cast<int>(e.kind) <= static_cast<int>(EntityKind::Door));
 }
 
 TEST_CASE(World_ThievesStartInDifferentRandomRooms)
