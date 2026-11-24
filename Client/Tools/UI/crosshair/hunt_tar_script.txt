@@ -1,0 +1,15 @@
+# 2026-11-25 Tar: 과녁(-VHBotStill). 삼단봉(사거리 200cm + 여유 40)으로 사거리 안·밖 조준점 화면
+0.5 vh.Aim 0
+1.5 vh.Crosshair at 150 0
+2.2 vh.Shot ch_range_in
+2.4 vh.Crosshair info
+3.0 vh.Crosshair at 520 0
+3.7 vh.Shot ch_range_out
+3.9 vh.Crosshair info
+4.5 vh.Crosshair at 230 0
+5.2 vh.Shot ch_range_edge_in
+5.4 vh.Crosshair info
+6.0 vh.Crosshair at 250 0
+6.7 vh.Shot ch_range_edge_out
+6.9 vh.Crosshair info
+7.5 vh.Crosshair free

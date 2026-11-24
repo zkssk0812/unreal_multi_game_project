@@ -30,6 +30,8 @@
 #include "Network/VHSettings.h"
 #include "UI/VHGameHUDWidget.h"
 #include "UI/VHCodeWidgets.h"
+#include "UI/VHCrosshairWidget.h"
+#include "Framework/Application/SlateApplication.h"
 #include "MCPTest.h"
 
 #include "EnhancedInputComponent.h"
@@ -62,6 +64,19 @@ void AVHGamePlayerController::BeginPlay()
 		Toast->AddToViewport(10);
 		Toast->SetPadding(FMargin(0.f, 84.f, 0.f, 0.f));	// 위 가운데의 남은 시간 칸(HUD)을 가리지 않게 그 아래에 띄운다
 	}
+	// 조준점: HUD·알림보다 위(Z 100) → 천장·문 가림·상호작용 안내와 겹쳐도 맨 위에 보인다
+	Crosshair = CreateWidget<UVHCrosshairWidget>(this, UVHCrosshairWidget::StaticClass());
+	if (Crosshair)
+	{
+		Crosshair->AddToViewport(100);
+	}
+	UpdateCrosshairCursor();
+	// 일시정지 중에도 커서를 되돌려야 하므로(PlayerTick 은 멈춤) 늘 도는 코어 티커로 매 프레임 갱신
+	CursorTicker = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateWeakLambda(this, [this](float)
+	{
+		UpdateCrosshairCursor();
+		return true;
+	}));
 	if (UVHInteractionSubsystem* Sub = GetInteractionSubsystem())
 	{
 		Sub->OnWorldMessage.AddUObject(this, &AVHGamePlayerController::HandleMessage);
@@ -95,6 +110,44 @@ void AVHGamePlayerController::ApplyGameInputMode()
 	Mode.SetHideCursorDuringCapture(false);
 	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::LockInFullscreen);
 	SetInputMode(Mode);
+}
+
+void AVHGamePlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (CursorTicker.IsValid())
+	{
+		FTSTicker::RemoveTicker(CursorTicker);
+		CursorTicker.Reset();
+	}
+	Super::EndPlay(EndPlayReason);
+}
+
+void AVHGamePlayerController::UpdateCrosshairCursor()
+{
+	const bool bPaused = GetWorld() && GetWorld()->IsPaused();
+	const bool bEnabled = Crosshair && UVHCrosshairWidget::IsEnabledByConfig();
+	const bool bShow = bEnabled && !bPaused;
+	if (Crosshair)
+	{
+		const ESlateVisibility Want = bShow ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
+		if (Crosshair->GetVisibility() != Want)
+		{
+			Crosshair->SetVisibility(Want);
+		}
+	}
+	// 조준점이 보이면 운영체제 커서는 숨긴다(None). 꺼짐 = 예전 십자 커서, 일시정지 = 보통 화살표
+	const EMouseCursor::Type Cursor = bShow ? EMouseCursor::None : (bPaused ? EMouseCursor::Default : EMouseCursor::Crosshairs);
+	if (CurrentMouseCursor != Cursor || DefaultMouseCursor != Cursor)
+	{
+		CurrentMouseCursor = Cursor;
+		DefaultMouseCursor = Cursor;
+		if (FSlateApplication::IsInitialized())
+		{
+			FSlateApplication::Get().QueryCursor();	// 마우스를 움직이지 않아도 바로 바뀌게
+		}
+		UE_LOG(LogTemp, Log, TEXT("[조준점] 운영체제 커서 → %s (조준점 %s%s)"), bShow ? TEXT("숨김") : (bPaused ? TEXT("보통 화살표") : TEXT("십자")),
+			bEnabled ? TEXT("켜짐") : TEXT("꺼짐"), bPaused ? TEXT(", 일시정지") : TEXT(""));
+	}
 }
 
 void AVHGamePlayerController::UpdateRotation(float DeltaTime)

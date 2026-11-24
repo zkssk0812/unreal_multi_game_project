@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "MCPTestPlayerController.h"
+#include "Containers/Ticker.h"
 #include "VHGamePlayerController.generated.h"
 
 class UInputAction;
@@ -80,6 +81,19 @@ protected:
 
 	/** 게임 중 마우스 커서 표시 + 클릭이 게임 입력으로 가게 */
 	void ApplyGameInputMode();
+
+	/**
+	 * 조준점(2026-11-25): 게임 중에는 운영체제 커서를 숨기고(EMouseCursor::None) 조준점 위젯을 보인다.
+	 * 일시정지·조준점 꺼짐(DA_VHUIStyle bCrosshairEnabled, vh.Crosshair 0)이면 커서를 되돌린다 (꺼짐 = 예전 십자 커서, 일시정지 = 보통 화살표).
+	 * 메뉴·로비·대기실·결과창은 메뉴 레벨(AVHMenuPlayerController)이라 늘 보통 커서다
+	 */
+	void UpdateCrosshairCursor();
+	/** 일시정지 중에는 PlayerTick 이 돌지 않으므로 커서 갱신은 늘 도는 코어 티커로 한다 */
+	FTSTicker::FDelegateHandle CursorTicker;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	UPROPERTY(Transient)
+	TObjectPtr<class UVHCrosshairWidget> Crosshair;
 
 	/** 조종 중인 캐릭터 카메라에 테두리(외곽선) 포스트 프로세스 머티리얼을 붙인다 */
 	void ApplyOutlinePostProcess();

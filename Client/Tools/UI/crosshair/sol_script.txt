@@ -1,0 +1,22 @@
+# 2026-11-25 Sol (1920x1080): F 안내와 겹침, 삼단봉 사거리 안·밖, 운영체제 커서(게임·일시정지) — 그 뒤 한 판 끝까지 기다려 결과창·로비 커서는 cursorcheck.ps1 이 확인
+0.3 r.SetRes 1920x1080wf
+2.0 vh.CeilingGo 3200 3150
+2.3 vh.Aim 0
+3.0 vh.Crosshair at 100 0
+3.8 vh.Shot ch_prompt_overlap
+4.0 vh.Crosshair info
+5.0 vh.CeilingGo -500 500
+5.3 vh.Aim 0
+5.6 vh.Crosshair at 150 0
+6.3 vh.Shot ch_range_150
+6.6 vh.Crosshair at 230 0
+7.3 vh.Shot ch_range_230
+7.6 vh.Crosshair at 250 0
+8.3 vh.Shot ch_range_250
+8.6 vh.Crosshair at 520 0
+9.3 vh.Shot ch_range_520
+9.5 vh.Crosshair info
+10.0 vh.Crosshair free
+12.0 vh.Crosshair info
+16.0 vh.Crosshair pausetest 4
+24.0 vh.Crosshair info

@@ -1,0 +1,4 @@
+# 2026-11-25 Hun: 가장 가까운 다른 플레이어를 쫓아가 공격(-VHBotHunt). 조준점을 그 사람에 고정 → 서버 맞힘·쓰러뜨림 때 히트 마커 화면 저장(-VHCrosshairShots)
+1.0 vh.Crosshair follow
+60.0 vh.Crosshair info
+90.0 vh.Crosshair info

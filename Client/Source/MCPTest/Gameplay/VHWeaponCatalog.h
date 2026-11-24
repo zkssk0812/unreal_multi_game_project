@@ -147,6 +147,66 @@ struct FVHWeaponRecoil
 	void Evaluate(float T, float& OutMuzzle, float& OutBody) const;
 };
 
+/**
+ * 게임 중 마우스 조준점 모양 (2026-11-25, 가시성 우선: 모든 모양이 지름 48px 이상·선 3px 이상 + 어두운 테두리).
+ * 크기·굵기·색·테두리·투명도 공통 값은 DA_VHUIStyle 의 HUD|Crosshair, 무기별 모양·사거리·반동은 여기(DA_VHWeaponCatalog).
+ */
+UENUM(BlueprintType)
+enum class EVHCrosshairShape : uint8
+{
+	/** 무기 종류로 정한다 (근접 = 괄호, 총 = 십자, 레일건 = 링, 화염 = 부채꼴, 투척·설치 = 착탄 원) */
+	Auto		UMETA(DisplayName = "자동 (무기 종류로)"),
+	/** 굵은 괄호(호) 4개가 둘러싼 모양 — 맨손·근접 */
+	Brackets	UMETA(DisplayName = "근접: 괄호 4개"),
+	/** 굵은 십자(선 4개 + 가운데 틈) — 권총·테이저건 */
+	Cross		UMETA(DisplayName = "총: 틈 있는 십자"),
+	/** 굵은 십자 + 바깥 큰 원 (충전 1초 동안 원이 채워지고, 잠금 중엔 색이 바뀐다) — 레일건 */
+	RailRing	UMETA(DisplayName = "레일건: 십자 + 큰 원 (충전 링)"),
+	/** 굵은 부채꼴 테두리 (사거리·각도 느낌, 내 캐릭터 → 커서 방향) — 화염방사기 */
+	Cone		UMETA(DisplayName = "화염: 부채꼴 테두리"),
+	/** 큰 착탄 원 + 가운데 십자 (원 크기 = 폭발 범위 느낌) — 수류탄·지뢰 */
+	Area		UMETA(DisplayName = "투척·설치: 착탄 원 + 십자"),
+	/** 원 + 번개 — 사제 테이저건(Q로 든 상태) */
+	Lightning	UMETA(DisplayName = "사제 테이저: 번개"),
+};
+
+/** 무기 하나의 조준점 설정. 음수 = 자동(서버 GameData.h 무기 표와 같은 값) */
+USTRUCT(BlueprintType)
+struct FVHCrosshairSpec
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Crosshair")
+	EVHCrosshairShape Shape = EVHCrosshairShape::Auto;
+
+	/**
+	 * 사거리 (cm): 커서가 내 캐릭터에서 이보다 멀면 조준점 색이 "사거리 밖" 색으로 바뀐다. 0 = 무제한(권총·레일건·지뢰), 음수 = 자동(서버 값).
+	 * 수류탄은 던질 수 있는 최대 거리(6m): 더 멀면 실제 떨어질 자리에 작은 원을 함께 그린다. 판정은 서버가 한다(표시용)
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Crosshair", meta = (Units = "cm"))
+	float RangeCm = -1.f;
+
+	/** 부채꼴 반각 (도, 화염방사기). 음수 = 자동(서버 15°). 화면에는 DA_VHUIStyle CrosshairConeAngleScale 배로 넓혀 그린다 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Crosshair", meta = (Units = "deg"))
+	float HalfAngleDeg = -1.f;
+
+	/** 폭발 반지름 (cm, 투척·설치). 원 크기 = 이 값 × CrosshairAreaPxPerCm (최소 크기는 지킨다). 음수 = 자동(수류탄 600·지뢰 300) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Crosshair", meta = (Units = "cm"))
+	float AreaRadiusCm = -1.f;
+
+	/** 쏠 때 조준점이 벌어지는 크기 (1080p 기준 px, 판정과 무관한 연출). 음수 = 자동 (권총 작게 · 레일건 크게) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Crosshair|Kick")
+	float KickPx = -1.f;
+
+	/** 벌어졌다가 제자리로 돌아오는 시간 (초). 음수 = 자동 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Crosshair|Kick", meta = (Units = "s"))
+	float KickRecoverSeconds = -1.f;
+
+	/** 크기 배율 (DA_VHUIStyle CrosshairSize 에 곱한다. 최소 지름은 CrosshairMinSize 로 지킨다) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Crosshair", meta = (ClampMin = 0.5))
+	float SizeScale = 1.f;
+};
+
 /** 무기 하나의 모습. 모델러가 만든 모델로 바꿀 때는 Mesh 칸만 바꾸면 된다 (크기·방향이 약속과 다르면 Model 칸) → Docs/무기_교체_가이드.md */
 USTRUCT(BlueprintType)
 struct FVHWeaponVisual
@@ -229,6 +289,10 @@ struct FVHWeaponVisual
 	/** 쏠 때 반동 (원거리 무기). 세기·복귀 시간을 여기서 숫자로 고친다 (2026-11-20) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Recoil")
 	FVHWeaponRecoil Recoil;
+
+	/** 게임 중 마우스 조준점 (모양·사거리·반동 벌어짐). 공통 크기·색은 DA_VHUIStyle (2026-11-25) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Crosshair")
+	FVHCrosshairSpec Crosshair;
 
 	// ── 바닥에 떨어져 있을 때 ──
 
@@ -420,6 +484,22 @@ public:
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Fx|Railgun", meta = (ClampMin = 0, ClampMax = 3, Units = "s"))
 	float RailgunChargeSeconds = 1.f;
+
+	// ── 게임 중 마우스 조준점 (2026-11-25). 무기별 값은 Weapons 각 칸의 Crosshair ──
+
+	/** 무기가 없을 때(맨손) 조준점 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Crosshair")
+	FVHCrosshairSpec UnarmedCrosshair;
+
+	/** 사제 테이저건(도적1 스킬, Q로 든 상태) 조준점. 자동 = 번개, 사거리 3m(서버 SkillTaserRangeCm) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Crosshair")
+	FVHCrosshairSpec SkillTaserCrosshair;
+
+	/**
+	 * 이 무기(또는 맨손 0, 사제 테이저건 bSkillTaser)의 조준점 설정을 자동 칸까지 채워서 돌려준다.
+	 * 자동 값 = 서버 GameData.h 무기 표(사거리·반각)와 같은 표시용 값
+	 */
+	FVHCrosshairSpec ResolveCrosshair(uint8 WeaponId, bool bSkillTaser) const;
 
 	/** 무기별 이펙트 묶음 (없으면 nullptr) */
 	const FVHWeaponFxSet* FindFx(uint8 WeaponId) const { return WeaponFx.Find(static_cast<EVHWeaponId>(WeaponId)); }

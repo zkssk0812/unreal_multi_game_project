@@ -1,0 +1,42 @@
+# 2026-11-25 조준점 비교 촬영 (Gal, 1920x1080): 모든 모양·상태를 나란히(gallery) 여러 바닥에서, 그리고 화염·폭발 위에서
+0.3 r.SetRes 1920x1080wf
+1.0 vh.Crosshair gallery 1
+1.2 vh.Aim 0
+2.0 vh.CeilingGo -500 500
+2.3 vh.Aim 0
+3.6 vh.Shot ch_gal_hall
+5.0 vh.CeilingGo 4290 -900
+5.3 vh.Aim 0
+6.6 vh.Shot ch_gal_freezer
+8.0 vh.CeilingGo 900 -2900
+8.3 vh.Aim 0
+9.6 vh.Shot ch_gal_gallery1
+11.0 vh.CeilingGo -4300 0
+11.3 vh.Aim 0
+12.6 vh.Shot ch_gal_storage1
+14.0 vh.CeilingGo -200 2640
+14.3 vh.Aim 0
+15.6 vh.Shot ch_gal_entrance
+17.0 vh.CeilingGo 2300 -1500
+17.3 vh.Aim 0
+18.6 vh.Shot ch_gal_dining
+20.0 vh.CeilingGo -700 -1500
+20.3 vh.Aim 0
+21.6 vh.Shot ch_gal_office
+23.0 vh.CeilingGo 3900 -1200
+23.3 vh.Aim 0
+24.6 vh.Shot ch_gal_kitchen
+27.0 vh.CeilingGo -500 500
+27.3 vh.Aim 0
+28.0 vh.WeaponTest 5 hold 3
+29.4 vh.Shot ch_fx_flame
+30.5 vh.Crosshair fx grenade
+31.55 vh.Shot ch_fx_grenade
+33.0 vh.Crosshair fx blastmine
+35.55 vh.Shot ch_fx_blastmine
+37.0 vh.Crosshair fx railbeam
+37.1 vh.Shot ch_fx_railbeam
+38.5 vh.WeaponTest off
+39.0 vh.Crosshair gallery 0
+39.2 vh.Crosshair info
+42.0 quit

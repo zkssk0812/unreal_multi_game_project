@@ -1,0 +1,40 @@
+# 2026-11-25 조준점을 화염·폭발 한가운데에 고정하고 무기 모양별로 촬영 (Gal, 1920x1080)
+0.3 r.SetRes 1920x1080wf
+2.0 vh.CeilingGo -500 500
+2.3 vh.Aim 0
+3.0 vh.WeaponTest 5 hold 9
+4.0 vh.Crosshair weapon 1
+4.1 vh.Crosshair at 260 0
+4.6 vh.Shot ch_flame_w1
+5.0 vh.Crosshair weapon 4
+5.1 vh.Crosshair at 260 0
+5.6 vh.Shot ch_flame_w4
+6.0 vh.Crosshair weapon 6
+6.1 vh.Crosshair at 260 0
+6.6 vh.Shot ch_flame_w6
+7.0 vh.Crosshair weapon 5
+7.1 vh.Crosshair at 260 0
+7.6 vh.Shot ch_flame_w5
+8.0 vh.Crosshair weapon 8
+8.1 vh.Crosshair at 260 0
+8.6 vh.Shot ch_flame_w8
+9.0 vh.Crosshair weapon 9
+9.1 vh.Crosshair at 260 0
+9.6 vh.Shot ch_flame_w9
+10.0 vh.Crosshair weapon skill
+10.1 vh.Crosshair at 260 0
+10.6 vh.Shot ch_flame_wskill
+13.0 vh.WeaponTest off
+14.0 vh.Crosshair weapon 4
+14.1 vh.Crosshair at 450 0
+14.5 vh.Crosshair fx grenade
+15.55 vh.Shot ch_boom_w4
+17.0 vh.Crosshair weapon 1
+17.5 vh.Crosshair fx grenade
+18.55 vh.Shot ch_boom_w1
+20.0 vh.Crosshair weapon 6
+20.5 vh.Crosshair fx grenade
+21.55 vh.Shot ch_boom_w6
+23.0 vh.Crosshair weapon auto
+23.1 vh.Crosshair free
+25.0 quit

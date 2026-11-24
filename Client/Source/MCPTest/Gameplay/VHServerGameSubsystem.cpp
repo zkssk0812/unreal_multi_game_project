@@ -2204,6 +2204,12 @@ void UVHServerGameSubsystem::OnSkill(const SC_Skill& P)
 				Caster->SetWeapon(static_cast<uint8>(E->Weapon));
 			}
 		}
+		if (P.phase == SkillPhase::Cast && bMe)
+		{
+			MyLastShotTime = FPlatformTime::Seconds();
+			MyLastShotWeapon = 0;
+			OnMyShot.Broadcast(static_cast<uint8>(WeaponId::Taser));	// 조준점 반동 (사제 테이저건 발사)
+		}
 		if (P.phase == SkillPhase::Cast)
 		{
 			// 사제 테이저건: 시선 방향 3m 직선 (맞았는지는 SC_DAMAGE 와 대상의 경직 상태로 온다)
@@ -2576,6 +2582,16 @@ void UVHServerGameSubsystem::OnDamage(const SC_Damage& P)
 		{
 			++DamageDealtToThieves;	// 시험 봇 -VHBotDoorShot: 닫힌 문 너머로 맞았는지
 		}
+		// 조준점 히트 마커 (2026-11-25): 서버가 내 공격의 피해를 알려 줄 때만 (플레이어·경비원, 설정하면 상자도)
+		if (const FEntity* T = Entities.Find(P.target))
+		{
+			const bool bBox = T->Kind == EntityKind::Box;
+			if (T->Kind == EntityKind::Thief || T->Kind == EntityKind::Guard || (bBox && UVHSettings::Get().GetStyle().bHitMarkerOnBoxes))
+			{
+				UE_LOG(LogVHServerGame, Log, TEXT("[조준점] 히트 마커: 맞힘 → %s (%s, -%u, HP %u)"), *NameOfEntity(P.target), WeaponName(P.weapon), P.amount, P.hp_after);
+				OnMyHitConfirmed.Broadcast(false, static_cast<uint8>(T->Kind));
+			}
+		}
 	}
 	// 몸 동작: 맞은 사람이 움찔 (경직·쓰러짐·작업 중이면 그 동작이 우선)
 	if (UVHWeaponVisualComponent* Hit = VisualOfEntity(P.target))
@@ -2664,6 +2680,17 @@ void UVHServerGameSubsystem::OnFire(const SC_Fire& P)
 	UE_LOG(LogVHServerGame, Verbose, TEXT("[서버] 공격 %s 무기 %s yaw %.0f 맞은 대상 %s"),
 		*NameOfEntity(P.shooter), WeaponName(P.weapon), P.yaw, *NameOfEntity(P.hit_entity));
 	++FiresSeen;
+
+	// 조준점: 내 공격 한 번 → 반동 벌어짐·쿨타임 원 (레일건은 충전이 끝나 빔이 나갈 때 TickRailgunShots 에서)
+	if (P.shooter == SelfEntityId && P.weapon != WeaponId::None)
+	{
+		MyLastShotTime = FPlatformTime::Seconds();
+		MyLastShotWeapon = static_cast<uint8>(P.weapon);
+		if (P.weapon != WeaponId::Railgun)
+		{
+			OnMyShot.Broadcast(static_cast<uint8>(P.weapon));
+		}
+	}
 
 	// 내 레일건: 서버가 누른 순간 발사(SC_FIRE, 충전 시작)했다 → 클릭 한 번 = 한 발이므로 손을 뗀 것으로 알린다
 	if (P.shooter == SelfEntityId && P.weapon == WeaponId::Railgun && bRailAwaitFire)
@@ -2800,6 +2827,12 @@ void UVHServerGameSubsystem::OnDowned(const SC_Downed& P)
 	const bool bByGuard = P.cause == DownCause::Guard;
 	UE_LOG(LogVHServerGame, Log, TEXT("[서버] 쓰러짐: %s ← %s (%s), 잃은 반납 금액 %u$, 리스폰 %ums"),
 		*NameOfEntity(P.victim), *NameOfEntity(P.attacker), bByGuard ? TEXT("경비원") : TEXT("플레이어"), P.lost_banked, P.respawn_ms);
+	// 조준점 히트 마커 (2026-11-25): 내가 쓰러뜨렸다고 서버가 알려 줄 때만 다른 색
+	if (!bByGuard && P.attacker == SelfEntityId && P.victim != SelfEntityId && SelfEntityId != 0)
+	{
+		UE_LOG(LogVHServerGame, Log, TEXT("[조준점] 히트 마커: 쓰러뜨림 → %s"), *NameOfEntity(P.victim));
+		OnMyHitConfirmed.Broadcast(true, static_cast<uint8>(EntityKind::Thief));
+	}
 	UVHMatchSubsystem* Match = GetMatch();
 	if (!Match)
 	{
@@ -3313,6 +3346,42 @@ uint8 UVHServerGameSubsystem::MyActiveWeapon() const
 	return MyStatus.bValid ? MyStatus.WeaponId[FMath::Clamp(MyStatus.ActiveSlot, 0, 1)] : 0;
 }
 
+uint8 UVHServerGameSubsystem::GetCrosshairWeapon() const
+{
+	if (bRailAwaitFire || PendingRailShots.ContainsByPredicate([this](const FRailShot& S) { return S.Shooter == SelfEntityId; }))
+	{
+		return static_cast<uint8>(WeaponId::Railgun);
+	}
+	return MyActiveWeapon();
+}
+
+int32 UVHServerGameSubsystem::GetMyActiveAmmo() const
+{
+	return MyStatus.bValid ? MyStatus.WeaponAmmo[FMath::Clamp(MyStatus.ActiveSlot, 0, 1)] : 0;
+}
+
+bool UVHServerGameSubsystem::GetMyRailgunCharge(float& OutProgress, bool& bOutBeam) const
+{
+	OutProgress = 0.f;
+	bOutBeam = false;
+	const double Now = FPlatformTime::Seconds();
+	for (const FRailShot& S : PendingRailShots)
+	{
+		if (S.Shooter != SelfEntityId)
+		{
+			continue;
+		}
+		bOutBeam = S.bFired;
+		OutProgress = S.bFired ? 1.f : FMath::Clamp(static_cast<float>(1.0 - (S.FireAt - Now) / RailgunChargeSeconds), 0.f, 1.f);
+		return true;
+	}
+	if (bRailAwaitFire)
+	{
+		return true;	// 클릭했고 서버 SC_FIRE 를 기다리는 중 (충전 0)
+	}
+	return false;
+}
+
 bool UVHServerGameSubsystem::IsRailgunCharging() const
 {
 	if (bRailAwaitFire)
@@ -3405,6 +3474,7 @@ void UVHServerGameSubsystem::TickRailgunShots()
 			}
 			if (S.Shooter == SelfEntityId)
 			{
+				OnMyShot.Broadcast(static_cast<uint8>(WeaponId::Railgun));	// 조준점: 빔이 나가는 순간 크게 벌어짐
 				++RailBeamsSeen;
 				UE_LOG(LogVHServerGame, Log, TEXT("[레일건] 충전 끝 → 빔 (클릭 후 %.0fms, SC_FIRE 후 %.0fms, yaw %.0f)"), (Now - RailClickTime) * 1000.0,
 					(Now - (S.FireAt - RailgunChargeSeconds)) * 1000.0, S.Yaw);
@@ -3565,7 +3635,7 @@ namespace
 
 	// vh.Press skill|attack|wheel : Q 키·좌클릭(누르고 0.1초 뒤 뗌)·마우스 휠과 같은 처리 (봇 스크립트로 사제 테이저건 시험)
 	FAutoConsoleCommandWithWorldAndArgs GVHPressCommand(TEXT("vh.Press"),
-		TEXT("개발용: vh.Press skill|attack|wheel — Q 키 / 좌클릭(0.1초) / 마우스 휠을 누른 것과 같은 처리 (실서버 게임 중)."),
+		TEXT("개발용: vh.Press skill|attack [누름 초]|wheel — Q 키 / 좌클릭(기본 0.1초, 꾹 누르기 시험은 초) / 마우스 휠을 누른 것과 같은 처리 (실서버 게임 중)."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			UVHServerGameSubsystem* Server = World ? World->GetSubsystem<UVHServerGameSubsystem>() : nullptr;
@@ -3594,7 +3664,7 @@ namespace
 					{
 						Weak->SendAttackHeld(false);
 					}
-				}), 0.1f, false);
+				}), (Args.Num() >= 2 ? FMath::Clamp(FCString::Atof(*Args[1]), 0.05f, 10.f) : 0.1f), false);
 			}
 		}));
 
@@ -3737,6 +3807,7 @@ void UVHServerGameSubsystem::PressSkillKey()
 	{
 		// 서버도 Cooldown 으로 거절한다. 보내지 않고 남은 시간만 알린다 (서버가 알려 준 쿨타임 기준)
 		UE_LOG(LogVHServerGame, Log, TEXT("[테이저] 들기 안 됨: 쿨타임 %.1f초 남음"), Cooldown);
+		SkillCooldownNoticeTime = FPlatformTime::Seconds();	// 조준점 옆에도 잠깐 쿨타임 표시
 		if (UVHMatchSubsystem* Match = GetMatch())
 		{
 			Match->PushNotice(FText::Format(LOCTEXT("TaserCooldown", "사제 테이저건 쿨타임 {0}초"), FText::AsNumber(FMath::CeilToInt(Cooldown))));
@@ -5047,9 +5118,16 @@ void UVHServerGameSubsystem::TickBotDoorShot(float DeltaTime)
 		case 4:
 			DoorShotHitsBefore = DamageDealtToThieves;
 			GEngine->Exec(GetWorld(), TEXT("vh.Aim 0"));	// 창 위 실제 마우스가 조준을 덮지 않게 매번 고정
-			GEngine->Exec(GetWorld(), TEXT("vh.Press attack"));
+		{
+			// -VHDoorShotHold=초 (2026-11-25 조준점 연사 시험): 열린 문으로 권총을 그 시간 동안 꾹 눌러 연사한다 (기본 0.1초 = 한 발)
+			float Hold = 0.f;
+			FParse::Value(FCommandLine::Get(), TEXT("VHDoorShotHold="), Hold);
+			const FString Press = Hold > 0.f ? FString::Printf(TEXT("vh.Press attack %.2f"), Hold) : FString(TEXT("vh.Press attack"));
+			UE_LOG(LogVHServerGame, Log, TEXT("[문 사격] 열린 문으로 권총 %s"), Hold > 0.f ? *FString::Printf(TEXT("연사 %.1f초"), Hold) : TEXT("한 발"));
+			GEngine->Exec(GetWorld(), *Press);
 			DoorShotSub = 5;
-			DoorShotNext = Now + 0.12;
+			DoorShotNext = Now + (Hold > 0.f ? Hold + 0.4 : 0.12);	// 연사 중에는 화면 저장(프레임 멈춤)을 하지 않는다
+		}
 			return;
 		case 5:
 			Shot(TEXT("pistol_open"));

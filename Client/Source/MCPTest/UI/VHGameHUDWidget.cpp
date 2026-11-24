@@ -1,5 +1,6 @@
 #include "UI/VHGameHUDWidget.h"
 #include "UI/VHMinimapWidget.h"
+#include "UI/VHCrosshairWidget.h"
 #include "MCPTest.h"
 
 #include "Gameplay/VHInteractionComponent.h"
@@ -1235,6 +1236,25 @@ bool UVHGameHUDWidget::PlaceAt(UWidget* Widget, const FVector& WorldLocation) co
 		const FVector2D BoxSize = PromptBox->GetDesiredSize();
 		ScreenPos.X = FMath::Clamp(ScreenPos.X, BoxSize.X * 0.5f + 10.f, FMath::Max(BoxSize.X * 0.5f + 10.f, View.X - BoxSize.X * 0.5f - 10.f));
 		ScreenPos.Y = FMath::Clamp(ScreenPos.Y, BoxSize.Y + 60.f, FMath::Max(BoxSize.Y + 60.f, View.Y - 20.f));
+	}
+	if (Widget == PromptBox || Widget == InfoBox)
+	{
+		// 조준점과 겹치면 안내를 조준점 위로(위가 모자라면 아래로) 옮긴다 → 조준점과 [F] 안내 둘 다 읽힌다 (2026-11-25)
+		FVector2D Aim;
+		float AimR = 0.f;
+		const UVHCrosshairWidget* Crosshair = UVHCrosshairWidget::GetActive();
+		if (Crosshair && Crosshair->GetOwningPlayer() == PC && Crosshair->GetScreenBounds(Aim, AimR))
+		{
+			const FVector2D BoxSize = Widget->GetDesiredSize();	// 아래 가운데 기준 (정렬 0.5, 1)
+			const float Gap = 6.f;
+			const bool bOverlapX = FMath::Abs(ScreenPos.X - Aim.X) < BoxSize.X * 0.5f + AimR;
+			const bool bOverlapY = ScreenPos.Y > Aim.Y - AimR && ScreenPos.Y - BoxSize.Y < Aim.Y + AimR;
+			if (bOverlapX && bOverlapY)
+			{
+				const float Above = Aim.Y - AimR - Gap;
+				ScreenPos.Y = Above - BoxSize.Y >= 50.f ? Above : Aim.Y + AimR + Gap + BoxSize.Y;
+			}
+		}
 	}
 	if (UCanvasPanelSlot* CanvasSlot = Cast<UCanvasPanelSlot>(Widget->Slot))
 	{

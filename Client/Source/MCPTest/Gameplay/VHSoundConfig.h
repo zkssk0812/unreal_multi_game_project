@@ -66,6 +66,9 @@ enum class EVHSound : uint8
 	DoorOpen			UMETA(DisplayName = "문 열림 (미닫이)"),
 	DoorClose			UMETA(DisplayName = "문 닫힘"),
 	DoorHit				UMETA(DisplayName = "닫힌 문에 총알·테이저가 맞음"),
+	// ── 2026-11-25 조준점 히트 마커 (서버가 내 공격의 피해·쓰러뜨림을 알려 줄 때만, 2D) ──
+	HitMarker			UMETA(DisplayName = "히트 마커: 내 공격이 맞음"),
+	KillMarker			UMETA(DisplayName = "히트 마커: 내가 쓰러뜨림"),
 	Count				UMETA(Hidden),
 };
 

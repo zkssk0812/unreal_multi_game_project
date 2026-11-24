@@ -159,6 +159,74 @@ public:
 	/** 들고 있는 가치가 0이면 이 불투명도로 흐리게 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD") float HudCarryDimOpacity = 0.4f;
 
+	// ── 게임 중 마우스 조준점 (2026-11-25, 가시성 우선). 숫자는 1080p 기준 px — 다른 해상도에서는 화면 대비 같은 크기(UI 배율)로 그려진다.
+	//    무기별 모양·사거리·반동 세기는 DA_VHWeaponCatalog → Weapons → Crosshair ──
+
+	/** 끄면 예전처럼 운영체제 십자 커서를 쓴다 (콘솔 vh.Crosshair 0/1) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair") bool bCrosshairEnabled = true;
+	/** 조준점 기본 지름 (px). 무기별 SizeScale 를 곱한다 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair", meta = (ClampMin = 24)) float CrosshairSize = 60.f;
+	/** 조준점 최소 지름 (px). 어떤 모양·배율이라도 이보다 작게 그리지 않는다 (가시성 기준 48px) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair", meta = (ClampMin = 16)) float CrosshairMinSize = 48.f;
+	/** 밝은 본체 선 굵기 (px, 가시성 기준 3 이상) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair", meta = (ClampMin = 1)) float CrosshairThickness = 4.f;
+	/** 어두운 테두리 두께 (px, 본체 양쪽에 이만큼 더 그린다. 0 = 테두리 없음) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair", meta = (ClampMin = 0)) float CrosshairOutline = 2.f;
+	/** 밝은 본체 색 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair") FLinearColor CrosshairColor = FLinearColor(1.f, 1.f, 1.f, 1.f);
+	/** 어두운 테두리 색 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair") FLinearColor CrosshairOutlineColor = FLinearColor(0.f, 0.f, 0.f, 0.9f);
+	/** 전체 투명도 (1 = 불투명) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair", meta = (ClampMin = 0.2, ClampMax = 1)) float CrosshairOpacity = 1.f;
+	/** 커서가 지금 무기의 사거리 밖일 때 본체 색 (흐리게 하지 않고 색을 바꾼다) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair") FLinearColor CrosshairOutOfRangeColor = FLinearColor(1.f, 0.22f, 0.16f, 1.f);
+	/** 사거리 밖일 때 투명도 (너무 낮추면 안 보인다) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair", meta = (ClampMin = 0.4, ClampMax = 1)) float CrosshairOutOfRangeOpacity = 0.9f;
+	/** 사거리 여유 (cm). 근접·테이저·화염은 상대 몸 반지름만큼 더 닿으므로 사거리 + 이 값까지는 "사거리 안" (투척은 여유 없음) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair", meta = (ClampMin = 0)) float CrosshairRangeSlackCm = 40.f;
+	/** 공격할 수 없을 때(쓰러짐·경직) 본체 색 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair") FLinearColor CrosshairDisabledColor = FLinearColor(0.62f, 0.64f, 0.68f, 1.f);
+	/** 레일건 충전 링 색 (1초 동안 원이 채워진다) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair") FLinearColor CrosshairChargeColor = FLinearColor(0.2f, 0.85f, 1.f, 1.f);
+	/** 레일건 잠금 중(충전·발사 2초, 이동·회전 불가) 본체 색 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair") FLinearColor CrosshairLockedColor = FLinearColor(1.f, 0.62f, 0.08f, 1.f);
+	/** 사제 테이저건 번개 색 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair") FLinearColor CrosshairTaserColor = FLinearColor(0.35f, 0.9f, 1.f, 1.f);
+	/** 투척·설치 착탄 원: 폭발 반지름 1cm 당 px (수류탄 600cm → 지름 600×2×값). 최소 지름은 CrosshairSize */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair", meta = (ClampMin = 0)) float CrosshairAreaPxPerCm = 0.075f;
+	/** 투척·설치 착탄 원의 최대 지름 (px) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair", meta = (ClampMin = 48)) float CrosshairAreaMaxSize = 110.f;
+	/** 화염 부채꼴: 사거리 1cm 당 길이 px (최소 CrosshairSize, 최대 ×1.6) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair", meta = (ClampMin = 0)) float CrosshairConePxPerCm = 0.11f;
+	/** 화염 부채꼴 각도 배율 (서버 반각 15°는 화면에서 너무 가늘어 보여 넓혀 그린다) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair", meta = (ClampMin = 1)) float CrosshairConeAngleScale = 1.6f;
+	/** 반동 벌어짐이 연사로 쌓이는 최대 배수 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair", meta = (ClampMin = 1)) float CrosshairKickMaxStack = 2.2f;
+	/** 반동 벌어짐 전체 배율 (0 = 반동 표시 없음) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair", meta = (ClampMin = 0)) float CrosshairKickScale = 1.f;
+
+	/** 히트 마커(서버가 내 공격의 피해를 알려 줄 때만): 색 / 쓰러뜨렸을 때 색 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair|HitMarker") FLinearColor HitMarkerColor = FLinearColor(1.f, 1.f, 1.f, 1.f);
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair|HitMarker") FLinearColor KillMarkerColor = FLinearColor(1.f, 0.12f, 0.1f, 1.f);
+	/** X 한 획의 바깥 끝까지 거리 (px, 가운데에서) / 안쪽 틈 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair|HitMarker", meta = (ClampMin = 8)) float HitMarkerSize = 26.f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair|HitMarker", meta = (ClampMin = 0)) float HitMarkerGap = 9.f;
+	/** X 선 굵기 (px) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair|HitMarker", meta = (ClampMin = 2)) float HitMarkerThickness = 5.f;
+	/** 보이는 시간 (초): 맞힘 / 쓰러뜨림 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair|HitMarker", meta = (ClampMin = 0.05)) float HitMarkerSeconds = 0.28f;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair|HitMarker", meta = (ClampMin = 0.05)) float KillMarkerSeconds = 0.6f;
+	/** 상자를 맞혔을 때도 히트 마커 (기본: 플레이어·경비원만) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair|HitMarker") bool bHitMarkerOnBoxes = false;
+
+	/** 조준점 옆 상태 표시 (탄 적음·탄 없음·쿨타임) 글자 크기와 색 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair|Status", meta = (ClampMin = 8)) int32 CrosshairStatusFontSize = 15;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair|Status") FLinearColor CrosshairStatusColor = FLinearColor(1.f, 0.85f, 0.25f, 1.f);
+	/** 남은 탄이 이 이하면 조준점 옆에 "탄 N" (0 = 표시 안 함). 탄이 무한인 무기는 표시하지 않는다 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair|Status", meta = (ClampMin = 0)) int32 CrosshairLowAmmo = 3;
+	/** 공격 간격이 이 초 이상인 무기(테이저건·수류탄·지뢰 1초)는 쏜 뒤 다음 공격까지 작은 쿨타임 원을 조준점 옆에 그린다 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "HUD|Crosshair|Status", meta = (ClampMin = 0)) float CrosshairCooldownMinSeconds = 0.9f;
+
 	// ── 적용 도우미 ──
 	FSlateFontInfo MakeFont(EVHTextRole Role) const;
 	int32 FontSize(EVHTextRole Role) const;

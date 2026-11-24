@@ -120,6 +120,47 @@ float UVHWeaponCatalog::ServerIntervalSeconds(uint8 WeaponId)
 	}
 }
 
+FVHCrosshairSpec UVHWeaponCatalog::ResolveCrosshair(uint8 WeaponId, bool bSkillTaser) const
+{
+	// 자동 값: [서버 GameData.h] WeaponTypes 의 rangeCm·halfAngleDeg, GrenadeRadiusCm 600, MineRadiusCm 300, SkillTaserRangeCm 300
+	struct FAuto { EVHCrosshairShape Shape; float Range; float Half; float Area; float Kick; float Recover; };
+	FAuto A{ EVHCrosshairShape::Brackets, 0.f, 0.f, 0.f, 6.f, 0.16f };
+	FVHCrosshairSpec Spec;
+	if (bSkillTaser)
+	{
+		Spec = SkillTaserCrosshair;
+		A = { EVHCrosshairShape::Lightning, 300.f, 0.f, 0.f, 12.f, 0.22f };
+	}
+	else
+	{
+		const FVHWeaponVisual* Visual = WeaponId != 0 ? Find(WeaponId) : nullptr;
+		Spec = Visual ? Visual->Crosshair : (WeaponId == 0 ? UnarmedCrosshair : FVHCrosshairSpec());
+		switch (static_cast<EVHWeaponId>(WeaponId))
+		{
+		case EVHWeaponId::Baton:		A = { EVHCrosshairShape::Brackets, 200.f, 0.f, 0.f, 7.f, 0.16f }; break;
+		case EVHWeaponId::Sword:		A = { EVHCrosshairShape::Brackets, 300.f, 0.f, 0.f, 8.f, 0.18f }; break;
+		case EVHWeaponId::BeamSword:	A = { EVHCrosshairShape::Brackets, 400.f, 0.f, 0.f, 9.f, 0.18f }; break;
+		case EVHWeaponId::Pistol:		A = { EVHCrosshairShape::Cross, 0.f, 0.f, 0.f, 9.f, 0.14f }; break;
+		case EVHWeaponId::Flamethrower:	A = { EVHCrosshairShape::Cone, 600.f, 15.f, 0.f, 3.f, 0.10f }; break;
+		case EVHWeaponId::Railgun:		A = { EVHCrosshairShape::RailRing, 0.f, 0.f, 0.f, 26.f, 0.45f }; break;
+		case EVHWeaponId::Taser:		A = { EVHCrosshairShape::Cross, 300.f, 0.f, 0.f, 13.f, 0.22f }; break;
+		case EVHWeaponId::Grenade:		A = { EVHCrosshairShape::Area, 600.f, 0.f, 600.f, 10.f, 0.25f }; break;
+		case EVHWeaponId::BlastMine:	A = { EVHCrosshairShape::Area, 0.f, 0.f, 300.f, 8.f, 0.25f }; break;	// 지뢰는 발밑에 설치 → 사거리 없음
+		case EVHWeaponId::ShockMine:	A = { EVHCrosshairShape::Area, 0.f, 0.f, 300.f, 8.f, 0.25f }; break;
+		default: break;	// 맨손
+		}
+	}
+	if (Spec.Shape == EVHCrosshairShape::Auto) { Spec.Shape = A.Shape; }
+	if (Spec.RangeCm < 0.f) { Spec.RangeCm = A.Range; }
+	if (Spec.HalfAngleDeg < 0.f) { Spec.HalfAngleDeg = A.Half; }
+	if (Spec.AreaRadiusCm < 0.f) { Spec.AreaRadiusCm = A.Area; }
+	if (Spec.KickPx < 0.f) { Spec.KickPx = A.Kick; }
+	if (Spec.KickRecoverSeconds < 0.f) { Spec.KickRecoverSeconds = A.Recover; }
+	Spec.KickRecoverSeconds = FMath::Max(Spec.KickRecoverSeconds, 0.02f);
+	Spec.SizeScale = FMath::Max(Spec.SizeScale, 0.5f);
+	return Spec;
+}
+
 void FVHWeaponRecoil::Evaluate(float T, float& OutMuzzle, float& OutBody) const
 {
 	// Lyra MM_Pistol_Fire 모양 (Tools/External/lyra_recoil.json): 총구 들림은 0.067초에 가장 크고(빠르게 올라감) 0.3초에 거의 0(처음 빨리 내려옴),

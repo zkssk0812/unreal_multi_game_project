@@ -136,6 +136,12 @@ PLAN.update({
     "DOOR_HIT": (["Impact/impactPlank_medium_000"], 0.75, 0.9, 1.1, 0.05, False,
                  {"layers": [(["Impact/impactMetal_light_000", "Impact/impactMetal_light_001", "Impact/impactMetal_light_002"], 0.3, 1.3, 0.0)]}),
 })
+# 조준점 히트 마커 (2026-11-25, 2D): 맞힘 = 짧고 높은 "틱", 쓰러뜨림 = "틱" + 금속 "칭". 이미 받은 Kenney Interface·Impact 소리만 씀
+PLAN.update({
+    "HIT_MARKER": (["Interface/tick_001", "Interface/tick_002"], 0.55, 1.45, 1.6, 0.04, True),
+    "KILL_MARKER": (["Interface/tick_002"], 0.7, 1.15, 1.2, 0.0, True,
+                    {"layers": [(["Impact/impactMetal_light_002"], 0.45, 1.6, 0.0)]}),
+})
 ATT_SMALL = DIR + "/ATT_VHSfxSmall"
 
 

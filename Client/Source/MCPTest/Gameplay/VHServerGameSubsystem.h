@@ -185,6 +185,28 @@ public:
 	/** 스킬 쿨타임 남은 초 (서버 상태 기준, 받은 뒤 흐른 시간을 뺌) */
 	float GetSkillCooldownRemaining() const;
 
+	// ── 게임 중 마우스 조준점(UVHCrosshairWidget)이 읽는다 (2026-11-25) ──
+	/**
+	 * 내 공격이 서버 판정으로 맞음: SC_DAMAGE(attacker = 나, 대상 = 다른 플레이어·경비원·상자) → bKill false,
+	 * SC_DOWNED(attacker = 나) → bKill true. 클라 추측으로는 부르지 않는다. TargetKind = RobProto::EntityKind 값
+	 */
+	DECLARE_MULTICAST_DELEGATE_TwoParams(FVHOnMyHitConfirmed, bool /*bKill*/, uint8 /*TargetKind*/);
+	FVHOnMyHitConfirmed OnMyHitConfirmed;
+	/** 내 공격 한 번 (내 SC_FIRE. 레일건은 충전이 끝나 빔이 나가는 순간). 조준점 반동 벌어짐 연출용 */
+	DECLARE_MULTICAST_DELEGATE_OneParam(FVHOnMyShot, uint8 /*WeaponId*/);
+	FVHOnMyShot OnMyShot;
+	/** 조준점에 쓸 지금 무기: 내 레일건 충전·빔 중이면 레일건(마지막 탄이면 서버 무기는 이미 삼단봉), 아니면 서버의 든 무기 */
+	uint8 GetCrosshairWeapon() const;
+	/** 든 무기의 남은 탄 (서버 SC_PLAYER_STATUS. 0 = 무한 또는 없음) */
+	int32 GetMyActiveAmmo() const;
+	/** 내 레일건: 충전 중이면 true + 진행도(0~1, 서버 SC_FIRE 기준 1초), 빔 중이면 bOutBeam. 둘 다 아니면 false */
+	bool GetMyRailgunCharge(float& OutProgress, bool& bOutBeam) const;
+	/** 내 마지막 공격(SC_FIRE) 시각 (FPlatformTime, 0 = 없음) — 조준점 쿨타임 원 */
+	double GetMyLastShotTime() const { return MyLastShotTime; }
+	uint8 GetMyLastShotWeapon() const { return MyLastShotWeapon; }
+	/** 쿨타임 중 Q 를 눌러 막힌 시각 (FPlatformTime, 0 = 없음) — 조준점 옆에 잠깐 쿨타임 표시 */
+	double GetSkillCooldownNoticeTime() const { return SkillCooldownNoticeTime; }
+
 	/** 서버 환금 아이템(품질, 가치) → 클라 물건 표시 데이터 */
 	static FVHItemData ItemForValuable(uint16 Quality, uint32 Value);
 	/** 표시용 이름 */
@@ -366,6 +388,9 @@ protected:
 	};
 	FPending Pending;
 	bool bAttackHeldSent = false;
+	double MyLastShotTime = 0.0;		// 조준점 쿨타임 원: 내 마지막 SC_FIRE (FPlatformTime)
+	uint8 MyLastShotWeapon = 0;
+	double SkillCooldownNoticeTime = 0.0;
 
 	// 레일건: 내 클릭 → AttackStart → 내 SC_FIRE 를 기다림 (받으면 AttackStop, 0.6초 안에 없으면 끝)
 	bool bRailAwaitFire = false;
