@@ -55,7 +55,7 @@ bool GameWorld::Blocked(const Vec3& from, const Vec3& to) const
 		return false;
 	const Vec3 a{ from.x, from.y, from.z + GameData::ShotHeightCm };
 	const Vec3 b{ to.x, to.y, to.z + GameData::ShotHeightCm };
-	return !HasLineOfSight(*_map, a, b);
+	return !SeesThrough(a, b);						// 닫힌 문도 벽처럼 막는다 (클라 2026-11-24)
 }
 
 GameWorld::HitResult GameWorld::RayHit(const Entity& shooter, float yaw, float range, bool guardShot)

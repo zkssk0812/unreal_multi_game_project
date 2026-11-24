@@ -69,6 +69,7 @@
     <ClCompile Include="Game\MapLoader.cpp" />
     <ClCompile Include="Game\GameWorld.cpp" />
     <ClCompile Include="Game\WorldCombat.cpp" />
+    <ClCompile Include="Game\WorldDoors.cpp" />
     <ClCompile Include="Game\WorldExplosives.cpp" />
     <ClCompile Include="Game\WorldItems.cpp" />
     <ClCompile Include="Game\WorldSkills.cpp" />

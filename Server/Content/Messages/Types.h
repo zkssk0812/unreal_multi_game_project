@@ -38,6 +38,7 @@ enum class EntityKind : uint8_t
 	StickyTrap,			// 끈끈이 함정. owner = 설치자
 	Mine,				// typeId = WeaponId(BlastMine/ShockMine)
 	Smoke,				// 연막
+	Door,				// 방 사이 문 (2026-11-24). typeId = 문 번호(맵 doors 위치), Opened 비트 = 열림
 };
 
 enum class ActionType : uint8_t
@@ -89,7 +90,7 @@ constexpr uint32_t RailgunLock      = 1u << 12;	// 레일건 충전·발사 중 
 constexpr uint32_t Jetpack          = 1u << 13;	// 제트팩 비행 중
 constexpr uint32_t Repairing        = 1u << 14;	// 경비원 자가 수리
 constexpr uint32_t LeftGame         = 1u << 15;	// 접속 끊김
-constexpr uint32_t Opened           = 1u << 16;	// 금고: 열림
+constexpr uint32_t Opened           = 1u << 16;	// 금고·문: 열림
 constexpr uint32_t Warning          = 1u << 17;	// 반납 지점: 곧 사라짐 (빨간색)
 constexpr uint32_t Armed            = 1u << 18;	// 지뢰: 작동 중
 constexpr uint32_t Triggered        = 1u << 19;	// 지뢰: 감지됨 (0.5초 경고)

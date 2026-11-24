@@ -83,6 +83,9 @@ void GameWorld::Setup(const MapData& map, const std::vector<ThiefSlot>& thieves,
 		}
 	}
 
+	// 3-2) 방 사이 문: 모두 닫힌 채로 (클라 2026-11-24)
+	PlaceDoors();
+
 	// 4) 금고 1개 (O-01), 상자 (A-02), 필드 아이템 (I-14)
 	PlaceSafe(startRooms);		// 의적이 시작하는 방에는 두지 않는다 (시작하자마자 열리지 않게)
 	for (size_t i = 0; i < GameData::BoxCount; ++i)
@@ -386,7 +389,8 @@ std::optional<RejectReason> GameWorld::BeginInteract(Entity& thief, uint16_t tar
 		return RejectReason::InvalidState;
 	const bool known = target->kind == EntityKind::Safe || target->kind == EntityKind::Box ||
 		target->kind == EntityKind::ReturnPoint || target->kind == EntityKind::Valuable ||
-		target->kind == EntityKind::WeaponPickup || target->kind == EntityKind::ConsumablePickup;
+		target->kind == EntityKind::WeaponPickup || target->kind == EntityKind::ConsumablePickup ||
+		target->kind == EntityKind::Door;
 	if (!known)
 		return RejectReason::InvalidState;		// 필드 아이템은 닿아야만 (IN-04)
 	if (!InRange(thief, *target))
@@ -401,6 +405,14 @@ std::optional<RejectReason> GameWorld::BeginInteract(Entity& thief, uint16_t tar
 		const auto reject = PickUpItem(thief, *target);
 		if (!reject && (thief.state & StateBit::Cloaked) != 0)
 			EndCloak(thief);					// 상호작용하면 은신이 풀림 (Q-30)
+		return reject;
+	}
+
+	case EntityKind::Door:
+	{
+		const auto reject = ToggleDoor(*target);	// 즉시 열기·닫기 (SC_INTERACT 없이 Opened 비트로)
+		if (!reject && (thief.state & StateBit::Cloaked) != 0)
+			EndCloak(thief);
 		return reject;
 	}
 

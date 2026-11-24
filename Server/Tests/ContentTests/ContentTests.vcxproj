@@ -78,6 +78,7 @@
     <ClCompile Include="MapDataTests.cpp" />
     <ClCompile Include="GameWorldTests.cpp" />
     <ClCompile Include="GamePlayTests.cpp" />
+    <ClCompile Include="DoorTests.cpp" />
     <ClCompile Include="GuardAITests.cpp" />
     <ClCompile Include="GuardBenchTests.cpp" />
     <ClCompile Include="CombatTests.cpp" />

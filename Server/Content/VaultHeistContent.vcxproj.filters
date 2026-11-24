@@ -97,6 +97,9 @@
     <ClCompile Include="Game\WorldCombat.cpp">
       <Filter>Game</Filter>
     </ClCompile>
+    <ClCompile Include="Game\WorldDoors.cpp">
+      <Filter>Game</Filter>
+    </ClCompile>
     <ClCompile Include="Game\WorldExplosives.cpp">
       <Filter>Game</Filter>
     </ClCompile>

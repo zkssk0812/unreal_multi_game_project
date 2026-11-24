@@ -142,7 +142,25 @@ void Parse(const Json& d, MapData& m)
 
 	const Json& colliders = d.at("colliders");
 	for (const Json& c : colliders.at("static"))
+	{
 		m.colliders.push_back(ReadCollider(c, false));
+		// 안쪽 문 위 벽 = 열고 닫는 문 자리 (바깥 문 2곳은 closed_exterior_door로 이미 막혀 있음)
+		if (c.value("kind", std::string()) == "above_door" && c.value("type", std::string()) != "exterior" &&
+			m.colliders.back().shape == MapCollider::Shape::Box)
+		{
+			const MapCollider& lintel = m.colliders.back();
+			MapDoor door;
+			door.panel = lintel;
+			door.panel.zMin = 0.0f;
+			door.panel.zMax = lintel.zMin;
+			door.panel.blocksMovement = false;		// 이동은 클라가 막는다 (서버는 이동을 검증하지 않음)
+			door.panel.blocksSight = true;
+			door.panel.dynamic = true;
+			door.center = { (lintel.xmin + lintel.xmax) * 0.5f, (lintel.ymin + lintel.ymax) * 0.5f, 0.0f };
+			door.yaw = (lintel.xmax - lintel.xmin) < (lintel.ymax - lintel.ymin) ? 0.0f : 90.0f;
+			m.doors.push_back(door);
+		}
+	}
 	if (colliders.contains("dynamic"))
 		for (const Json& c : colliders.at("dynamic"))
 			m.colliders.push_back(ReadCollider(c, true));

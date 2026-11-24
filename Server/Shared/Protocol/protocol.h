@@ -124,6 +124,7 @@ enum class EntityKind : uint8_t {
 	StickyTrap,			// owner = 설치한 플레이어, timer_ms = 남은 시간
 	Mine,				// type_id = WeaponId(BlastMine/ShockMine)
 	Smoke,				// timer_ms = 남은 시간
+	Door,				// 방 사이 문: type_id = 문 번호, pos = 문 가운데, yaw = 지나가는 방향(0 = ±X, 90 = ±Y), ES_OPENED = 열림
 };
 
 enum class ActionType : uint8_t {
@@ -175,7 +176,7 @@ enum EntityStateBit : uint32_t {
 	ES_JETPACK           = 1u << 13,	// 제트팩 3초
 	ES_REPAIRING         = 1u << 14,	// 경비원 자가 수리
 	ES_LEFT_GAME         = 1u << 15,	// 접속 끊김
-	ES_OPENED            = 1u << 16,	// 금고: 열림
+	ES_OPENED            = 1u << 16,	// 금고·문: 열림
 	ES_WARNING           = 1u << 17,	// 반납 지점: 곧 사라짐 (빨간색)
 	ES_ARMED             = 1u << 18,	// 지뢰: 작동 중
 	ES_TRIGGERED         = 1u << 19,	// 지뢰: 감지됨 (0.5초 경고)

@@ -59,6 +59,8 @@ constexpr int32_t VestShield = 20;					// [명세 K-01]
 // ── 상호작용 (§13) ──
 constexpr float PickupRangeCm = 300.0f;				// [명세 IN-03] 아이템 3m
 constexpr float WorkRangeCm = 130.0f;				// [명세 Q-33] 금고·상자 1m + 여유 30cm
+constexpr float DoorRangeCm = 150.0f;				// 문: 가운데에서 150cm 안에서 F로 열고 닫기 (클라 2026-11-24)
+constexpr float GuardDoorLookAheadCm = 100.0f;		// 경비원은 가는 길 1m 앞의 닫힌 문을 열고 지나감 (열린 채로 둠)
 constexpr float ReturnPointRangeCm = 100.0f;		// 반납 지점 구획 중심에서 (지금 규칙 유지)
 constexpr float FieldItemTouchCm = 60.0f;			// 필드 아이템: 닿았다고 보는 거리 (히트 박스 40 + 20)
 constexpr uint32_t SafeOpenMs = 10000;				// [명세 O-02] 10초 × 작업 속도, 진행도 유지

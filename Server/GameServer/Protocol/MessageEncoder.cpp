@@ -58,6 +58,7 @@ VH_SAME_ENUM(Content::EntityKind, EntityKind, Box);
 VH_SAME_ENUM(Content::EntityKind, EntityKind, StickyTrap);
 VH_SAME_ENUM(Content::EntityKind, EntityKind, Mine);
 VH_SAME_ENUM(Content::EntityKind, EntityKind, Smoke);
+VH_SAME_ENUM(Content::EntityKind, EntityKind, Door);
 
 VH_SAME_ENUM(Content::ActionType, ActionType, None);
 VH_SAME_ENUM(Content::ActionType, ActionType, AttackStart);

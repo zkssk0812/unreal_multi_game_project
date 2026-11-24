@@ -276,6 +276,15 @@ private:
 	uint32_t ReturnPointLeftMs(const Entity& point) const;
 	bool CanAct(const Entity& thief) const;
 
+	// ── 문 (WorldDoors.cpp, 클라 2026-11-24) ──
+	void PlaceDoors();
+	std::optional<RejectReason> ToggleDoor(Entity& door);		// F: 즉시 열기·닫기. 문간에 누가 있으면 닫지 않음
+	void SetDoorOpen(Entity& door, bool open);
+	bool DoorOccupied(size_t index) const;
+	bool ClosedDoorBlocks(const Vec3& from, const Vec3& to) const;	// 닫힌 문이 선분을 가리나
+	void OpenDoorsOnWay(const Vec3& from, const Vec3& to);			// 경비원: 가는 길의 닫힌 문을 연다
+	bool SeesThrough(const Vec3& from, const Vec3& to, uint32_t* tests = nullptr) const;	// 벽·닫힌 문 모두 없나
+
 	// ── 전투 (WorldCombat.cpp) ──
 	struct HitResult { Entity* target = nullptr; float distance = 0.0f; };
 	bool IsTargetable(const Entity& e, const Entity* shooter, bool guardShot) const;
@@ -382,6 +391,8 @@ private:
 	struct BoxRespawn { Vec3 pos; uint32_t atMs = 0; };
 	std::vector<BoxRespawn> _boxRespawns;
 	uint32_t _nextFieldItemMs = 0;
+	std::vector<uint8_t> _doorOpen;		// 맵 doors마다 열림(1)·닫힘(0). 시야 검사가 엔티티를 찾지 않고 바로 본다
+	std::vector<uint16_t> _doorIds;		// 맵 doors마다 Door 엔티티 id
 	std::vector<Vec3> _itemCells;		// 상자·필드 아이템을 놓을 수 있는 칸 (방 안, 걸을 수 있고 닿는 칸)
 };
 
