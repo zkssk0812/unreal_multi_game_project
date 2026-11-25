@@ -26,6 +26,7 @@
 #include "HAL/IConsoleManager.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Misc/Paths.h"
+#include "Algo/BinarySearch.h"
 #include "TimerManager.h"
 #include "UnrealClient.h"
 
@@ -119,10 +120,60 @@ namespace
 		TEXT("개발용: vh.DoorPeekInfo — 열린 문 너머 엿보기(문마다 너머 구역·각도·광선 길이)를 로그에 쓴다."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
-			if (const UVHCeilingSubsystem* Ceiling = World ? World->GetSubsystem<UVHCeilingSubsystem>() : nullptr)
+			if (UVHCeilingSubsystem* Ceiling = World ? World->GetSubsystem<UVHCeilingSubsystem>() : nullptr)
 			{
 				UE_LOG(LogMCPTest, Log, TEXT("[Peek] %s"), *Ceiling->DescribePeek());
+				if (Args.Num() > 0 && Args[0].Equals(TEXT("reset"), ESearchCase::IgnoreCase))
+				{
+					Ceiling->ResetPeekStats();
+				}
 			}
+		}));
+
+	// vh.AimSweep 시작각 끝각 초 [반복] : 조준 방향을 시작각 → 끝각으로 초 동안 고르게 돌린다(마우스를 돌린 것처럼, 끝나면 그 방향에 고정).
+	// 문 너머 시야가 바라보는 방향에 따라 부드럽게 바뀌는지 연속 프레임 시험용. vh.Aim off 로 풀기
+	FAutoConsoleCommandWithWorldAndArgs GVHAimSweepCommand(TEXT("vh.AimSweep"),
+		TEXT("개발용: vh.AimSweep 시작각 끝각 초 [왕복 횟수] — 조준 방향을 고르게 돌린다(0 = 화면 위, 90 = 오른쪽). vh.Aim off 로 풀기."),
+		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
+		{
+			const APlayerController* PC = World ? World->GetFirstPlayerController() : nullptr;
+			APawn* Pawn = PC ? PC->GetPawn() : nullptr;
+			UVHAimComponent* Aim = Pawn ? Pawn->FindComponentByClass<UVHAimComponent>() : nullptr;
+			if (!Aim || Args.Num() < 3)
+			{
+				return;
+			}
+			const float A0 = FCString::Atof(*Args[0]), A1 = FCString::Atof(*Args[1]);
+			const float Dur = FMath::Max(0.05f, FCString::Atof(*Args[2]));
+			const int32 Legs = Args.Num() > 3 ? FMath::Clamp(FCString::Atoi(*Args[3]), 1, 200) : 1;
+			const double Start = World->GetTimeSeconds();
+			TWeakObjectPtr<UVHAimComponent> WeakAim(Aim);
+			TSharedRef<FTimerHandle> Handle = MakeShared<FTimerHandle>();
+			UE_LOG(LogMCPTest, Log, TEXT("[Peek] 조준 돌리기 %.0f° → %.0f° (%.2f초 × %d)"), A0, A1, Dur, Legs);
+			World->GetTimerManager().SetTimer(*Handle, FTimerDelegate::CreateLambda([WeakAim, A0, A1, Dur, Legs, Start, Handle]()
+			{
+				UVHAimComponent* A = WeakAim.Get();
+				UWorld* W = A ? A->GetWorld() : nullptr;
+				if (!W)
+				{
+					return;
+				}
+				const float T = static_cast<float>(W->GetTimeSeconds() - Start) / Dur;
+				const int32 Leg = FMath::Min(FMath::FloorToInt(T), Legs - 1);
+				float F = FMath::Clamp(T - Leg, 0.f, 1.f);
+				if (Leg % 2 == 1)
+				{
+					F = 1.f - F;
+				}
+				A->SetTurnLocked(false);
+				A->SnapLookYaw(FMath::Lerp(A0, A1, F));
+				A->SetTurnLocked(true);
+				if (T >= Legs)
+				{
+					W->GetTimerManager().ClearTimer(*Handle);
+					UE_LOG(LogMCPTest, Log, TEXT("[Peek] 조준 돌리기 끝 (%.0f°)"), Legs % 2 == 1 ? A1 : A0);
+				}
+			}), 0.001f, true);
 		}));
 
 	// vh.CeilingInfo : 지금 상태 (내 구역·숨긴 물체 수)
@@ -1192,40 +1243,216 @@ int32 UVHCeilingSubsystem::ZoneIdAtMap(const FVector2D& P) const
 	return ZoneMapIds[Y * ZoneMapSize.X + X];
 }
 
+void UVHCeilingSubsystem::RefreshPassMap()
+{
+	// 광선이 지나갈 수 있는 칸 지도 = 넓은 구역 지도(R) + 문 자리 덮어쓰기.
+	//  - 문 자리(벽 두께 × 문 폭 + 옆 20cm): 닫힌 문·잠긴 문 = 0(벽). 넓은 구역이 문가에서 벽 속까지 들어가 있어도 막는다.
+	//  - 열린 문틈(지금 문짝이 비켜난 만큼, 벽 면 바깥 15cm 까지) = PassDoor(255): 이 칸을 거쳐야 다른 구역으로 넘어갈 수 있다.
+	if (PassMap.Num() != ZoneMapIds.Num())
+	{
+		PassMap = ZoneMapIds;
+	}
+	const double Cell = 1.0 / ZoneMapParam.Z;
+	for (const TWeakObjectPtr<AVHDoor>& Weak : DoorList)
+	{
+		const AVHDoor* D = Weak.Get();
+		if (!D)
+		{
+			continue;
+		}
+		FTransform T = D->GetActorTransform();
+		T.SetScale3D(FVector::OneVector);
+		const float HalfT = D->WallThickness * 0.5f;
+		const float ExX = HalfT + 15.f;
+		const float ExY = D->Width * 0.5f + 20.f;
+		float Y0 = 0.f, Y1 = 0.f;
+		const bool bOpen = D->GetAperture(Y0, Y1);
+		// 문 자리 상자의 월드 경계 → 칸 범위
+		FBox2D B(ForceInit);
+		for (const FVector2D& Corner : { FVector2D(-ExX, -ExY), FVector2D(ExX, -ExY), FVector2D(-ExX, ExY), FVector2D(ExX, ExY) })
+		{
+			const FVector P = T.TransformPosition(FVector(Corner.X, Corner.Y, 0.f));
+			B += FVector2D(P.X, P.Y);
+		}
+		const int32 X0 = FMath::Max(0, FMath::FloorToInt((B.Min.X - ZoneMapParam.X) * ZoneMapParam.Z));
+		const int32 X1 = FMath::Min(ZoneMapSize.X - 1, FMath::FloorToInt((B.Max.X - ZoneMapParam.X) * ZoneMapParam.Z));
+		const int32 Yc0 = FMath::Max(0, FMath::FloorToInt((B.Min.Y - ZoneMapParam.Y) * ZoneMapParam.Z));
+		const int32 Yc1 = FMath::Min(ZoneMapSize.Y - 1, FMath::FloorToInt((B.Max.Y - ZoneMapParam.Y) * ZoneMapParam.Z));
+		for (int32 Y = Yc0; Y <= Yc1; ++Y)
+		{
+			for (int32 X = X0; X <= X1; ++X)
+			{
+				const FVector Wc(ZoneMapParam.X + (X + 0.5) * Cell, ZoneMapParam.Y + (Y + 0.5) * Cell, T.GetLocation().Z);
+				const FVector L = T.InverseTransformPosition(Wc);
+				if (FMath::Abs(L.X) > ExX || FMath::Abs(L.Y) > ExY)
+				{
+					continue;
+				}
+				const int32 Idx = Y * ZoneMapSize.X + X;
+				uint8 V = FMath::Abs(L.X) <= HalfT ? 0 : ZoneMapIds[Idx];
+				if (bOpen && L.Y >= Y0 && L.Y <= Y1 && FMath::Abs(L.Y) <= D->Width * 0.5f)
+				{
+					V = PassDoor;
+				}
+				PassMap[Idx] = V;
+			}
+		}
+	}
+}
+
+UVHCeilingSubsystem::FPeekRay UVHCeilingSubsystem::CastPeekRay(const FPeekWedge& W, float A, const FVector2D& Viewer, int32 CurMap, TBitArray<>& OutZones) const
+{
+	FPeekRay R;
+	R.Angle = A;
+	auto ToWorld = [&W](const FVector2D& Lp)
+	{
+		const FVector P = W.DoorT.TransformPosition(FVector(Lp.X, Lp.Y, 0.f));
+		return FVector2D(P.X, P.Y);
+	};
+	const FVector2D Dir(W.Fwd * FMath::Cos(A), FMath::Sin(A));
+	const float CosA = FMath::Max(0.05f, FMath::Cos(A));
+	const float TNear = W.Fn / CosA;
+	const float TFar = W.Ff / CosA;
+	const FVector2D StartW = ToWorld(W.Eye + Dir * TFar);
+	const FVector DirW3 = W.DoorT.TransformVectorNoScale(FVector(Dir.X, Dir.Y, 0.f));
+	const FVector2D DW = FVector2D(DirW3.X, DirW3.Y).GetSafeNormal();
+	R.Start = StartW;
+	R.End = StartW;
+	R.Dist = TFar;
+
+	// 1) 내 쪽 가림: 실제 내 위치 → 가까운 벽 면까지가 내 구역 안이어야 한다 (복도 모퉁이 너머 문은 안 보임)
+	{
+		const FVector2D NearW = ToWorld(W.Eye + Dir * TNear);
+		const float Total = FVector2D::Distance(Viewer, NearW);
+		const FVector2D DV = Total > 1.f ? (NearW - Viewer) / Total : FVector2D::ZeroVector;
+		const float Step = FMath::Max(2.f, static_cast<float>(1.0 / ZoneMapParam.Z));
+		for (float S = 50.f; S < Total - 70.f; S += Step)
+		{
+			if (ZoneIdAtMap(Viewer + DV * S) != CurMap)
+			{
+				return R;
+			}
+		}
+	}
+
+	// 2) 문 너머: 먼 벽 면부터 칸 하나하나를 정확히 따라간다(격자 DDA — 얇은 벽 모서리 사이로 새지 않음).
+	//    벽(0)·닫힌 문(0)에서 멈춘다. 열린 문틈(PassDoor)은 지나가서 그 너머 구역까지 이어진다 — 거리 제한 없음 [2026-11-25].
+	//    다른 구역끼리 문틈 없이 바로 맞닿는 곳(넓은 구역이 벽 속에서 만나는 곳)도 벽으로 친다.
+	const double Inv = ZoneMapParam.Z;
+	const double Gx = (StartW.X - ZoneMapParam.X) * Inv, Gy = (StartW.Y - ZoneMapParam.Y) * Inv;
+	int32 Ix = FMath::FloorToInt(Gx), Iy = FMath::FloorToInt(Gy);
+	const int32 StepX = DW.X > 0.0 ? 1 : -1, StepY = DW.Y > 0.0 ? 1 : -1;
+	const double Big = 1e30;
+	const double DeltaX = FMath::Abs(DW.X) > 1e-9 ? 1.0 / FMath::Abs(DW.X) : Big;
+	const double DeltaY = FMath::Abs(DW.Y) > 1e-9 ? 1.0 / FMath::Abs(DW.Y) : Big;
+	double TMaxX = FMath::Abs(DW.X) > 1e-9 ? ((StepX > 0 ? (Ix + 1) - Gx : Gx - Ix) * DeltaX) : Big;
+	double TMaxY = FMath::Abs(DW.Y) > 1e-9 ? ((StepY > 0 ? (Iy + 1) - Gy : Gy - Iy) * DeltaY) : Big;
+	double TCell = 0.0;		// 지금 칸에 들어온 거리 (칸 단위)
+	double Reach = 0.0;		// 마지막으로 지나갈 수 있었던 칸을 나온 거리 (칸 단위)
+	const double SkipCells = 40.0 * Inv;	// 먼 벽 면 근처 처음 40cm 의 벽 칸(반올림 틈)은 건너뛴다
+	uint8 Prev = PassDoor;
+	bool bEntered = false;
+	const int32 MaxCells = (ZoneMapSize.X + ZoneMapSize.Y) * 2;
+	for (int32 Guard = 0; Guard < MaxCells; ++Guard)
+	{
+		if (Ix < 0 || Iy < 0 || Ix >= ZoneMapSize.X || Iy >= ZoneMapSize.Y)
+		{
+			break;
+		}
+		const uint8 V = PassMap[Iy * ZoneMapSize.X + Ix];
+		const double TExit = FMath::Min(TMaxX, TMaxY);
+		if (V == 0)
+		{
+			if (bEntered || TCell > SkipCells)
+			{
+				break;
+			}
+		}
+		else
+		{
+			if (V != PassDoor)
+			{
+				if (Prev != PassDoor && V != Prev)
+				{
+					break;	// 다른 구역과 문틈 없이 맞닿음 = 벽
+				}
+				if (OutZones.IsValidIndex(V - 1))
+				{
+					OutZones[V - 1] = true;
+				}
+			}
+			Prev = V;
+			bEntered = true;
+			Reach = TExit;
+		}
+		// 다음 칸
+		TCell = TExit;
+		if (TMaxX < TMaxY)
+		{
+			TMaxX += DeltaX;
+			Ix += StepX;
+		}
+		else
+		{
+			TMaxY += DeltaY;
+			Iy += StepY;
+		}
+	}
+	const float Len = static_cast<float>(Reach / Inv);
+	R.End = StartW + DW * Len;
+	R.Dist = TFar + Len;
+	R.Cells = static_cast<int32>(TCell);
+	return R;
+}
+
 void UVHCeilingSubsystem::UpdatePeek()
 {
 	const UVHGameplayConfig& C = UVHSettings::Get().GetGameplayConfig();
 	const bool bOn = IsEnabled() && C.bDoorPeek && CVarVHDoorPeek.GetValueOnGameThread() != 0 && Zones.IsValidIndex(Current) && ZoneMapSize.X > 0 && PeekTarget;
 	const FVector V3 = GetViewerLocation();
 	const FVector2D V(V3.X, V3.Y);
-	const bool bFacing = C.DoorPeekMode == EVHDoorPeekMode::ApertureAndFacing;
-	float AimYaw = 0.f;
+	const bool bFacing = C.DoorPeekMode == EVHDoorPeekMode::ApertureAndFacing && C.DoorPeekFovDegrees < 359.f;
+
+	// 바라보는 방향 = 내 캐릭터 → 마우스(조준점). 짧게 부드럽게 따라가서(DoorPeekFacingSmoothSeconds) 마우스가 캐릭터 가까이서 튀어도 깜빡이지 않게
 	if (bFacing)
 	{
 		const APlayerController* PC = GetWorld()->GetFirstPlayerController();
 		const APawn* Pawn = PC ? PC->GetPawn() : nullptr;
 		const UVHAimComponent* Aim = Pawn ? Pawn->FindComponentByClass<UVHAimComponent>() : nullptr;
-		AimYaw = Aim ? Aim->GetAimYaw() : (Pawn ? Pawn->GetActorRotation().Yaw : 0.f);
+		const float Target = Aim ? Aim->GetAimYaw() : (Pawn ? Pawn->GetActorRotation().Yaw : 0.f);
+		const float Dt = GetWorld()->GetDeltaSeconds();
+		if (!bAimSmoothInit || C.DoorPeekFacingSmoothSeconds <= 0.f)
+		{
+			SmoothAimYaw = Target;
+			bAimSmoothInit = true;
+		}
+		else
+		{
+			const float K = 1.f - FMath::Exp(-Dt / C.DoorPeekFacingSmoothSeconds);
+			SmoothAimYaw = FRotator::NormalizeAxis(SmoothAimYaw + FRotator::NormalizeAxis(Target - SmoothAimYaw) * K);
+			if (FMath::Abs(FRotator::NormalizeAxis(Target - SmoothAimYaw)) < 0.05f)
+			{
+				SmoothAimYaw = Target;
+			}
+		}
 	}
 
-	// 1) 입력이 그대로면(내 위치 2cm·내 구역 문들의 문틈·설정) 다시 계산하지 않는다
+	// 1) 입력이 그대로면(내 위치 2cm·바라보는 방향 0.2°·모든 문의 문틈·설정) 다시 계산하지 않는다
 	uint32 InSig = GetTypeHash(bOn ? Current : -1);
 	if (bOn)
 	{
 		InSig = HashCombine(InSig, GetTypeHash(FMath::RoundToInt(V.X * 0.5f)));
 		InSig = HashCombine(InSig, GetTypeHash(FMath::RoundToInt(V.Y * 0.5f)));
-		InSig = HashCombine(InSig, GetTypeHash(bFacing ? FMath::RoundToInt(AimYaw) : 9999));
-		InSig = HashCombine(InSig, GetTypeHash(C.DoorPeekRays));
-		const FName CurId = Zones[Current].Id;
+		InSig = HashCombine(InSig, GetTypeHash(bFacing ? FMath::RoundToInt(SmoothAimYaw * 5.f) : 99999));
+		InSig = HashCombine(InSig, GetTypeHash(FMath::RoundToInt(C.DoorPeekFovDegrees * 10.f) + C.DoorPeekMaxRays * 7 + C.DoorPeekRefineDepth * 131
+			+ FMath::RoundToInt(C.DoorPeekRayStepDegrees * 100.f) * 17 + FMath::RoundToInt(C.DoorPeekRefineGap)));
+		// 열린 문을 지나 너머 구역까지 이어지므로 모든 문의 문틈이 입력이다
 		for (const TWeakObjectPtr<AVHDoor>& Weak : DoorList)
 		{
 			const AVHDoor* D = Weak.Get();
-			if (D && (D->ZoneA == CurId || D->ZoneB == CurId))
-			{
-				float Y0 = 0.f, Y1 = 0.f;
-				const bool bAp = D->GetAperture(Y0, Y1);
-				InSig = HashCombine(InSig, GetTypeHash(bAp ? FMath::RoundToInt(Y0) * 1000 + FMath::RoundToInt(Y1) : -77777));
-			}
+			float Y0 = 0.f, Y1 = 0.f;
+			const bool bAp = D && D->GetAperture(Y0, Y1);
+			InSig = HashCombine(InSig, GetTypeHash(bAp ? FMath::RoundToInt(Y0) * 1000 + FMath::RoundToInt(Y1) : -77777));
 		}
 	}
 	if (InSig == PeekSignature)
@@ -1233,21 +1460,24 @@ void UVHCeilingSubsystem::UpdatePeek()
 		return;
 	}
 	PeekSignature = InSig;
+	const double T0 = FPlatformTime::Seconds();
 
-	// 2) 문마다 부채꼴: 문 로컬 좌표(x = 벽을 뚫는 방향, y = 문 폭 방향)에서 문틈 양 끝을 지나는 각도 범위를 구하고,
-	//    그 사이 광선을 쏴 문 너머 구역 안에서만 늘린다 (그 구역을 벗어나는 곳 = 벽에서 멈춤)
+	// 2) 내 구역의 열린 문마다 부채꼴: 문 로컬 좌표(x = 벽을 뚫는 방향, y = 문 폭 방향)에서 문틈 양 끝을 지나는 각도 범위
+	//    ∩ 바라보는 방향 시야각. 그 사이 광선을 쏴 벽·닫힌 문에 막힐 때까지 늘린다(열린 문은 지나감).
 	for (FZone& Z : Zones)
 	{
 		Z.bPeek = false;
 	}
 	Wedges.Reset();
+	LastPeekRays = 0;
+	LastPeekCells = 0;
 	if (bOn)
 	{
+		RefreshPassMap();
 		const FName CurId = Zones[Current].Id;
 		const int32 CurMap = Current + 1;
-		const float Step = FMath::Max(2.f, 1.f / static_cast<float>(ZoneMapParam.Z));	// 구역 지도 한 칸
-		const int32 N = FMath::Clamp(C.DoorPeekRays, 4, 256);
-		const float HalfFacing = FMath::DegreesToRadians(C.DoorPeekFacingHalfAngle);
+		const float HalfFov = FMath::DegreesToRadians(C.DoorPeekFovDegrees * 0.5f);
+		TBitArray<> Touched(false, Zones.Num());
 		for (const TWeakObjectPtr<AVHDoor>& Weak : DoorList)
 		{
 			AVHDoor* D = Weak.Get();
@@ -1280,85 +1510,93 @@ void UVHCeilingSubsystem::UpdatePeek()
 			W.Eye = E;
 			const float NearX = Mine * HalfT;
 			W.FarX = -Mine * HalfT;
-			const float Fn = (NearX - E.X) * W.Fwd;	// 눈 → 가까운 벽 면 (앞쪽 거리, > 0)
-			const float Ff = (W.FarX - E.X) * W.Fwd;	// 눈 → 먼 벽 면
+			W.Fn = (NearX - E.X) * W.Fwd;	// 눈 → 가까운 벽 면 (앞쪽 거리, > 0)
+			W.Ff = (W.FarX - E.X) * W.Fwd;	// 눈 → 먼 벽 면
 			// 두 벽 면 모두에서 문틈 안을 지나는 옆 기울기 범위 (벽이 두꺼우면 비스듬할수록 좁아진다)
-			const float KMin = FMath::Max((Y0 - E.Y) / Fn, (Y0 - E.Y) / Ff);
-			const float KMax = FMath::Min((Y1 - E.Y) / Fn, (Y1 - E.Y) / Ff);
+			const float KMin = FMath::Max((Y0 - E.Y) / W.Fn, (Y0 - E.Y) / W.Ff);
+			const float KMax = FMath::Min((Y1 - E.Y) / W.Fn, (Y1 - E.Y) / W.Ff);
 			float A0 = FMath::Atan(KMin), A1 = FMath::Atan(KMax);
+			W.ApA0 = A0;
+			W.ApA1 = A1;
 			if (bFacing)
 			{
-				// 설정: 문틈 ∩ 바라보는 방향 부채꼴
-				const FVector AimL = W.DoorT.InverseTransformVectorNoScale(FRotator(0.f, AimYaw, 0.f).Vector());
+				// 문틈 ∩ 바라보는 방향 시야각 (조준 방향 ± 반각). 각도는 문 앞쪽 기준이라 ±2π 로 옮긴 것 중 가장 많이 겹치는 쪽
+				const FVector AimL = W.DoorT.InverseTransformVectorNoScale(FRotator(0.f, SmoothAimYaw, 0.f).Vector());
 				const float AimA = FMath::Atan2(AimL.Y, AimL.X * W.Fwd);
-				A0 = FMath::Max(A0, AimA - HalfFacing);
-				A1 = FMath::Min(A1, AimA + HalfFacing);
+				float BestLo = 0.f, BestHi = -1.f;
+				for (const float Shift : { -2.f * PI, 0.f, 2.f * PI })
+				{
+					const float Lo = FMath::Max(A0, AimA + Shift - HalfFov);
+					const float Hi = FMath::Min(A1, AimA + Shift + HalfFov);
+					if (Hi - Lo > BestHi - BestLo)
+					{
+						BestLo = Lo;
+						BestHi = Hi;
+					}
+				}
+				A0 = BestLo;
+				A1 = BestHi;
 			}
 			if (A1 - A0 < 0.002f)
 			{
 				continue;
 			}
-			auto ToWorld = [&W](const FVector2D& Lp)
-			{
-				const FVector P = W.DoorT.TransformPosition(FVector(Lp.X, Lp.Y, 0.f));
-				return FVector2D(P.X, P.Y);
-			};
-			bool bAny = false;
+			// 기본 광선: DoorPeekRayStepDegrees 간격 (최소 8개, 최대 DoorPeekMaxRays)
+			const int32 N = FMath::Clamp(FMath::CeilToInt(FMath::RadiansToDegrees(A1 - A0) / FMath::Max(0.1f, C.DoorPeekRayStepDegrees)) + 1, 8, FMath::Max(8, C.DoorPeekMaxRays));
+			TArray<FPeekRay> Rays;
+			Rays.Reserve(N * 2);
 			for (int32 i = 0; i < N; ++i)
 			{
-				const float A = FMath::Lerp(A0, A1, static_cast<float>(i) / static_cast<float>(N - 1));
-				const FVector2D Dir(W.Fwd * FMath::Cos(A), FMath::Sin(A));
-				const float TNear = Fn / FMath::Cos(A);
-				const float TFar = Ff / FMath::Cos(A);
-				const FVector2D StartW = ToWorld(E + Dir * TFar);
-				const FVector DirW3 = W.DoorT.TransformVectorNoScale(FVector(Dir.X, Dir.Y, 0.f));
-				const FVector2D DW(DirW3.X, DirW3.Y);
-				// 내 쪽 가림: 실제 내 위치 → 가까운 벽 면까지가 내 구역 안이어야 한다 (복도 모퉁이 너머 문은 안 보임)
-				bool bBlocked = false;
-				{
-					const FVector2D NearW = ToWorld(E + Dir * TNear);
-					const float Total = FVector2D::Distance(V, NearW);
-					const FVector2D DV = Total > 1.f ? (NearW - V) / Total : FVector2D::ZeroVector;
-					for (float S = 50.f; S < Total - 70.f; S += Step)
-					{
-						if (ZoneIdAtMap(V + DV * S) != CurMap)
-						{
-							bBlocked = true;
-							break;
-						}
-					}
-				}
-				// 문 너머: 먼 벽 면에서 시작해 너머 구역 안에서만 늘린다 (처음 60cm 는 벽 틈이라 건너뜀)
-				float Len = 0.f;
-				if (!bBlocked)
-				{
-					bool bFound = false;
-					for (float S = 0.f; S <= C.DoorPeekMaxDistance; S += Step)
-					{
-						if (ZoneIdAtMap(StartW + DW * S) == Other + 1)
-						{
-							bFound = true;
-							Len = S + Step * 0.5f;
-						}
-						else if (bFound || S > 60.f)
-						{
-							break;
-						}
-					}
-				}
-				W.Angles.Add(A);
-				W.EndDist.Add(TFar + Len);
-				W.Starts.Add(StartW);
-				W.Ends.Add(StartW + DW * Len);
-				bAny |= Len > 0.f;
+				Rays.Add(CastPeekRay(W, FMath::Lerp(A0, A1, static_cast<float>(i) / static_cast<float>(N - 1)), V, CurMap, Touched));
 			}
+			// 가장자리 보정: 이웃 광선 길이가 RefineGap 넘게 다르면 사이에 광선을 더 쏜다 (단계마다 반, 최대 RefineDepth 단계)
+			const int32 Budget = FMath::Max(8, C.DoorPeekMaxRays) * 4;
+			for (int32 Depth = 0; Depth < C.DoorPeekRefineDepth && Rays.Num() < Budget; ++Depth)
+			{
+				TArray<FPeekRay> Next;
+				Next.Reserve(Rays.Num() * 2);
+				bool bAdded = false;
+				for (int32 i = 0; i < Rays.Num(); ++i)
+				{
+					Next.Add(Rays[i]);
+					if (i + 1 < Rays.Num() && Rays.Num() + (Next.Num() - i - 1) < Budget
+						&& FMath::Abs(Rays[i].Dist - Rays[i + 1].Dist) > C.DoorPeekRefineGap && (Rays[i + 1].Angle - Rays[i].Angle) > 0.0005f)
+					{
+						Next.Add(CastPeekRay(W, (Rays[i].Angle + Rays[i + 1].Angle) * 0.5f, V, CurMap, Touched));
+						bAdded = true;
+					}
+				}
+				Rays = MoveTemp(Next);
+				if (!bAdded)
+				{
+					break;
+				}
+			}
+			bool bAny = false;
+			for (const FPeekRay& R : Rays)
+			{
+				W.Angles.Add(R.Angle);
+				W.EndDist.Add(R.Dist);
+				W.Starts.Add(R.Start);
+				W.Ends.Add(R.End);
+				bAny |= R.Dist > W.Ff / FMath::Max(0.05f, FMath::Cos(R.Angle)) + 1.f;
+				LastPeekCells += R.Cells;
+			}
+			LastPeekRays += Rays.Num();
 			if (bAny)
 			{
-				Zones[Other].bPeek = true;
 				Wedges.Add(MoveTemp(W));
 			}
 		}
+		for (int32 i = 0; i < Zones.Num(); ++i)
+		{
+			Zones[i].bPeek = i != Current && Touched[i];
+		}
 	}
+	LastPeekMs = static_cast<float>((FPlatformTime::Seconds() - T0) * 1000.0);
+	PeekMsAvg = PeekMsAvg <= 0.f ? LastPeekMs : FMath::Lerp(PeekMsAvg, LastPeekMs, 0.05f);
+	PeekMsMax = FMath::Max(PeekMsMax, LastPeekMs);
+	++PeekUpdates;
 
 	// 3) 마스크 그리기 (부채꼴마다 이웃 광선 둘씩 사각형 = 삼각형 2개)
 	UWorld* World = GetWorld();
@@ -1409,28 +1647,32 @@ void UVHCeilingSubsystem::UpdatePeek()
 
 bool UVHCeilingSubsystem::IsPointPeeked(const FVector2D& P) const
 {
+	// 부채꼴(광선 다발) 안인가: 눈에서 이 점까지의 각도를 찾아 양옆 광선 길이를 이어 본다. 너머 구역 여러 개에 걸쳐도 같은 방법
 	for (const FPeekWedge& W : Wedges)
 	{
 		const int32 N = W.Angles.Num();
-		if (N < 2 || ZoneIdAtMap(P) != W.Zone + 1)
+		if (N < 2)
 		{
 			continue;
 		}
 		const FVector L = W.DoorT.InverseTransformPosition(FVector(P.X, P.Y, W.DoorT.GetLocation().Z));
 		const float F = (L.X - W.Eye.X) * W.Fwd;
-		if (F <= (W.FarX - W.Eye.X) * W.Fwd)
+		if (F <= W.Ff)
 		{
 			continue;	// 문 너머가 아님
 		}
 		const float A = FMath::Atan2(L.Y - W.Eye.Y, F);
-		const float A0 = W.Angles[0], A1 = W.Angles[N - 1];
-		if (A < A0 || A > A1)
+		if (A < W.Angles[0] || A > W.Angles[N - 1])
 		{
 			continue;
 		}
-		const float T = (A - A0) / FMath::Max(1e-5f, A1 - A0) * static_cast<float>(N - 1);
-		const int32 I = FMath::Clamp(FMath::FloorToInt(T), 0, N - 2);
-		const float Reach = FMath::Lerp(W.EndDist[I], W.EndDist[I + 1], T - static_cast<float>(I));
+		// 각도는 오름차순 (가장자리 보정 광선이 사이에 들어가 간격이 고르지 않다) → 이진 탐색
+		const int32 Hi = FMath::Clamp(Algo::UpperBound(W.Angles, A), 1, N - 1);
+		const int32 Lo = Hi - 1;
+		const float T = (A - W.Angles[Lo]) / FMath::Max(1e-6f, W.Angles[Hi] - W.Angles[Lo]);
+		// 양옆 광선 길이가 비슷하면 이어서, 크게 다르면(벽 모서리) 짧은 쪽으로 (보정 광선 덕에 그 사이 각도는 아주 좁다)
+		const float D0 = W.EndDist[Lo], D1 = W.EndDist[Hi];
+		const float Reach = FMath::Abs(D1 - D0) < 60.f ? FMath::Lerp(D0, D1, T) : FMath::Min(D0, D1);
 		if (FVector2D::Distance(FVector2D(L.X, L.Y), W.Eye) <= Reach + 20.f)
 		{
 			return true;
@@ -1449,15 +1691,26 @@ FString UVHCeilingSubsystem::DescribePeek() const
 		int32 Open = 0;
 		for (int32 i = 0; i < W.Starts.Num(); ++i)
 		{
-			const float Len = FVector2D::Distance(W.Starts[i], W.Ends[i]);
-			MaxLen = FMath::Max(MaxLen, Len);
-			Open += Len > 0.f ? 1 : 0;
+			MaxLen = FMath::Max(MaxLen, W.EndDist[i]);
+			Open += FVector2D::Distance(W.Starts[i], W.Ends[i]) > 0.f ? 1 : 0;
 		}
-		Parts.Add(FString::Printf(TEXT("문 %s → %s: 각도 %.0f°~%.0f°(폭 %.0f°), 광선 %d/%d, 최대 %.0fcm"),
+		Parts.Add(FString::Printf(TEXT("문 %s → %s: 문틈 %.0f°~%.0f°, 보이는 각도 %.0f°~%.0f°(폭 %.1f°), 광선 %d/%d, 최대 %.0fcm"),
 			D ? *D->ServerId.ToString() : TEXT("?"), *Zones[W.Zone].Label,
+			FMath::RadiansToDegrees(W.ApA0), FMath::RadiansToDegrees(W.ApA1),
 			FMath::RadiansToDegrees(W.Angles[0]), FMath::RadiansToDegrees(W.Angles.Last()),
 			FMath::RadiansToDegrees(W.Angles.Last() - W.Angles[0]), Open, W.Angles.Num(), MaxLen));
 	}
-	return FString::Printf(TEXT("내 구역 %s, 엿보기 %d곳 (마스크 그린 횟수 %d)%s%s"), *GetCurrentZoneLabel(), Wedges.Num(), PeekDraws,
+	TArray<FString> Peeked;
+	for (const FZone& Z : Zones)
+	{
+		if (Z.bPeek)
+		{
+			Peeked.Add(Z.Label);
+		}
+	}
+	const UVHGameplayConfig& C = UVHSettings::Get().GetGameplayConfig();
+	return FString::Printf(TEXT("내 구역 %s, 바라보는 방향 %.1f°(시야각 %.0f°, %s), 엿보기 %d곳, 보이는 너머 구역 %d [%s], 광선 %d·칸 %d, 계산 %.3fms(평균 %.3f, 최대 %.3f, %d번), 마스크 %d번%s%s"),
+		*GetCurrentZoneLabel(), SmoothAimYaw, C.DoorPeekFovDegrees, C.DoorPeekMode == EVHDoorPeekMode::ApertureAndFacing ? TEXT("문틈+방향") : TEXT("문틈만"),
+		Wedges.Num(), Peeked.Num(), *FString::Join(Peeked, TEXT(", ")), LastPeekRays, LastPeekCells, LastPeekMs, PeekMsAvg, PeekMsMax, PeekUpdates, PeekDraws,
 		Parts.Num() ? TEXT(": ") : TEXT(""), *FString::Join(Parts, TEXT(" | ")));
 }

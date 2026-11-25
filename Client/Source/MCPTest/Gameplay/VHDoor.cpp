@@ -78,6 +78,14 @@ AVHDoor::AVHDoor()
 	HandleA = MakePart(TEXT("HandleA"));
 	HandleB = MakePart(TEXT("HandleB"));
 	LockLight = MakePart(TEXT("LockLight"));
+	OutlineProxy = MakePart(TEXT("OutlineProxy"));
+	OutlineProxy->SetRenderInMainPass(false);
+	OutlineProxy->SetRenderInDepthPass(false);
+	OutlineProxy->bVisibleInReflectionCaptures = false;
+	OutlineProxy->bVisibleInRealTimeSkyCaptures = false;
+	OutlineProxy->bAffectDynamicIndirectLighting = false;
+	OutlineProxy->bAffectDistanceFieldLighting = false;
+	OutlineProxy->SetVisibleInRayTracing(false);
 	MarkStrip = MakeMark(TEXT("MarkStrip"));
 	MarkArrow = MakeMark(TEXT("MarkArrow"));
 	MarkCeiling = MakeMark(TEXT("MarkCeiling"));
@@ -170,6 +178,9 @@ void AVHDoor::Layout()
 	HandleB->SetRelativeScale3D(CubeScale(PanelThickness + 8.f, 2.5f, 55.f));
 	HandleB->SetVisibility(bDouble);
 	LockLight->SetRelativeScale3D(CubeScale(PanelThickness + 6.f, 7.f, 9.f));
+	// 테두리 전용 문 자리 상자 = 닫힌 문짝 전체 크기 (열린 문이 빛날 때 문짝 대신)
+	OutlineProxy->SetRelativeLocation(FVector(0.f, 0.f, PanelHeight * 0.5f + 0.5f));
+	OutlineProxy->SetRelativeScale3D(CubeScale(PanelThickness, ClearWidth, PanelHeight));
 	LockLight->SetVisibility(bLocked);
 	// 통과 막기 상자: 문틀 안쪽 구멍 전체 (벽 두께 + 앞뒤 2cm)
 	Blocker->SetRelativeLocation(FVector(0.f, 0.f, OpeningHeight * 0.5f));
@@ -269,8 +280,6 @@ void AVHDoor::BeginPlay()
 	}
 	MarkSide = 0;
 	bCeilingMarkOn = false;
-	MarkBoostApplied = -1.f;
-	MarkStateApplied = -1;
 }
 
 void AVHDoor::UpdateMarks()
@@ -330,34 +339,43 @@ void AVHDoor::UpdateMarks()
 		}
 	}
 
-	// 3) 열림/닫힘에 맞게 [2026-11-24]: 열린 문 = 하늘색(열린 만큼 더 밝게), 닫힌 문 = 흰 회색·어둡게. 잠긴 문은 늘 빨강
-	if (StripMID && !bLocked)
+	// 3) [기획 확인 2026-11-25] 열림/닫힘에 따른 색·밝기 차이 없음 — BeginPlay 에서 정한 한 가지 색(잠긴 문만 빨강) 그대로.
+	//    (예전 2026-11-24: 열린 문 하늘색·밝게 / 닫힌 문 흰 회색·어둡게 → 문 상태로 남의 위치가 드러나서 뺌)
+}
+
+void AVHDoor::SetFocusOutline(bool bOn)
+{
+	if (bOn == bFocusOutline)
 	{
-		const int32 State = OpenAlpha > 0.5f ? 1 : 0;
-		if (State != MarkStateApplied)
-		{
-			MarkStateApplied = State;
-			const FLinearColor Color = State ? C.DoorMarkColor : C.DoorMarkClosedColor;
-			for (UMaterialInstanceDynamic* MID : { StripMID.Get(), ArrowMID.Get(), CeilingMID.Get() })
-			{
-				MID->SetVectorParameterValue(TEXT("Color"), Color);
-			}
-			CeilingMID->SetScalarParameterValue(TEXT("Intensity"), C.CeilingDoorMarkIntensity * (State ? 1.f : C.DoorMarkClosedIntensityScale));
-			MarkBoostApplied = -1.f;
-		}
+		return;
 	}
-	if (Side != 0 && StripMID)
+	bFocusOutline = bOn;
+	ApplyOutlineParts();
+}
+
+void AVHDoor::ApplyOutlineParts()
+{
+	// 상자·금고·환금 아이템과 같은 테두리: 커스텀 뎁스 + 스텐실 2(Focus) → M_VHOutline 이 가장자리에 밝은 노랑을 칠한다.
+	// 문짝은 닫혀 보일 때(반 넘게 닫힘)만 — 열리면 문짝이 벽 속에 들어가 있어 테두리가 벽 너머로 사선처럼 그려졌다 → 열린 문은 문틀 + 화면에 안 그려지는 "문 자리" 상자(OutlineProxy)
+	const bool bPanels = OpenAlpha < 0.5f;
+	OutlinePanelsApplied = bPanels ? 1 : 0;
+	const int32 Stencil = 2;
+	auto Set = [Stencil](UStaticMeshComponent* Part, bool bOn)
 	{
-		const float Boost = bLocked ? 1.f : (OpenAlpha > 0.5f ? 1.f + (C.DoorMarkOpenBoost - 1.f) * OpenAlpha : C.DoorMarkClosedIntensityScale);
-		if (Boost != MarkBoostApplied)
+		if (Part && Part->bRenderCustomDepth != bOn)
 		{
-			MarkBoostApplied = Boost;
-			for (UMaterialInstanceDynamic* MID : { StripMID.Get(), ArrowMID.Get() })
-			{
-				MID->SetScalarParameterValue(TEXT("Intensity"), C.DoorMarkIntensity * Boost);
-				MID->SetScalarParameterValue(TEXT("Opacity"), FMath::Min(1.f, C.DoorMarkOpacity * FMath::Max(Boost, 0.8f)));
-			}
+			Part->SetRenderCustomDepth(bOn);
+			Part->SetCustomDepthStencilValue(bOn ? Stencil : 0);
 		}
+	};
+	for (UStaticMeshComponent* Part : { JambL.Get(), JambR.Get(), Header.Get() })
+	{
+		Set(Part, bFocusOutline);
+	}
+	Set(OutlineProxy.Get(), bFocusOutline && !bPanels);	// 열린 문: 닫힌 문짝 자리 모양으로 (화면에는 안 그려지는 상자)
+	for (UStaticMeshComponent* Part : { PanelA.Get(), PanelB.Get(), HandleA.Get(), HandleB.Get() })
+	{
+		Set(Part, bFocusOutline && bPanels);
 	}
 }
 
@@ -478,6 +496,10 @@ void AVHDoor::Tick(float DeltaSeconds)
 	}
 	ApplyAlpha(OpenAlpha);
 	UpdateBlocker();
+	if (bFocusOutline && OutlinePanelsApplied != (OpenAlpha < 0.5f ? 1 : 0))
+	{
+		ApplyOutlineParts();	// 문짝이 벽 속으로 들어가거나 나오면 문짝 테두리를 끄고 켠다
+	}
 }
 
 FString AVHDoor::Describe() const

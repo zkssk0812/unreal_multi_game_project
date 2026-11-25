@@ -3140,7 +3140,7 @@ void UVHServerGameSubsystem::OnReject(const SC_ActionReject& P)
 		switch (P.reason)
 		{
 		case RejectReason::TargetBusy:	Text = LOCTEXT("DoorBusy", "문간에 누가 있어 닫을 수 없습니다"); break;
-		case RejectReason::OutOfRange:	Text = LOCTEXT("DoorFar", "문에서 너무 멉니다 — 문 앞 1.5m 안에서 F를 누르세요"); break;
+		case RejectReason::OutOfRange:	Text = LOCTEXT("DoorFar", "문에서 너무 멉니다 — 문 앞 1.3m 안에서 F를 누르세요"); break;
 		// 서버는 상호작용(금고·상자·반납) 중이면 새 상호작용(문 포함)을 InvalidState 로 거절하고 작업을 이어 간다 (정호님 2026-11-25).
 		// 클라는 작업 중 F 를 "작업 취소"로 먼저 쓰므로 보통은 오지 않는다 (취소가 서버에 닿기 전에 문 요청이 간 경우 등)
 		case RejectReason::InvalidState:	Text = LOCTEXT("DoorBusyWork", "다른 작업 중이라 문을 열거나 닫을 수 없습니다"); break;

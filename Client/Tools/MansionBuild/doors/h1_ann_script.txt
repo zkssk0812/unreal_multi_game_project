@@ -1,0 +1,47 @@
+# 2026-11-25 문 기획 확인 반영 시험 (1)(3)(4): Ann(도적1). 문 wall_119 (3300,3150) Gallery2(x<3280) ↔ Area_7(x>3320)
+# 고르는 거리 130cm(문 가운데 2D), 바라보는 방향 시야각 90°, 문 테두리 빛, 미니맵 문 색 같음
+1.0 vh.CeilingGo 3060 3150
+1.2 vh.Aim 0
+2.4 vh.DoorBind
+# 240cm: 닫힌 문, 고르는 거리 밖 → 테두리 빛 없음, 안내 없음
+2.6 vh.Shot h1_01_far_closed
+3.0 vh.CeilingGo 3185 3150
+# 115cm: 테두리 빛 + "[F] 문 열기"
+4.0 vh.Shot h1_02_near_closed
+4.3 vh.PressF
+# 열림 → 아직 115cm 라 테두리 빛("[F] 문 닫기"). 미니맵은 닫힘 때와 같은 색이어야 함
+5.3 vh.Shot h1_03_near_open
+5.5 vh.CeilingGo 3020 3150
+5.6 vh.Aim 0
+# 문 쪽(0°)을 봄 → 문 너머 보임, Bob 보임
+6.6 vh.DoorPeekInfo
+6.7 vh.CeilingInfo
+6.8 vh.Shot h1_04_face_door
+# 반대쪽(180°) → 문 너머 덮임, Bob 숨김
+7.0 vh.Aim 180
+7.7 vh.DoorPeekInfo
+7.8 vh.CeilingInfo
+7.9 vh.Shot h1_05_face_away
+# 비스듬히(50°) → 일부만
+8.2 vh.Aim 50
+8.9 vh.DoorPeekInfo
+9.0 vh.CeilingInfo
+9.1 vh.Shot h1_06_face_50
+9.5 vh.Aim 0
+# 연속 프레임: 0° → 180° → 0° (각 2초). 바깥에서 peekfilm.ps1 이 찍는다
+10.5 vh.AimSweep 0 180 2.0 2
+11.5 vh.DoorPeekInfo
+12.5 vh.DoorPeekInfo
+13.5 vh.DoorPeekInfo
+15.0 vh.DoorPeekInfo
+# 다시 닫기 → 미니맵 같은 색
+15.5 vh.CeilingGo 3185 3150
+15.7 vh.Aim 0
+16.5 vh.PressF
+17.6 vh.Shot h1_07_closed_again
+# 다시 열고 문간(3300)에 서기 → 닫을 수 없음 → 테두리 빛 없음
+18.0 vh.PressF
+19.0 vh.CeilingGo 3290 3150
+20.0 vh.Shot h1_08_doorway_open
+20.5 vh.DoorInfo
+21.0 vh.DoorPeekInfo

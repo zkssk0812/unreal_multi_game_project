@@ -1,0 +1,7 @@
+# 2026-11-25 거리 제한 없애기 시험: Bob(도적2) = 먼 곳 과녁
+# A) Lounge2 안 (Ann 에서 41m, 문 두 개 너머)
+1.0 vh.CeilingGo 2600 500
+1.2 vh.Aim 180
+# B) 세로 복도 (Ann 에서 46m)
+9.5 vh.CeilingGo 1500 1000
+9.7 vh.Aim 270

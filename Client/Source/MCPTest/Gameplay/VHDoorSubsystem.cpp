@@ -282,8 +282,9 @@ AVHDoor* UVHDoorSubsystem::FindDoorFor(const APawn* Pawn) const
 		{
 			continue;
 		}
-		// 서버 문: 서버는 문 가운데에서 150cm(2D) 안만 받는다 → 그 밖이면 고르지 않는다 (DoorServerRange = 150 − 여유)
-		if (D->ServerEntityId != 0 && IsServerSource() && FVector::Dist2D(D->GetActorLocation(), Pawn->GetActorLocation()) > C.DoorServerRange)
+		// 고르는 거리 = 문 가운데에서 DoorPickRange(130cm, 2D) [기획 확인 2026-11-25: 금고·상자 상호작용 거리(서버 WorkRangeCm 130)와 같게].
+		// 서버 문 판정(DoorRangeCm 150)보다 안쪽이라 위치 차이가 있어도 OutOfRange 가 나지 않는다. 로컬 출처(가짜 서버)도 같은 거리
+		if (FVector::Dist2D(D->GetActorLocation(), Pawn->GetActorLocation()) > C.DoorPickRange)
 		{
 			continue;
 		}
@@ -323,6 +324,39 @@ FString UVHDoorSubsystem::DescribeDoorway(const AVHDoor& Door, const APawn* Pawn
 	const float Inside = FMath::Min(LimX - FMath::Abs(L.X), LimY - FMath::Abs(L.Y));
 	return FString::Printf(TEXT("문 로컬 (%.1f, %.1f), 넓힌 범위 |x|<=%.0f |y|<=%.0f → 경계까지 %+.1fcm (%s)"), L.X, L.Y, LimX, LimY, Inside,
 		Inside >= 0.f ? TEXT("문간 안") : TEXT("문간 밖"));
+}
+
+bool UVHDoorSubsystem::CanToggleNow(const AVHDoor& Door, const APawn* Pawn)
+{
+	if (Door.bLocked)
+	{
+		return false;
+	}
+	// 열린 문을 문간에 서서 닫는 것은 거절된다 (TryToggle 과 같은 조건)
+	return !(Door.IsOpen() && IsPawnInDoorway(Door, Pawn));
+}
+
+void UVHDoorSubsystem::SetFocusDoor(AVHDoor* Door)
+{
+	if (!UVHSettings::Get().GetGameplayConfig().bDoorFocusOutline)
+	{
+		Door = nullptr;
+	}
+	AVHDoor* Old = FocusDoor.Get();
+	if (Old == Door)
+	{
+		return;
+	}
+	if (Old)
+	{
+		Old->SetFocusOutline(false);
+	}
+	FocusDoor = Door;
+	if (Door)
+	{
+		Door->SetFocusOutline(true);
+	}
+	UE_LOG(LogMCPTest, Log, TEXT("[Door] 테두리 빛: %s"), Door ? *Door->Describe() : TEXT("없음"));
 }
 
 bool UVHDoorSubsystem::TryToggle(APawn* Pawn, AVHDoor* Door, FText& OutMessage)

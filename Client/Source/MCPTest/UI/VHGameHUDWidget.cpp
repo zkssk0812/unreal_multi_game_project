@@ -1292,11 +1292,14 @@ void UVHGameHUDWidget::UpdatePrompt()
 			{
 				PromptBox->SetVisibility(ESlateVisibility::HitTestInvisible);
 				const bool bLockedDoor = Door->bLocked;
+				// 문간에 서서 열린 문을 닫을 수는 없다 → 테두리 빛과 같이 회색 안내 [2026-11-25]
+				const bool bInDoorway = !bLockedDoor && !UVHDoorSubsystem::CanToggleNow(*Door, Pawn);
 				const FText DoorLine = bLockedDoor ? LOCTEXT("DoorLocked", "잠긴 문")
+					: bInDoorway ? LOCTEXT("DoorInDoorway", "문간에서는 문을 닫을 수 없음")
 					: FText::Format(LOCTEXT("DoorPrompt", "{0} {1}"), FText::FromString(KeyLabel),
 						Door->IsOpen() ? LOCTEXT("DoorClose", "문 닫기") : LOCTEXT("DoorOpen", "문 열기"));
 				PromptText->SetText(DoorLine);
-				PromptText->SetColorAndOpacity(FSlateColor(bLockedDoor ? S.DisabledText : S.Text));
+				PromptText->SetColorAndOpacity(FSlateColor(bLockedDoor || bInDoorway ? S.DisabledText : S.Text));
 				PromptBar->SetVisibility(ESlateVisibility::Collapsed);
 				return;
 			}

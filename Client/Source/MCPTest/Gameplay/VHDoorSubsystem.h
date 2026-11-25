@@ -69,6 +69,16 @@ public:
 	/** 개발용: 문 열기/닫기 요청 (상태 출처를 거친다) */
 	void RequestSetOpen(AVHDoor* Door, bool bOpen);
 
+	/** 지금 F 를 누르면 이 문을 열거나 닫을 수 있는가 (잠긴 문·문간에 서서 닫기는 false. 거리·작업 중 여부는 부르는 쪽이 본다) */
+	static bool CanToggleNow(const AVHDoor& Door, const APawn* Pawn);
+
+	/**
+	 * F 대상 문 테두리 빛 [기획 확인 2026-11-25]: 이 문 하나만 켜고 나머지는 끈다 (nullptr = 모두 끔).
+	 * UVHInteractionComponent 가 매 프레임 "물품이 F 대상이 아니고, 작업·구르기·쓰러짐이 아니고, 이 문을 지금 열고 닫을 수 있을 때"만 넘긴다
+	 */
+	void SetFocusDoor(AVHDoor* Door);
+	AVHDoor* GetFocusDoor() const { return FocusDoor.Get(); }
+
 	/** 이 폰이 문간(문짝이 지나가는 자리)에 서 있는가 → 닫으면 안 됨 */
 	static bool IsPawnInDoorway(const AVHDoor& Door, const APawn* Pawn);
 	/** 로그용: 문 로컬 위치와 넓힌 문간 범위 경계까지 거리 (양수 = 안) */
@@ -109,5 +119,6 @@ private:
 	TMap<uint16, TWeakObjectPtr<AVHDoor>> ServerDoors;
 	TArray<FString> BindProblems;
 	TUniquePtr<IVHDoorStateSource> Source;
+	TWeakObjectPtr<AVHDoor> FocusDoor;
 	bool bCollected = false;
 };

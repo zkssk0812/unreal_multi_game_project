@@ -81,6 +81,8 @@ public:
 	bool IsPointPeeked(const FVector2D& P) const;
 	/** 개발용: 엿보기 상태 (문마다 각도·광선) */
 	FString DescribePeek() const;
+	/** 개발용: 엿보기 계산 시간 통계 지우기 (vh.DoorPeekInfo reset) */
+	void ResetPeekStats() { PeekMsAvg = 0.f; PeekMsMax = 0.f; PeekUpdates = 0; }
 
 private:
 	struct FZone
@@ -165,14 +167,33 @@ private:
 		FVector2D Eye;					// 문 로컬 (x, y)
 		float Fwd = 1.f;				// 문 너머 쪽 로컬 x 부호
 		float FarX = 0.f;				// 먼 쪽 벽 면 로컬 x
-		TArray<float> Angles;			// 광선 각도 (라디안, 앞쪽 기준 옆으로)
+		float Fn = 1.f, Ff = 1.f;		// 눈 → 가까운/먼 벽 면 (앞쪽 거리)
+		float ApA0 = 0.f, ApA1 = 0.f;	// 문틈만 본 각도 범위 (바라보는 방향으로 자르기 전, 로그용)
+		TArray<float> Angles;			// 광선 각도 (라디안, 앞쪽 기준 옆으로, 오름차순)
 		TArray<float> EndDist;			// 눈에서 광선 끝까지 (로컬 2D)
 		TArray<FVector2D> Starts, Ends;	// 월드 2D
 	};
+	struct FPeekRay
+	{
+		float Angle = 0.f;
+		float Dist = 0.f;				// 눈에서 끝까지
+		FVector2D Start = FVector2D::ZeroVector, End = FVector2D::ZeroVector;
+		int32 Cells = 0;
+	};
+	/** 광선이 지나갈 수 있는 칸 지도 갱신 (닫힌 문 자리 = 벽, 열린 문틈 = PassDoor) */
+	void RefreshPassMap();
+	/** 광선 하나: 내 구역 안 확인 → 먼 벽 면부터 칸을 따라 벽·닫힌 문까지 (열린 문은 지나감). OutZones = 지나간 구역 */
+	FPeekRay CastPeekRay(const FPeekWedge& W, float A, const FVector2D& Viewer, int32 CurMap, TBitArray<>& OutZones) const;
+	static constexpr uint8 PassDoor = 255;
+	TArray<uint8> PassMap;				// 넓은 구역 지도 + 문 자리 (0 = 벽)
 	TArray<FPeekWedge> Wedges;
 	uint32 PeekSignature = 0;
 	bool bPeekDrawn = false;
 	int32 PeekDraws = 0;
+	float SmoothAimYaw = 0.f;			// 부드럽게 따라간 바라보는 방향
+	bool bAimSmoothInit = false;
+	int32 LastPeekRays = 0, LastPeekCells = 0, PeekUpdates = 0;
+	float LastPeekMs = 0.f, PeekMsAvg = 0.f, PeekMsMax = 0.f;
 
 	/** 가려진 내 캐릭터 실루엣: 내 메시들을 커스텀 뎁스(스텐실 0)에 그리고, 카메라 후처리에 M_VHSilhouette 을 붙인다 */
 	void UpdateSilhouette();

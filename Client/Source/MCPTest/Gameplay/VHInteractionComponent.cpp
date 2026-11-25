@@ -13,6 +13,7 @@
 #include "Gameplay/VHCeilingSubsystem.h"
 #include "Gameplay/VHDoorSubsystem.h"
 #include "Gameplay/VHDoor.h"
+#include "Gameplay/VHStatusEffectComponent.h"
 #include "Network/VHSettings.h"
 #include "MCPTest.h"
 
@@ -40,6 +41,10 @@ void UVHInteractionComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 			{
 				T->SetOutline(EVHOutline::None);
 			}
+		}
+		if (UVHDoorSubsystem* Doors = GetWorld() ? GetWorld()->GetSubsystem<UVHDoorSubsystem>() : nullptr)
+		{
+			Doors->SetFocusDoor(nullptr);
 		}
 	}
 	Super::EndPlay(EndPlayReason);
@@ -109,6 +114,32 @@ void UVHInteractionComponent::TickComponent(float DeltaTime, ELevelTick TickType
 		UpdateFocus(Visible);
 	}
 	UpdateOutlines(Visible);
+	UpdateDoorOutline();
+}
+
+void UVHInteractionComponent::UpdateDoorOutline()
+{
+	// F 대상 문 테두리 빛 [기획 확인 2026-11-25]: InteractPressed 가 문을 고르는 조건과 같다
+	//  = 작업·다가가기·구르기·경직·리스폰 대기가 아니고, 물품이 F 대상이 아니고(없거나 지금 할 수 없음),
+	//    고르는 거리(DoorPickRange 130cm) 안의 문을 지금 열고 닫을 수 있을 때(잠긴 문·문간에 서서 닫기 제외)
+	UVHDoorSubsystem* Doors = GetWorld() ? GetWorld()->GetSubsystem<UVHDoorSubsystem>() : nullptr;
+	if (!Doors)
+	{
+		return;
+	}
+	APawn* Pawn = Cast<APawn>(GetOwner());
+	const UVHActionComponent* Action = GetOwner()->FindComponentByClass<UVHActionComponent>();
+	const UVHThiefStateComponent* ThiefState = GetOwner()->FindComponentByClass<UVHThiefStateComponent>();
+	const UVHStatusEffectComponent* Status = GetOwner()->FindComponentByClass<UVHStatusEffectComponent>();
+	const bool bCanAct = !IsInteracting() && !IsApproaching() && !(Action && Action->IsBusy())
+		&& !(ThiefState && !ThiefState->IsFree()) && !(Status && Status->IsStunned())
+		&& (!FocusTarget.IsValid() || !FocusOffer.IsAvailable());
+	AVHDoor* Door = bCanAct ? Doors->FindDoorFor(Pawn) : nullptr;
+	if (Door && !UVHDoorSubsystem::CanToggleNow(*Door, Pawn))
+	{
+		Door = nullptr;
+	}
+	Doors->SetFocusDoor(Door);
 }
 
 void UVHInteractionComponent::UpdateOutlines(const TSet<AVHInteractableBase*>& Visible)

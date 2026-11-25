@@ -86,6 +86,8 @@ protected:
 	void UpdateFocus(const TSet<AVHInteractableBase*>& Visible);
 	/** 물품 테두리 상태를 매 프레임 정한다 (빛 안 / 현재 대상 / 불가) */
 	void UpdateOutlines(const TSet<AVHInteractableBase*>& Visible);
+	/** F 대상 문 테두리 빛 (UVHDoorSubsystem::SetFocusDoor) [2026-11-25] */
+	void UpdateDoorOutline();
 	void SetFocus(AVHInteractableBase* NewTarget, const FVHInteractOffer& Offer);
 	void LockMovement(bool bLock);
 	void FaceTarget(const AVHInteractableBase* Target);

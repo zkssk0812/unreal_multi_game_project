@@ -1,0 +1,5 @@
+# 2026-11-25 문 기획 확인 반영 시험: Bob(도적2) = Area_7 쪽 과녁 (Ann 이 문 너머로 보는지)
+1.0 vh.CeilingGo 3700 3150
+1.2 vh.Aim 180
+5.6 vh.Shot h1_bob_01_ann_opened
+17.8 vh.Shot h1_bob_02_closed_again

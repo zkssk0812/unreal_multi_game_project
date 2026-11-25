@@ -1,0 +1,7 @@
+# 2026-11-25 테두리 빛 비교 (3): 상자에 다가가 F 대상이 된 순간(상자 테두리) → 작업 중 → 열린 뒤 떨어진 아이템 테두리
+# 문 테두리는 h1_02 (문 115cm)
+1.0 vh.WorkBox
+1.12 vh.Shot h3_01_box_focus
+2.2 vh.Shot h3_02_box_working
+5.0 vh.Shot h3_03_box_drops
+5.5 vh.CeilingInfo

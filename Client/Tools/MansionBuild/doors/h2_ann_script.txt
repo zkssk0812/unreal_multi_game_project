@@ -1,0 +1,29 @@
+# 2026-11-25 거리 제한 없애기 시험 (2): Ann(도적1)
+# A) 중앙 홀 → wall_080(1300,500) → 복도 → wall_091(1700,500) → Lounge2(x 1725~2875): 문 두 개를 지나 40m 넘게
+1.0 vh.CeilingGo 1185 500
+1.2 vh.Aim 0
+2.0 vh.PressF
+2.8 vh.CeilingGo 1600 500
+3.0 vh.Aim 0
+3.6 vh.PressF
+4.5 vh.CeilingGo -1500 500
+4.7 vh.Aim 0
+6.0 vh.DoorPeekInfo
+6.1 vh.CeilingInfo
+6.2 vh.Shot h2_01_hall
+6.6 vh.Cam 13000 -89 0
+8.0 vh.Shot h2_02_hall_zoomout
+8.4 vh.Cam off
+# B) Gallery1 → wall_186(1500,-2400) → 세로 복도(x 1350~1650, y -2375~2375): 문 너머 48m
+9.0 vh.CeilingGo 1500 -2520
+9.2 vh.Aim 90
+10.0 vh.PressF
+11.0 vh.CeilingGo 1500 -3600
+11.2 vh.Aim 90
+12.5 vh.DoorPeekInfo
+12.6 vh.CeilingInfo
+12.7 vh.Shot h2_03_gallery
+13.0 vh.Cam 13000 -89 0
+14.4 vh.Shot h2_04_gallery_zoomout
+14.8 vh.Cam off
+15.5 vh.DoorInfo

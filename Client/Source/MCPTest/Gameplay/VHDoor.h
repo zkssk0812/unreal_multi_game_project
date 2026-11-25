@@ -104,6 +104,10 @@ public:
 	/** 문을 보이게/숨기게 (vh.Doors 0/1) */
 	void ApplyEnabled(bool bEnabled);
 
+	/** F 로 열고 닫을 수 있는 문(F 대상)이면 테두리 빛 (상자·금고와 같은 스텐실 2) [2026-11-25]. UVHDoorSubsystem::SetFocusDoor 가 부른다 */
+	void SetFocusOutline(bool bOn);
+	bool HasFocusOutline() const { return bFocusOutline; }
+
 private:
 	void Layout();
 	void ApplyAlpha(float Alpha);
@@ -123,6 +127,8 @@ private:
 	UPROPERTY(VisibleAnywhere, Category = "Door") TObjectPtr<UStaticMeshComponent> HandleA;
 	UPROPERTY(VisibleAnywhere, Category = "Door") TObjectPtr<UStaticMeshComponent> HandleB;
 	UPROPERTY(VisibleAnywhere, Category = "Door") TObjectPtr<UStaticMeshComponent> LockLight;
+	/** 테두리 빛 전용 "문 자리" 상자 (화면에는 안 그림, 커스텀 뎁스에만) — 열린 문도 닫힌 문과 같은 모양으로 빛나게 [2026-11-25] */
+	UPROPERTY(VisibleAnywhere, Category = "Door") TObjectPtr<UStaticMeshComponent> OutlineProxy;
 	UPROPERTY(VisibleAnywhere, Category = "Door") TObjectPtr<UStaticMeshComponent> MarkStrip;
 	UPROPERTY(VisibleAnywhere, Category = "Door") TObjectPtr<UStaticMeshComponent> MarkArrow;
 	UPROPERTY(VisibleAnywhere, Category = "Door") TObjectPtr<UStaticMeshComponent> MarkCeiling;
@@ -133,8 +139,9 @@ private:
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> CeilingMID;
 	int32 MarkSide = 0;			// 바닥 표시를 그린 쪽 (-1 = A 쪽, +1 = B 쪽, 0 = 없음)
 	bool bCeilingMarkOn = false;
-	float MarkBoostApplied = -1.f;
-	int32 MarkStateApplied = -1;	// 표시 색에 쓴 상태 (0 닫힘, 1 열림)
+	bool bFocusOutline = false;
+	int32 OutlinePanelsApplied = -1;	// 문짝 테두리를 켠 상태 (열리면 문틀만)
+	void ApplyOutlineParts();
 	bool bBlocking = false;
 
 	float OpenAlpha = 0.f;
