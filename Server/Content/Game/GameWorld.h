@@ -66,6 +66,7 @@ struct Entity
 	ActionType action = ActionType::None;	// 진행 중인 구르기 (스냅샷에 실림)
 	uint32_t actionStartMs = 0;
 	uint16_t interactTarget = 0;		// 상호작용 중인 대상
+	uint32_t interactSpeed = 0;		// 지금 작업의 작업 속도 (시작할 때 정해지고 바뀌지 않음)
 	int32_t shield = 0;					// 방탄조끼 보호막
 	bool deathSaveLeft = false;			// 가시회생 남음
 	uint16_t perkMask = 0;				// 1 << 퍽 ID
@@ -104,7 +105,7 @@ struct Entity
 	// ── 상호작용 대상 (금고·상자·반납 지점·아이템) ──
 	Vec3 interactPos;					// 여기서 interactRange 안에 서야 상호작용 가능
 	float interactRange = 0.0f;
-	float progressMs = 0.0f;			// 진행한 시간 (작업 속도를 곱해 쌓는다)
+	float workDone = 0.0f;				// 진행한 작업량 (금고는 중단해도 남음)
 	uint16_t interactor = 0;			// 지금 상호작용 중인 플레이어. 한 명만
 	uint32_t spawnMs = 0;				// 생긴 시각 (반납 지점 55초·60초)
 	uint16_t safeRoom = 0;				// 금고: 놓인 방 (MapData::rooms의 위치). 다음 금고는 이 방을 뺀다
@@ -285,9 +286,10 @@ private:
 	void CancelInteract(Entity& thief);
 	void CompleteInteract(Entity& thief, Entity& target);
 	void UpdateInteract(Entity& thief, uint32_t dtMs);
-	uint32_t InteractDurationMs(const Entity& target) const;
+	uint32_t InteractWork(const Entity& target) const;			// 대상의 작업량 (상자 300·금고 1,000·반납 400)
+	Msg::Interact InteractMsg(const Entity& thief, const Entity& target, InteractState state) const;	// 진행·전체를 그 플레이어 속도의 ms로
 	bool InRange(const Entity& thief, const Entity& target) const;
-	float WorkSpeed(const Entity& thief) const;
+	uint32_t WorkSpeed(const Entity& thief) const;				// 지금 작업 속도 (기본 100 + 효과 합연산)
 
 	// ── 플레이어 틱 (GameWorld.cpp) ──
 	void UpdateThief(Entity& thief, float deltaSec, uint32_t dtMs);

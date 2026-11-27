@@ -429,7 +429,7 @@ std::optional<RejectReason> GameWorld::BeginInteract(Entity& thief, uint16_t tar
 		if (ReturnPointLeftMs(*target) <= GameData::ReturnMinLeftMs)
 			return RejectReason::NotAvailable;	// 곧 닫히는 구역 (버저비터 없음)
 		if (target->interactor == 0)
-			target->progressMs = 0.0f;			// 반납은 처음부터
+			target->workDone = 0.0f;			// 반납은 처음부터
 		break;
 
 	case EntityKind::Safe:
@@ -439,7 +439,7 @@ std::optional<RejectReason> GameWorld::BeginInteract(Entity& thief, uint16_t tar
 
 	case EntityKind::Box:
 		if (target->interactor == 0)
-			target->progressMs = 0.0f;			// 상자는 처음부터
+			target->workDone = 0.0f;			// 상자는 처음부터
 		break;
 
 	default:
@@ -452,11 +452,11 @@ std::optional<RejectReason> GameWorld::BeginInteract(Entity& thief, uint16_t tar
 	if ((thief.state & StateBit::Cloaked) != 0)
 		EndCloak(thief);
 	thief.interactTarget = target->id;
+	thief.interactSpeed = WorkSpeed(thief);		// 작업 속도는 시작할 때 정해지고 도중에는 바뀌지 않는다 (기획 2026-11-27)
 	target->interactor = thief.id;
 	thief.state |= StateBit::Interacting;
 	ClearBits(thief.state, StateBit::Running);
-	_events.push_back(Msg::Interact{ thief.id, target->id, InteractState::Begin,
-		static_cast<uint32_t>(target->progressMs), InteractDurationMs(*target) });
+	_events.push_back(InteractMsg(thief, *target, InteractState::Begin));
 	return std::nullopt;
 }
 
@@ -466,11 +466,11 @@ void GameWorld::CancelInteract(Entity& thief)
 	{
 		target->interactor = 0;
 		if (target->kind == EntityKind::Box || target->kind == EntityKind::ReturnPoint)
-			target->progressMs = 0.0f;			// 상자·반납은 멈추면 처음부터. 금고는 진행도 유지 (O-02)
-		_events.push_back(Msg::Interact{ thief.id, target->id, InteractState::Cancel,
-			static_cast<uint32_t>(target->progressMs), InteractDurationMs(*target) });
+			target->workDone = 0.0f;			// 상자·반납은 멈추면 처음부터. 금고는 진행도 유지 (O-02)
+		_events.push_back(InteractMsg(thief, *target, InteractState::Cancel));
 	}
 	thief.interactTarget = 0;
+	thief.interactSpeed = 0;
 	ClearBits(thief.state, StateBit::Interacting);
 }
 
@@ -482,19 +482,25 @@ void GameWorld::UpdateInteract(Entity& thief, uint32_t dtMs)
 		CancelInteract(thief);					// 범위를 벗어나면 중단
 		return;
 	}
-	const float speed = target->kind == EntityKind::ReturnPoint ? 1.0f : WorkSpeed(thief);	// 반납은 늘 4초
-	target->progressMs += static_cast<float>(dtMs) * speed;
-	if (target->progressMs >= static_cast<float>(InteractDurationMs(*target)))
+	if (WorkSpeed(thief) < thief.interactSpeed)
+	{
+		CancelInteract(thief);					// 도중에 작업 속도가 떨어지면(디버프 등) 강제로 중단 (기획 2026-11-27)
+		return;
+	}
+	// 시작할 때 정한 속도로 쌓는다 (도중에 올라가도 그대로)
+	target->workDone += static_cast<float>(dtMs) * static_cast<float>(thief.interactSpeed) / 1000.0f;
+	if (target->workDone >= static_cast<float>(InteractWork(*target)))
 		CompleteInteract(thief, *target);
 }
 
 void GameWorld::CompleteInteract(Entity& thief, Entity& target)
 {
-	const uint32_t duration = InteractDurationMs(target);
+	target.workDone = static_cast<float>(InteractWork(target));
+	_events.push_back(InteractMsg(thief, target, InteractState::Complete));
 	target.interactor = 0;
 	thief.interactTarget = 0;
+	thief.interactSpeed = 0;
 	ClearBits(thief.state, StateBit::Interacting);
-	_events.push_back(Msg::Interact{ thief.id, target.id, InteractState::Complete, duration, duration });
 
 	if (target.kind == EntityKind::Safe)
 		OnSafeOpened(target, thief);
@@ -508,15 +514,25 @@ void GameWorld::CompleteInteract(Entity& thief, Entity& target)
 	}
 }
 
-uint32_t GameWorld::InteractDurationMs(const Entity& target) const
+uint32_t GameWorld::InteractWork(const Entity& target) const
 {
 	switch (target.kind)
 	{
-	case EntityKind::Safe: return GameData::SafeOpenMs;
-	case EntityKind::Box: return GameData::BoxOpenMs;
-	case EntityKind::ReturnPoint: return GameData::ReturnDeliverMs;
+	case EntityKind::Safe: return GameData::SafeWork;
+	case EntityKind::Box: return GameData::BoxWork;
+	case EntityKind::ReturnPoint: return GameData::ReturnWork;
 	default: return 0;
 	}
+}
+
+Msg::Interact GameWorld::InteractMsg(const Entity& thief, const Entity& target, InteractState state) const
+{
+	// SC_INTERACT: 진행·전체를 이 플레이어의 작업 속도로 걸리는 ms로 보낸다. 클라는 progress/duration으로 게이지를 그린다.
+	// 금고는 진행도(작업량)가 남으므로, 다른 사람이 이어서 열면 그 사람 속도로 남은 시간이 정해진다
+	const uint32_t speed = thief.interactSpeed != 0 ? thief.interactSpeed : WorkSpeed(thief);
+	const uint32_t work = InteractWork(target);
+	const uint32_t done = std::min(work, static_cast<uint32_t>(target.workDone));
+	return Msg::Interact{ thief.id, target.id, state, GameData::WorkMs(done, speed), GameData::WorkMs(work, speed) };
 }
 
 bool GameWorld::InRange(const Entity& thief, const Entity& target) const
@@ -525,9 +541,13 @@ bool GameWorld::InRange(const Entity& thief, const Entity& target) const
 	return Dist2D(thief.pos, target.interactPos) <= target.interactRange;
 }
 
-float GameWorld::WorkSpeed(const Entity& thief) const
+uint32_t GameWorld::WorkSpeed(const Entity& thief) const
 {
-	return thief.HasPerk(GameData::Perk::Tools) ? GameData::WorkSpeedTools : 1.0f;	// K-03
+	// 기본 100에 효과(%)를 더해서 곱한다 (합연산): 유용한 도구 +10% → 110 (K-03)
+	uint32_t bonusPct = 0;
+	if (thief.HasPerk(GameData::Perk::Tools))
+		bonusPct += GameData::WorkSpeedToolsPct;
+	return GameData::BaseWorkSpeed * (100 + bonusPct) / 100;
 }
 
 // ───────────────── 반납 지점 (§11.8) ─────────────────
@@ -559,7 +579,7 @@ bool GameWorld::PlaceReturnPoint(Entity& point, std::optional<uint16_t> excludeR
 	point.typeId = room;
 	point.spawnMs = _nowMs;
 	point.interactor = 0;
-	point.progressMs = 0.0f;
+	point.workDone = 0.0f;
 	ClearBits(point.state, StateBit::Warning);
 	return true;
 }

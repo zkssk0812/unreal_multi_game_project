@@ -53,7 +53,11 @@ constexpr float StaminaRegenPerSec = 10.0f;
 constexpr float ExhaustedRegenScale = 0.5f;			// 탈진 중 +5/s
 constexpr float DodgeStamina = 20.0f;
 constexpr uint32_t DodgeInvulnMs = 500;
-constexpr float WorkSpeedTools = 1.1f;				// [명세 K-03]
+// 작업 속도 (기획 2026-11-27): 작업 시간 = 작업량 ÷ 작업 속도. 기본 100 = 1초에 작업량 100.
+// 작업을 시작할 때 정해지고 도중에는 바뀌지 않는다. 도중에 떨어지면(디버프 등) 작업을 중단한다.
+// 같은 효과는 합연산: 유용한 도구 +10%, 다른 +50%와 겹치면 +60%
+constexpr uint32_t BaseWorkSpeed = 100;				// 모든 캐릭터 같음
+constexpr uint32_t WorkSpeedToolsPct = 10;			// [명세 K-03] 유용한 도구 +10% (전에는 ×1.1)
 constexpr int32_t VestShield = 20;					// [명세 K-01]
 
 // ── 상호작용 (§13) ──
@@ -63,8 +67,12 @@ constexpr float DoorRangeCm = 150.0f;				// 문: 가운데에서 150cm 안에서
 constexpr float GuardDoorLookAheadCm = 100.0f;		// 경비원은 가는 길 1m 앞의 닫힌 문을 열고 지나감 (열린 채로 둠)
 constexpr float ReturnPointRangeCm = 100.0f;		// 반납 지점 구획 중심에서 (지금 규칙 유지)
 constexpr float FieldItemTouchCm = 60.0f;			// 필드 아이템: 닿았다고 보는 거리 (히트 박스 40 + 20)
-constexpr uint32_t SafeOpenMs = 10000;				// [명세 O-02] 10초 × 작업 속도, 진행도 유지
-constexpr uint32_t BoxOpenMs = 3000;				// [명세 O-11] 3초, 멈추면 처음부터
+constexpr uint32_t SafeWork = 1000;					// [명세 O-02] 금고 작업량 (기본 속도로 10초), 진행도 유지
+constexpr uint32_t BoxWork = 300;					// [명세 O-11] 상자 작업량 (기본 속도로 3초), 멈추면 처음부터
+constexpr uint32_t ReturnWork = 400;				// 반납 작업량 (기본 속도로 4초), 멈추면 처음부터
+constexpr uint32_t WorkMs(uint32_t work, uint32_t speed) { return (work * 1000 + speed - 1) / speed; }	// 작업량 ÷ 속도 (ms, 올림)
+constexpr uint32_t SafeOpenMs = WorkMs(SafeWork, BaseWorkSpeed);		// 기본 속도일 때 걸리는 시간
+constexpr uint32_t BoxOpenMs = WorkMs(BoxWork, BaseWorkSpeed);
 
 // ── 쓰러짐·리스폰 (§7) ──
 constexpr uint32_t RespawnByPlayerMs = 5000;		// [명세 D-05]
@@ -223,7 +231,7 @@ constexpr size_t SafeRoomsNeeded = MaxRoomPlayers + 1;	// 금고: 의적 시작 
 constexpr size_t ReturnPointCount = 3;				// [명세 O-21] 전에는 5곳
 constexpr uint32_t ReturnPointLifeMs = 30000;		// 전에는 60초
 constexpr uint32_t ReturnPointWarnMs = ReturnPointLifeMs - 5000;	// 사라지기 5초 전 빨강
-constexpr uint32_t ReturnDeliverMs = 4000;			// 반납에 걸리는 시간 (작업 속도 퍽과 관계없이 4초)
+constexpr uint32_t ReturnDeliverMs = WorkMs(ReturnWork, BaseWorkSpeed);	// 기본 속도로 반납에 걸리는 시간 (4초)
 constexpr uint32_t ReturnMinLeftMs = 2000;			// 이 이하로 남으면 반납 시작 불가
 static_assert(ReturnMinLeftMs < ReturnDeliverMs && ReturnDeliverMs < ReturnPointWarnMs);
 

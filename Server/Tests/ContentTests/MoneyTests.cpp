@@ -108,14 +108,17 @@ TEST_CASE(Money_Return_Takes4s_SendsProgress)
 	CHECK((world.ThiefOf(A)->state & StateBit::Interacting) == 0);
 }
 
-TEST_CASE(Money_Return_ToolsPerk_StillFourSeconds)
+TEST_CASE(Money_Return_ToolsPerk_Work400_Speed110)
 {
+	// 반납도 작업량 ÷ 작업 속도 (기획 2026-11-27): 400 ÷ 110 ≈ 3.64초. 클라 게이지용 duration_ms도 실제 시간
 	GameWorld world = MakeWorld(2, false, { { GameData::Perk::Tools } });
 	const uint16_t point = CarryToPoint(world);
 	Act(world, A, ActionType::InteractBegin, point);
-	Run(world, 3800);											// 작업 속도 +10%면 3.64초에 끝났을 것
+	const auto begin = First<Msg::Interact>(world.TakeEvents());
+	CHECK(begin && begin->durationMs == GameData::WorkMs(GameData::ReturnWork, 110) && begin->durationMs == 3637);
+	Run(world, 3550);
 	CHECK_EQ(world.ThiefOf(A)->banked, uint32_t{ 0 });
-	Run(world, 300);
+	Run(world, 150);
 	CHECK_EQ(world.ThiefOf(A)->banked, uint32_t{ 25 });
 }
 
@@ -335,8 +338,75 @@ TEST_CASE(Money_Safe_ToolsPerkFaster)
 	const uint16_t safe = Nth(world, EntityKind::Safe);
 	GoTo(world, A, safe);
 	Act(world, A, ActionType::InteractBegin, safe);
-	Run(world, 9100);										// 10초 ÷ 1.1 ≈ 9.09초 (K-03)
+	const auto begin = First<Msg::Interact>(world.TakeEvents());
+	CHECK(begin && begin->progressMs == 0 && begin->durationMs == 9091);	// 1,000 ÷ 110 (K-03 +10%)
+	Run(world, 9000);
+	CHECK((world.Find(safe)->state & StateBit::Opened) == 0);
+	Run(world, 100);
 	CHECK((world.Find(safe)->state & StateBit::Opened) != 0);
+}
+
+// ───────────────── 작업 속도 (기획 2026-11-27) ─────────────────
+
+TEST_CASE(Work_Speed_Base100_ToolsAdds10Percent)
+{
+	CHECK_EQ(GameData::BaseWorkSpeed, uint32_t{ 100 });
+	CHECK_EQ(GameData::SafeOpenMs, uint32_t{ 10000 });				// 기본 속도면 지금과 같은 10·3·4초
+	CHECK_EQ(GameData::BoxOpenMs, uint32_t{ 3000 });
+	CHECK_EQ(GameData::ReturnDeliverMs, uint32_t{ 4000 });
+	GameWorld world = MakeWorld(2, false, { { GameData::Perk::Tools }, {} });
+	const uint16_t box = world.AddNow(EntityKind::Box, Offset(world.ThiefOf(A)->pos, 100, 0));
+	Act(world, A, ActionType::InteractBegin, box);
+	const auto withTools = First<Msg::Interact>(world.TakeEvents());
+	CHECK(withTools && withTools->durationMs == 2728);				// 300 ÷ 110
+	Act(world, A, ActionType::InteractCancel);
+	world.TakeEvents();
+	Teleport(world, B, world.ThiefOf(A)->pos);
+	Act(world, B, ActionType::InteractBegin, box);
+	const auto plain = First<Msg::Interact>(world.TakeEvents());
+	CHECK(plain && plain->durationMs == 3000);						// 300 ÷ 100
+}
+
+TEST_CASE(Work_SpeedFixedAtStart_RiseMidwayIgnored)
+{
+	// 시작할 때 100이면 도중에 유용한 도구가 생겨도 끝까지 100 → 10초
+	GameWorld world = MakeWorld(1);
+	const uint16_t safe = Nth(world, EntityKind::Safe);
+	GoTo(world, A, safe);
+	Act(world, A, ActionType::InteractBegin, safe);
+	Run(world, 2000);
+	world.ThiefOf(A)->perkMask = static_cast<uint16_t>(1u << GameData::Perk::Tools);
+	Run(world, 7500);												// 110이었다면 9.1초 근처에 열렸을 것
+	CHECK((world.Find(safe)->state & StateBit::Opened) == 0);
+	CHECK((world.ThiefOf(A)->state & StateBit::Interacting) != 0);	// 올라가는 건 중단 사유가 아님
+	Run(world, 600);
+	CHECK((world.Find(safe)->state & StateBit::Opened) != 0);
+}
+
+TEST_CASE(Work_SpeedDropMidway_Cancels_SafeKeepsWork)
+{
+	// 도중에 작업 속도가 떨어지면 강제로 중단. 금고는 한 작업량(2초 × 110 = 220)이 남고,
+	// 다른 사람(100)이 이어서 열면 진행·전체를 그 사람 속도로 다시 보낸다 (2.2초 / 10초)
+	GameWorld world = MakeWorld(2, false, { { GameData::Perk::Tools }, {} });
+	const uint16_t safe = Nth(world, EntityKind::Safe);
+	GoTo(world, A, safe);
+	Act(world, A, ActionType::InteractBegin, safe);
+	Run(world, 2000);
+	world.TakeEvents();
+	world.ThiefOf(A)->perkMask = 0;									// 디버프처럼 작업 속도 110 → 100
+	const auto events = RunCollect(world, 50);
+	const auto cancel = First<Msg::Interact>(events);
+	CHECK(cancel && cancel->state == InteractState::Cancel && cancel->durationMs == 9091);
+	CHECK((world.ThiefOf(A)->state & StateBit::Interacting) == 0);
+
+	GoTo(world, B, safe);
+	Act(world, B, ActionType::InteractBegin, safe);
+	const auto resume = First<Msg::Interact>(world.TakeEvents());
+	CHECK(resume && resume->durationMs == 10000 && resume->progressMs >= 2190 && resume->progressMs <= 2210);
+	Run(world, 7700);
+	CHECK((world.Find(safe)->state & StateBit::Opened) == 0);
+	Run(world, 200);
+	CHECK((world.Find(safe)->state & StateBit::Opened) != 0);		// 남은 780 ÷ 100 = 7.8초
 }
 
 TEST_CASE(Money_Safe_TooFar_OutOfRange)
