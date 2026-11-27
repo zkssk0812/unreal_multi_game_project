@@ -474,7 +474,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ReturnPoint", meta = (ClampMin = 10, Units = "cm"))
 	float ReturnPointSize = 100.f;
 
-	/** 반납 작업 시간의 안내용 값. 실제 시간은 서버가 SC_INTERACT duration_ms 로 알려 준다 (2026-11-23 팀 서버 4초, 작업 속도 퍽과 관계없음) */
+	/** 반납 작업 시간의 안내용 값. 실제 시간은 서버가 SC_INTERACT duration_ms 로 알려 준다 (기본 4초. 2026-11-27 팀 서버부터 반납도 작업량 400 ÷ 작업 속도 — 유용한 도구면 약 3.64초) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "ReturnPoint", meta = (ClampMin = 0, Units = "s"))
 	float ReturnSeconds = 4.f;
 

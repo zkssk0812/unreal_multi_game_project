@@ -538,8 +538,8 @@ struct SC_Interact {
 	uint16_t actor;
 	uint16_t target;
 	InteractState state;
-	uint32_t progress_ms;			// 이미 진행된 시간(금고는 중단해도 유지)
-	uint32_t duration_ms;			// 끝나는 데 필요한 전체 시간 (작업 속도 1.0 기준)
+	uint32_t progress_ms;			// 이미 진행된 만큼을 이 플레이어 작업 속도의 시간으로 (금고는 중단해도 작업량이 남음)
+	uint32_t duration_ms;			// 이 플레이어가 끝내는 데 걸리는 전체 시간 = 작업량 ÷ 작업 속도 (시작할 때 정해짐)
 };
 
 struct SC_SafeOpened {

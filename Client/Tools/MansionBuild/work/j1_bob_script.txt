@@ -1,0 +1,4 @@
+# 2026-11-27 작업 속도 시험: Bob = 유용한 도구(퍽 3) → 상자 약 2.73초, Ann 이 멈춘 금고를 이어서 (남은 작업량 ÷ 110)
+6.0 vh.WorkBox
+12.0 vh.WorkBox safe
+13.0 vh.Shot j1_bob_safe_continue

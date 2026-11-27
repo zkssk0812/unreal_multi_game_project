@@ -63,7 +63,12 @@ namespace
 	constexpr double OwnActionWindowSeconds = 0.5;				// 내가 보낸 행동 뒤 이 시간 안의 Cancel은 내가 일으킨 것으로 본다
 	constexpr float CancelGraceSeconds = 0.15f;					// 길게 누르기가 이만큼 남았을 때 손을 떼면 취소를 미룬다
 	constexpr double CancelWaitSeconds = 0.6;					// 미룬 취소: 이 시간 안에 서버 완료가 없으면 취소 전송
-	constexpr float ToolsWorkSpeed = 1.1f;						// 유용한 도구 퍽: 작업 속도 1.1배
+	// 작업 속도 (팀 서버 0168a0a, 2026-11-27): 기본 100, 효과는 합연산(유용한 도구 +10 → 110). 로그 표시용 — 게이지는 서버 ms 그대로
+	constexpr float BaseWorkSpeed = 100.f;
+	constexpr float ToolsWorkSpeedPct = 10.f;
+	// 시험 로그용: 내 작업 게이지가 끝날 예정 시각(서버 Begin 을 받은 순간 + 남은 시간) — 서버 Complete 가 온 시각과 비교
+	struct FVHGaugeProbe { double ExpectEnd = 0.0; double Start = 0.0; float Total = 0.f; float Remaining = 0.f; uint16 Target = 0; };
+	FVHGaugeProbe GGaugeProbe;
 	// 표시용 범위 (서버 GameData.h 와 같은 값. 판정은 서버가 한다)
 	constexpr float StickyRadiusCm = 300.f;						// 끈끈이 함정 반경
 	constexpr float SmokeRadiusCm = 500.f;						// 연막 반경
@@ -607,7 +612,7 @@ FString UVHServerGameSubsystem::NameOfEntity(uint16 Id) const
 
 float UVHServerGameSubsystem::GetMyWorkSpeed() const
 {
-	return HasMyPerk(VHPerk::Tools) ? ToolsWorkSpeed : 1.f;
+	return BaseWorkSpeed + (HasMyPerk(VHPerk::Tools) ? ToolsWorkSpeedPct : 0.f);	// 서버와 같은 단위(100 = 기본)
 }
 
 bool UVHServerGameSubsystem::HasMyPerk(int32 PerkId) const
@@ -2286,11 +2291,11 @@ void UVHServerGameSubsystem::OnInteract(const SC_Interact& P)
 		return;
 	}
 	const FVHInteractOffer Offer = Pending.Target.Get() == Target ? Pending.Offer : Sub->GetAuthority()->Evaluate(By, Target);
-	// duration_ms 는 작업 속도 1.0 기준. 유용한 도구 퍽이면 실제로는 1.1배 빨리 끝난다 (반납은 퍽과 관계없이 늘 duration_ms 그대로, 2026-11-23 팀 서버)
+	// 팀 서버 0168a0a(2026-11-27)부터 duration_ms·progress_ms 는 "이 플레이어 작업 속도로 계산한 실제 ms"(작업량 ÷ 작업 속도).
+	// 그래서 클라는 유용한 도구 보정을 따로 하지 않고 그대로 쓴다 (예전: 속도 1.0 기준이라 클라가 ÷1.1 을 했음, 반납은 제외였음)
 	AVHReturnPoint* ReturnTarget = Cast<AVHReturnPoint>(Target);
-	const float Speed = ReturnTarget ? 1.f : GetMyWorkSpeed();
-	const float Total = P.duration_ms / 1000.f / Speed;
-	const float Remaining = FMath::Max(0.f, (static_cast<float>(P.duration_ms) - static_cast<float>(P.progress_ms)) / 1000.f / Speed);
+	const float Total = P.duration_ms / 1000.f;
+	const float Remaining = FMath::Max(0.f, (static_cast<float>(P.duration_ms) - static_cast<float>(P.progress_ms)) / 1000.f);
 	const EVHInteractMode Mode = P.duration_ms > 0 ? EVHInteractMode::Hold : Offer.Mode;
 	switch (P.state)
 	{
@@ -2301,6 +2306,13 @@ void UVHServerGameSubsystem::OnInteract(const SC_Interact& P)
 			UE_LOG(LogVHServerGame, Log, TEXT("[반납] 시작: 반납지점 %u, %.1f초 작업 (구역 남은 수명 %.1f초)"), P.target, Total, ReturnTarget->GetRemainingSeconds());
 		}
 		Sub->ApplyInteract(By, Target, EVHInteractState::Begin, Sub->GetNow(), Remaining, Total, Mode, Offer.bKeepProgressOnCancel, Offer.ActionText);
+		GGaugeProbe.Start = FPlatformTime::Seconds();
+		GGaugeProbe.ExpectEnd = GGaugeProbe.Start + Remaining;
+		GGaugeProbe.Total = Total;
+		GGaugeProbe.Remaining = Remaining;
+		GGaugeProbe.Target = P.target;
+		UE_LOG(LogVHServerGame, Log, TEXT("[작업 게이지] 시작: %s, 서버 duration %ums · progress %ums → 게이지 전체 %.2f초, 남은 %.2f초 (시작 %.0f%%), 내 작업 속도 %.0f"),
+			*NameOfEntity(P.target), P.duration_ms, P.progress_ms, Total, Remaining, Total > 0.f ? 100.f * (Total - Remaining) / Total : 0.f, GetMyWorkSpeed());
 		// 응답이 오기 전에 손을 뗐으면 바로 취소
 		if (Mode == EVHInteractMode::Hold && !By->IsInteractHeld())
 		{
@@ -2331,6 +2343,13 @@ void UVHServerGameSubsystem::OnInteract(const SC_Interact& P)
 		TickCause.OnInteractCancel(SentOwnActionRecently());
 		break;
 	case InteractState::Complete:
+		if (GGaugeProbe.Target == P.target && GGaugeProbe.ExpectEnd > 0.0)
+		{
+			const double Now = FPlatformTime::Seconds();
+			UE_LOG(LogVHServerGame, Log, TEXT("[작업 게이지] 서버 완료: %s, 게이지 시작부터 %.3f초 (게이지 남은 %.2f초 예정) → 게이지 끝과 차이 %+.0fms"),
+				*NameOfEntity(P.target), Now - GGaugeProbe.Start, GGaugeProbe.Remaining, (Now - GGaugeProbe.ExpectEnd) * 1000.0);
+			GGaugeProbe = FVHGaugeProbe();
+		}
 		Sub->ApplyInteract(By, Target, EVHInteractState::Complete, Sub->GetNow(), 0.f, Total, Mode, Offer.bKeepProgressOnCancel, Offer.ActionText);
 		Pending = FPending();
 		if (ReturnTarget)
@@ -3585,7 +3604,7 @@ namespace
 {
 	// vh.WorkBox : 가장 가까운 상자 옆(150cm)으로 옮겨 F (상자 3초 작업 시작). 작업 중 문 요청 거절(InvalidState) 시험용 (2026-11-25)
 	FAutoConsoleCommandWithWorldAndArgs GVHWorkBoxCommand(TEXT("vh.WorkBox"),
-		TEXT("개발용: vh.WorkBox — 가장 가까운 상자 옆으로 옮겨 F 를 눌러 상자 작업을 시작한다 (실서버 게임 중)."),
+		TEXT("개발용: vh.WorkBox [safe] — 가장 가까운 상자(safe = 닫힌 금고) 옆으로 옮겨 F 를 눌러 작업을 시작한다 (실서버 게임 중). 취소는 vh.PressF."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			UVHServerGameSubsystem* Server = World ? World->GetSubsystem<UVHServerGameSubsystem>() : nullptr;
@@ -3596,10 +3615,12 @@ namespace
 			{
 				return;
 			}
+			const bool bSafe = Args.Num() > 0 && Args[0].Equals(TEXT("safe"), ESearchCase::IgnoreCase);	// 2026-11-27 금고 이어 열기 시험
+			const EntityKind WantKind = bSafe ? EntityKind::Safe : EntityKind::Box;
 			const UVHServerGameSubsystem::FEntity* Best = nullptr;
 			for (const TPair<uint16, UVHServerGameSubsystem::FEntity>& Pair : Server->GetEntities())
 			{
-				if (Pair.Value.Kind == EntityKind::Box && Pair.Value.Object.IsValid()
+				if (Pair.Value.Kind == WantKind && !(bSafe && (Pair.Value.State & ES_OPENED)) && Pair.Value.Object.IsValid()
 					&& (!Best || FVector::Dist2D(Pair.Value.Pos, Pawn->GetActorLocation()) < FVector::Dist2D(Best->Pos, Pawn->GetActorLocation())))
 				{
 					Best = &Pair.Value;
@@ -3611,7 +3632,7 @@ namespace
 			}
 			for (int32 Try = 0; Try < 8; ++Try)
 			{
-				const FVector Cand = Best->Pos + FRotator(0.f, 45.f * Try, 0.f).Vector() * 150.f;
+				const FVector Cand = Best->Pos + FRotator(0.f, 45.f * Try, 0.f).Vector() * (bSafe ? 100.f : 150.f);	// 서버 작업 거리: 금고 가운데 130 / 상자 가운데 180
 				if (Pawn->TeleportTo(FVector(Cand.X, Cand.Y, Pawn->GetActorLocation().Z), Pawn->GetActorRotation()))	// 높이는 그대로
 				{
 					break;
@@ -3890,7 +3911,7 @@ void UVHServerGameSubsystem::Tick(float DeltaTime)
 			{
 				Perks += FString::Printf(TEXT(" %d"), Perk);
 			}
-			UE_LOG(LogVHServerGame, Log, TEXT("내 캐릭터 %d, 퍽%s → 달리기 배율 %.2f, 작업 속도 %.2f"), Me->CharacterId, Perks.IsEmpty() ? TEXT(" 없음") : *Perks,
+			UE_LOG(LogVHServerGame, Log, TEXT("내 캐릭터 %d, 퍽%s → 달리기 배율 %.2f, 작업 속도 %.0f(로그용, 게이지는 서버 ms 그대로)"), Me->CharacterId, Perks.IsEmpty() ? TEXT(" 없음") : *Perks,
 				HasMyPerk(VHPerk::Sneakers) ? UVHSettings::Get().GetGameplayConfig().SneakersRunScale : 1.f, GetMyWorkSpeed());
 		}
 	}

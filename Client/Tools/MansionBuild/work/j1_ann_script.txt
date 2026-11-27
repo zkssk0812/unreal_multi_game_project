@@ -1,0 +1,6 @@
+# 2026-11-27 작업 속도(작업량 ÷ 속도) 시험: Ann = 유용한 도구 없음(퍽 1,2)
+# 상자 3.0초 → 금고를 일부(약 4초) 열다 F 로 멈춤 → Bob(유용한 도구)이 이어서 연다
+1.0 vh.WorkBox
+6.0 vh.WorkBox safe
+10.0 vh.PressF
+10.5 vh.CeilingInfo
