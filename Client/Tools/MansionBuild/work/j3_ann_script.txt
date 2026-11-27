@@ -1,0 +1,8 @@
+# 2026-11-27 시작 전 안내 시간 = 작업량 ÷ 작업 속도: Ann = 유용한 도구 없음 → "상자 열기 (3초)", "금고 열기 (10초)"
+1.0 vh.WorkBox look
+2.5 vh.Shot j3_ann_box
+3.0 vh.WorkBox safe look
+4.5 vh.Shot j3_ann_safe
+# 금고를 약 4초 열다 멈춤 → Bob 화면 "(남은 5.7초)"
+5.0 vh.PressF
+9.0 vh.PressF

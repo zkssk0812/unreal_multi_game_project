@@ -14,6 +14,7 @@
 #include "Gameplay/VHStatusEffectComponent.h"
 #include "Gameplay/VHReturnPoint.h"
 #include "Gameplay/VHGameplayConfig.h"
+#include "Gameplay/VHServerGameSubsystem.h"
 #include "Network/VHSettings.h"
 
 #define LOCTEXT_NAMESPACE "VHInteract"
@@ -48,6 +49,14 @@ FVHInteractOffer UVHLocalInteractionAuthority::BuildOffer(const UVHInteractionCo
 {
 	const UVHInteractionConfig& C = Cfg();
 	const float Scale = GetSubsystem() ? GetSubsystem()->DebugDurationScale : 1.f;
+	// 시작 전 안내 시간도 내 작업 속도로 (팀 서버 0168a0a, 2026-11-27): 서버와 같은 식 = 작업량(기본 초 × 100) ÷ 작업 속도, ms 올림.
+	// 유용한 도구(110)면 금고 10초 → 9.1초, 상자 3초 → 2.7초, 반납 4초 → 3.6초. 실제 시간은 작업이 시작되면 서버 SC_INTERACT 로 온다
+	const UVHServerGameSubsystem* Game = By && By->GetWorld() ? By->GetWorld()->GetSubsystem<UVHServerGameSubsystem>() : nullptr;
+	const float WorkSpeed = Game && Game->IsActive() ? FMath::Max(1.f, Game->GetMyWorkSpeed()) : 100.f;
+	auto WorkSeconds = [WorkSpeed](float BaseSeconds)
+	{
+		return FMath::CeilToFloat(BaseSeconds * 100.f * 1000.f / WorkSpeed) / 1000.f;
+	};
 
 	switch (Target->GetKind())
 	{
@@ -57,7 +66,7 @@ FVHInteractOffer UVHLocalInteractionAuthority::BuildOffer(const UVHInteractionCo
 		const AVHSafe* Safe = CastChecked<AVHSafe>(Target);
 		if (Safe->GetSafeState() == EVHSafeState::Closed)
 		{
-			return FVHInteractOffer::Make(EVHInteractMode::Hold, C.SafeOpenSeconds * Scale, C.bSafeKeepProgress, C.SafeOpenText);
+			return FVHInteractOffer::Make(EVHInteractMode::Hold, WorkSeconds(C.SafeOpenSeconds) * Scale, C.bSafeKeepProgress, C.SafeOpenText);
 		}
 		return FVHInteractOffer();
 	}
@@ -74,7 +83,7 @@ FVHInteractOffer UVHLocalInteractionAuthority::BuildOffer(const UVHInteractionCo
 
 	case EVHEntityKind::Box:
 		// [기획·서버] 3초 작업, 멈추면 처음부터 (공격으로도 부술 수 있다). 2026-11-24: 무기 상자 / 환금 상자 이름으로
-		return FVHInteractOffer::Make(EVHInteractMode::Hold, C.BoxOpenSeconds * Scale, false,
+		return FVHInteractOffer::Make(EVHInteractMode::Hold, WorkSeconds(C.BoxOpenSeconds) * Scale, false,
 			FText::Format(LOCTEXT("BoxOpenNamed", "{0} 열기"), CastChecked<AVHBox>(Target)->GetBoxName()));
 
 	case EVHEntityKind::WeaponPickup:
@@ -90,7 +99,7 @@ FVHInteractOffer UVHLocalInteractionAuthority::BuildOffer(const UVHInteractionCo
 		const UVHGameplayConfig& G = UVHSettings::Get().GetGameplayConfig();
 		const UVHTreasureCarrierComponent* Carrier = FindOn<UVHTreasureCarrierComponent>(By);
 		const int32 Count = Carrier ? Carrier->GetCount() : 0;
-		FVHInteractOffer Offer = FVHInteractOffer::Make(EVHInteractMode::Hold, G.ReturnSeconds, false,
+		FVHInteractOffer Offer = FVHInteractOffer::Make(EVHInteractMode::Hold, WorkSeconds(G.ReturnSeconds), false,
 			Count > 0 ? FText::Format(LOCTEXT("ReturnDetail", "{0} ({1}개 · {2}$)"), G.ReturnText, Count, FText::AsNumber(Carrier->GetTotalValue()))
 				: G.ReturnText);
 		if (Count == 0)

@@ -2281,6 +2281,22 @@ void UVHServerGameSubsystem::OnInteract(const SC_Interact& P)
 				PartnerSeenTime = FPlatformTime::Seconds();
 			}
 		}
+		// 다른 플레이어가 금고를 열다 멈춤 (2026-11-27): 금고 진행도는 작업량으로 남으므로 progress/duration 비율 = 남은 작업 비율.
+		// 내 금고 기록에 넣어 두면 안내가 "(남은 N초)" = 남은 비율 × 내 작업 시간으로 보인다 (실제 시간은 내가 시작할 때 서버가 다시 알려 줌)
+		if (P.state == InteractState::Cancel && P.duration_ms > 0)
+		{
+			if (const FEntity* T = Entities.Find(P.target); T && T->Kind == EntityKind::Safe)
+			{
+				if (AVHInteractableBase* SafeObj = ObjectFor(P.target))
+				{
+					FVHHoldProgress& Hold = SafeObj->GetHoldProgress();
+					Hold.Reset();
+					Hold.SavedProgress = FMath::Clamp(static_cast<float>(P.progress_ms) / static_cast<float>(P.duration_ms), 0.f, 0.999f);
+					UE_LOG(LogVHServerGame, Log, TEXT("[작업 게이지] %s 가 %s 를 %.0f%% 열다 멈춤 → 내 안내는 남은 비율로"),
+						*NameOfEntity(P.actor), *NameOfEntity(P.target), Hold.SavedProgress * 100.f);
+				}
+			}
+		}
 		return;	// 다른 플레이어: 상태는 스냅샷(Interacting 비트)으로 보인다
 	}
 	UVHInteractionSubsystem* Sub = GetInteraction();
@@ -3604,7 +3620,7 @@ namespace
 {
 	// vh.WorkBox : 가장 가까운 상자 옆(150cm)으로 옮겨 F (상자 3초 작업 시작). 작업 중 문 요청 거절(InvalidState) 시험용 (2026-11-25)
 	FAutoConsoleCommandWithWorldAndArgs GVHWorkBoxCommand(TEXT("vh.WorkBox"),
-		TEXT("개발용: vh.WorkBox [safe] — 가장 가까운 상자(safe = 닫힌 금고) 옆으로 옮겨 F 를 눌러 작업을 시작한다 (실서버 게임 중). 취소는 vh.PressF."),
+		TEXT("개발용: vh.WorkBox [safe] [look] — look = 옆에 서서 안내만(F 안 누름). 가장 가까운 상자(safe = 닫힌 금고) 옆으로 옮겨 F 를 눌러 작업을 시작한다 (실서버 게임 중). 취소는 vh.PressF."),
 		FConsoleCommandWithWorldAndArgsDelegate::CreateLambda([](const TArray<FString>& Args, UWorld* World)
 		{
 			UVHServerGameSubsystem* Server = World ? World->GetSubsystem<UVHServerGameSubsystem>() : nullptr;
@@ -3616,6 +3632,7 @@ namespace
 				return;
 			}
 			const bool bSafe = Args.Num() > 0 && Args[0].Equals(TEXT("safe"), ESearchCase::IgnoreCase);	// 2026-11-27 금고 이어 열기 시험
+			const bool bLookOnly = Args.ContainsByPredicate([](const FString& A) { return A.Equals(TEXT("look"), ESearchCase::IgnoreCase); });	// 옆에 서서 안내만 (F 안 누름)
 			const EntityKind WantKind = bSafe ? EntityKind::Safe : EntityKind::Box;
 			const UVHServerGameSubsystem::FEntity* Best = nullptr;
 			for (const TPair<uint16, UVHServerGameSubsystem::FEntity>& Pair : Server->GetEntities())
@@ -3639,6 +3656,11 @@ namespace
 				}
 			}
 			I->DebugSetHoverAt(Best->Object.Get());
+			if (bLookOnly)
+			{
+				UE_LOG(LogVHServerGame, Log, TEXT("[개발] vh.WorkBox look: %s %u 옆에 섬 (F 안 누름)"), bSafe ? TEXT("금고") : TEXT("상자"), Best->Id);
+				return;
+			}
 			// 커서 대상(포커스)은 다음 틱에 잡히므로 조금 뒤에 F
 			TWeakObjectPtr<UVHInteractionComponent> WeakI(I);
 			FTimerHandle Handle;

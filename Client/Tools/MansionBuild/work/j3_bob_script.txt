@@ -1,0 +1,7 @@
+# 2026-11-27 시작 전 안내 시간: Bob = 유용한 도구 → "상자 열기 (2.7초)", "금고 열기 (9.1초)", Ann 이 멈춘 금고 "(남은 5.7초)"
+1.0 vh.WorkBox look
+2.5 vh.Shot j3_bob_box
+3.0 vh.WorkBox safe look
+4.5 vh.Shot j3_bob_safe
+11.0 vh.WorkBox safe look
+12.5 vh.Shot j3_bob_safe_resume

@@ -92,6 +92,12 @@ namespace
 		return FText::AsNumber(S, &Opt);
 	}
 
+	/** 안내 시간: 딱 떨어지면 정수("10초"), 아니면 소수 한 자리("9.1초" — 유용한 도구 작업 속도, 2026-11-27) */
+	FText SecondsAuto(float S)
+	{
+		return Seconds(S, FMath::Abs(S - FMath::RoundToFloat(S)) < 0.05f ? 0 : 1);
+	}
+
 	FText MoneyText(int32 Value)
 	{
 		return FText::FromString(VHRanking::Money(Value));
@@ -1337,12 +1343,12 @@ void UVHGameHUDWidget::UpdatePrompt()
 		{
 			Progress = Saved;
 			Line = FText::Format(LOCTEXT("PressResume", "{0} {1} (남은 {2}초)"),
-				FText::FromString(KeyLabel), Offer.ActionText, Seconds((1.f - Saved) * Offer.DurationSeconds, 0));
+				FText::FromString(KeyLabel), Offer.ActionText, SecondsAuto((1.f - Saved) * Offer.DurationSeconds));
 		}
 		else
 		{
 			Line = FText::Format(LOCTEXT("PressPrompt", "{0} {1} ({2}초)"),
-				FText::FromString(KeyLabel), Offer.ActionText, Seconds(Offer.DurationSeconds, 0));
+				FText::FromString(KeyLabel), Offer.ActionText, SecondsAuto(Offer.DurationSeconds));
 		}
 	}
 	else if (Offer.Mode == EVHInteractMode::Hold)
@@ -1353,12 +1359,12 @@ void UVHGameHUDWidget::UpdatePrompt()
 		{
 			Progress = Saved;
 			Line = FText::Format(LOCTEXT("HoldResume", "{0} 길게 눌러 {1} (남은 {2}초)"),
-				FText::FromString(KeyLabel), Offer.ActionText, Seconds((1.f - Saved) * Offer.DurationSeconds, 0));
+				FText::FromString(KeyLabel), Offer.ActionText, SecondsAuto((1.f - Saved) * Offer.DurationSeconds));
 		}
 		else
 		{
 			Line = FText::Format(LOCTEXT("HoldPrompt", "{0} 길게 눌러 {1} ({2}초)"),
-				FText::FromString(KeyLabel), Offer.ActionText, Seconds(Offer.DurationSeconds, 0));
+				FText::FromString(KeyLabel), Offer.ActionText, SecondsAuto(Offer.DurationSeconds));
 		}
 	}
 	else

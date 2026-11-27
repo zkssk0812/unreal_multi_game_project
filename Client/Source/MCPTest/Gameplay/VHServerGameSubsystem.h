@@ -97,6 +97,11 @@ public:
 
 	/** 서버와 게임 중인가 (게임 레벨이 시작될 때 정해짐) */
 	bool IsActive() const { return bActive; }
+	/**
+	 * 내 작업 속도 (서버와 같은 단위: 기본 100, 유용한 도구 +10 → 110. 팀 서버 0168a0a).
+	 * SC_INTERACT 의 duration·progress 는 이미 이 속도로 계산된 실제 ms 로 오므로 게이지에는 쓰지 않고, 시작 전 안내 시간·로그에만 쓴다
+	 */
+	float GetMyWorkSpeed() const;
 	uint16 GetSelfEntityId() const { return SelfEntityId; }
 	/** 내 상태 비트 (RobProto::EntityStateBit, 스냅샷 기준) */
 	uint32 GetSelfState() const { return SelfState; }
@@ -304,8 +309,6 @@ protected:
 	int32 CharacterForPlayer(uint64 PlayerId) const;
 	/** 내 캐릭터의 무기 표시 컴포넌트에 지금 든 무기·캐릭터 번호를 알린다 */
 	void UpdateMyWeaponVisual();
-	/** 내 작업 속도 배율 (유용한 도구 퍽 = 1.1). SC_INTERACT 의 duration 은 1.0 기준으로 온다 */
-	float GetMyWorkSpeed() const;
 
 	TWeakObjectPtr<UVHNetSubsystem> Net;
 	UPROPERTY() TObjectPtr<UVHServerInteractionAuthority> ServerAuthority;
