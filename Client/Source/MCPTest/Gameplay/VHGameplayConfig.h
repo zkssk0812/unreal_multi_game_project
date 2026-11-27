@@ -456,6 +456,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Match|Downed", meta = (ClampMin = 0, ClampMax = 100))
 	int32 DownLossPctByGuard = 40;
 
+	/**
+	 * 쓰러짐 창 표시용: 플레이어에게 쓰러지면 일반 환금 아이템을 비싼 것부터 이만큼만 떨어뜨리고 나머지는 사라진다
+	 * [팀 서버 16244a7, 2026-11-27: GameData::DropMaxValuables = 5]. 보물은 늘 떨어지고, 경비원에게면 일반 환금 아이템은 모두 사라짐
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Match|Downed", meta = (ClampMin = 0))
+	int32 DownDropMaxValuables = 5;
+
 	// ── 반납지점 (서버가 만들고 없앤다. 아래는 표시용) ──
 
 	/**

@@ -101,6 +101,30 @@ namespace
 		}
 		return Cases;
 	}
+	/** 개발용 -VHBotDownValuables=N: 쓰러짐 시험 봇이 보물 + 일반 환금 아이템 N개 이상(기본 1)을 든 뒤 쓰러지러 간다 (2026-11-27 비싼 순 5개 규칙 시험) */
+	int32 BotDownMinValuables()
+	{
+		static int32 N = -1;
+		if (N < 0)
+		{
+			N = 1;
+			FParse::Value(FCommandLine::Get(), TEXT("VHBotDownValuables="), N);
+			N = FMath::Max(1, N);
+		}
+		return N;
+	}
+	/** 시험 로그: 쓰러진 자리 근처에 생긴 환금 아이템 (OnDowned 가 만들고, 엔티티 생성이 채움) */
+	struct FVHDropWatch
+	{
+		FVector2D Pos = FVector2D::ZeroVector;
+		double Time = 0.0;
+		FString Who;
+		bool bGuard = false;
+		TArray<FVector2D> Spots;
+		TArray<uint32> Values;
+		TArray<uint16> Quality;
+	};
+	TArray<FVHDropWatch> GDropWatches;
 	/** 줍기 시험: 알림이 HUD에 그려진 뒤(0.4초) 화면을 Saved/V3Test/pick_<이름>_<태그>.png 로 저장 */
 	void PickTestShot(UWorld* World, const FString& Tag)
 	{
@@ -1233,7 +1257,24 @@ void UVHServerGameSubsystem::AddEntity(const EntitySpawn& S, bool bFromStart)
 			}
 			E.Object = Sub->SpawnDroppedTreasure(ShowPos, ItemForValuable(E.TypeId, E.Param));
 		}
-		// 방금 내가 쓰러진 자리 근처에 생긴 것 = 내가 떨어뜨린 것 (서버는 80cm 안에 흩뿌린다)
+		// 시험 로그: 방금 누가 쓰러진 자리 근처(3초·300cm)에 생긴 환금 아이템을 모은다 (OnDowned 의 [떨어짐 관찰] 요약)
+		if (!bFromStart)
+		{
+			for (FVHDropWatch& W : GDropWatches)
+			{
+				const FVector2D P2(E.Pos.X, E.Pos.Y);
+				if (FPlatformTime::Seconds() - W.Time < 3.0 && FVector2D::Distance(P2, W.Pos) < 300.f)
+				{
+					W.Spots.Add(P2);
+					W.Values.Add(E.Param);
+					W.Quality.Add(E.TypeId);
+					UE_LOG(LogVHServerGame, Log, TEXT("[떨어짐 관찰] %s 근처에 환금 아이템 %u: 품질 %u, %u$, 위치 (%.0f, %.0f), 쓰러진 자리에서 %.0fcm"),
+						*W.Who, E.Id, E.TypeId, E.Param, E.Pos.X, E.Pos.Y, FVector2D::Distance(P2, W.Pos));
+					break;
+				}
+			}
+		}
+		// 방금 내가 쓰러진 자리 근처에 생긴 것 = 내가 떨어뜨린 것 (서버는 0.5~1.5m 에 흩뿌린다, 2026-11-27 팀 서버 16244a7)
 		if (!bFromStart && DownSeconds > 0.0 && FPlatformTime::Seconds() - DownSeconds < 3.0 && FVector::Dist2D(E.Pos, DownPos) < 300.f)
 		{
 			if (static_cast<ValuableQuality>(E.TypeId) == ValuableQuality::Unique && DownExpectTreasure > 0)
@@ -2879,6 +2920,42 @@ void UVHServerGameSubsystem::OnDowned(const SC_Downed& P)
 		: FText::Format(LOCTEXT("DownByPlayer", "{0}이(가) {1}을(를) 쓰러뜨렸습니다"), FText::FromString(NameOfEntity(P.attacker)), FText::FromString(Victim));
 	Match->PushNotice(Notice);
 
+	// 시험 로그(2026-11-27 떨어뜨리기 규칙): 누가 쓰러지든 그 자리 근처에 곧 생기는 환금 아이템을 모아 2.5초 뒤 요약
+	if (const FEntity* VictimE = Entities.Find(P.victim))
+	{
+		FVHDropWatch& W = GDropWatches.AddDefaulted_GetRef();
+		W.Pos = FVector2D(VictimE->Pos.X, VictimE->Pos.Y);
+		W.Time = FPlatformTime::Seconds();
+		W.Who = Victim;
+		W.bGuard = bByGuard;
+		const int32 Index = GDropWatches.Num() - 1;
+		FTimerHandle WatchHandle;
+		GetWorld()->GetTimerManager().SetTimer(WatchHandle, FTimerDelegate::CreateWeakLambda(this, [Index]()
+		{
+			if (!GDropWatches.IsValidIndex(Index))
+			{
+				return;
+			}
+			const FVHDropWatch& D = GDropWatches[Index];
+			float MinR = TNumericLimits<float>::Max(), MaxR = 0.f, MinGap = TNumericLimits<float>::Max();
+			TArray<FString> Parts;
+			for (int32 i = 0; i < D.Spots.Num(); ++i)
+			{
+				const float R = FVector2D::Distance(D.Spots[i], D.Pos);
+				MinR = FMath::Min(MinR, R);
+				MaxR = FMath::Max(MaxR, R);
+				for (int32 j = i + 1; j < D.Spots.Num(); ++j)
+				{
+					MinGap = FMath::Min(MinGap, FVector2D::Distance(D.Spots[i], D.Spots[j]));
+				}
+				Parts.Add(FString::Printf(TEXT("%s%u$"), D.Quality[i] == static_cast<uint16>(ValuableQuality::Unique) ? TEXT("보물 ") : TEXT(""), D.Values[i]));
+			}
+			UE_LOG(LogVHServerGame, Log, TEXT("[떨어짐 관찰] %s (%s에게): 떨어진 환금 아이템 %d개 [%s], 쓰러진 자리에서 %.0f~%.0fcm, 서로 최소 %.0fcm"),
+				*D.Who, D.bGuard ? TEXT("경비원") : TEXT("플레이어"), D.Spots.Num(), *FString::Join(Parts, TEXT(", ")),
+				D.Spots.Num() ? MinR : 0.f, MaxR, D.Spots.Num() > 1 ? MinGap : 0.f);
+		}), 2.5f, false);
+	}
+
 	if (P.victim == SelfEntityId)
 	{
 		TickCause.OnSelfDowned();	// 쓰러져서 멈춘 작업은 "공격받아 중단" 안내를 띄우지 않는다
@@ -2924,16 +3001,34 @@ void UVHServerGameSubsystem::OnDowned(const SC_Downed& P)
 			}
 			const FVHServerMoneyRow* Mine = Match->GetMyServerMoney();
 			S.LastBankedBefore = (Mine ? Mine->Banked : 0) + (bMoneyFirst ? static_cast<int32>(P.lost_banked) : 0);
-			UE_LOG(LogVHServerGame, Log, TEXT("[쓰러짐] %s에게: 반납 %d$ 중 %u$ 잃음, 들고 있던 것 보물 %d$ + 환금 아이템 %d개(%d$) → %s"),
+			// 2026-11-27 팀 서버 16244a7: 플레이어에게면 일반 환금 아이템을 비싼 것부터 최대 5개만 떨어뜨리고 나머지는 사라짐
+			const int32 DropMax = UVHSettings::Get().GetGameplayConfig().DownDropMaxValuables;
+			TArray<int32> OtherValues;
+			for (const FVHItemData& Item : Items)
+			{
+				if (Item.Kind != EVHItemKind::Treasure)
+				{
+					OtherValues.Add(Item.Value);
+				}
+			}
+			OtherValues.Sort([](int32 A, int32 B) { return A > B; });
+			const int32 DropN = bByGuard ? 0 : FMath::Min(OtherValues.Num(), DropMax);
+			TArray<FString> DropList, LostList;
+			for (int32 i = 0; i < OtherValues.Num(); ++i)
+			{
+				(i < DropN ? DropList : LostList).Add(FString::Printf(TEXT("%d$"), OtherValues[i]));
+			}
+			UE_LOG(LogVHServerGame, Log, TEXT("[쓰러짐] %s에게: 반납 %d$ 중 %u$ 잃음, 들고 있던 것 보물 %d$ + 환금 아이템 %d개(%d$) → 떨어짐 예상 %s[%s], 사라짐 예상 [%s]"),
 				bByGuard ? TEXT("경비원") : TEXT("플레이어"), S.LastBankedBefore, P.lost_banked, S.LastDropTreasureValue, S.LastDropValuableCount, S.LastDropValuableValue,
-				bByGuard ? TEXT("보물만 떨어지고 환금 아이템은 사라짐") : TEXT("전부 쓰러진 자리에 떨어짐"));
+				S.LastDropTreasureValue > 0 ? *FString::Printf(TEXT("보물 %d$ + "), S.LastDropTreasureValue) : TEXT(""),
+				*FString::Join(DropList, TEXT(", ")), *FString::Join(LostList, TEXT(", ")));
 
 			// 떨어질 보물을 기다린다: 곧 쓰러진 자리 근처(서버 흩어짐 80cm)에 생기는 보물 엔티티가 내 것이다
 			DownPos = LastSentPos;
 			DownSeconds = Now;
 			bDownByGuard = bByGuard;
 			DownExpectTreasure = S.LastDropTreasureValue;
-			DownExpectValuables = bByGuard ? 0 : S.LastDropValuableCount;
+			DownExpectValuables = DropN;	// 플레이어에게: 비싼 것부터 최대 5개
 			DownSeenValuables = 0;
 			// 개발용(-VHBotDownTest): 보물을 들고, 지금 시험 중인 경우와 같은 상대에게 쓰러졌을 때만 시험으로 친다
 			const TArray<FString>& Cases = BotDownTestCases();
@@ -4177,7 +4272,7 @@ void UVHServerGameSubsystem::TickBotHeist(float DeltaTime)
 		}
 	}
 	const int32 MyBanked = Mine ? Mine->Banked : 0;
-	if (DownCases.Num() > 0 && HeldTreasure > 0 && MyBanked > 0 && HeldValuables > 0)
+	if (DownCases.Num() > 0 && HeldTreasure > 0 && MyBanked > 0 && HeldValuables >= BotDownMinValuables())
 	{
 		TickBotDownTest(Pawn);
 		return;
@@ -4198,7 +4293,8 @@ void UVHServerGameSubsystem::TickBotHeist(float DeltaTime)
 				{
 					return Pass == 0 && E.Kind == EntityKind::ReturnPoint;
 				}
-				return Pass == 0 ? (E.Kind == EntityKind::Valuable && !bTreasureItem) : E.Kind == EntityKind::Box;
+				// -VHBotDownValuables=N(2 이상): 환금 상자(BoxType 2)만 연다 (무기 상자에서는 환금 아이템이 안 나옴)
+				return Pass == 0 ? (E.Kind == EntityKind::Valuable && !bTreasureItem) : (E.Kind == EntityKind::Box && (BotDownMinValuables() <= 1 || E.TypeId == 2));
 			}
 			// 바닥의 보물(떨어진 것 포함) → 환금 아이템 2개까지 → 닫힌 금고
 			return Pass == 0 ? (bTreasureItem || (E.Kind == EntityKind::Valuable && HeldValuables < 2))
@@ -4416,16 +4512,21 @@ void UVHServerGameSubsystem::TickBotHunt(float DeltaTime)
 		UVHInteractionComponent* I = GetMyInteraction();
 		if (LootDelay > 0.f && I && BotHuntKillSeconds > 0.0 && FPlatformTime::Seconds() - BotHuntKillSeconds > LootDelay)
 		{
+			// -VHBotHuntLootAll: 보물만이 아니라 근처에 떨어진 환금 아이템을 모두 (가까운 것부터) 주워 본다 (2026-11-27 떨어진 자리가 주울 수 있는지 시험)
+			static const bool bLootAll = FParse::Param(FCommandLine::Get(), TEXT("VHBotHuntLootAll"));
 			const FEntity* Loot = nullptr;
+			float LootDist = TNumericLimits<float>::Max();
 			for (const TPair<uint16, FEntity>& Pair : Entities)
 			{
-				if (Pair.Value.Kind == EntityKind::Valuable && static_cast<ValuableQuality>(Pair.Value.TypeId) == ValuableQuality::Unique
-					&& Pair.Value.Object.IsValid() && FVector::Dist2D(Foot, Pair.Value.Pos) < 2000.f)
+				const float D = FVector::Dist2D(Foot, Pair.Value.Pos);
+				if (Pair.Value.Kind == EntityKind::Valuable && (bLootAll || static_cast<ValuableQuality>(Pair.Value.TypeId) == ValuableQuality::Unique)
+					&& Pair.Value.Object.IsValid() && D < 2000.f && D < LootDist)
 				{
 					Loot = &Pair.Value;
+					LootDist = D;
 				}
 			}
-			if (!Loot || BotHuntLootStep >= 6)
+			if (!Loot || BotHuntLootStep >= (bLootAll ? 40 : 6))
 			{
 				return;
 			}
@@ -4434,7 +4535,7 @@ void UVHServerGameSubsystem::TickBotHunt(float DeltaTime)
 				Pawn->TeleportTo(Loot->Pos + FVector(100.f, 0.f, Half + 2.f), Pawn->GetActorRotation());
 				SendCurrentPositionNow();
 				I->DebugSetHoverAt(Loot->Object.Get());
-				UE_LOG(LogVHServerGame, Log, TEXT("[봇 사냥] 떨어진 보물 %u (%u$) 주우러 감"), Loot->Id, Loot->Param);
+				UE_LOG(LogVHServerGame, Log, TEXT("[봇 사냥] 떨어진 환금 아이템 %u (품질 %u, %u$) 주우러 감"), Loot->Id, Loot->TypeId, Loot->Param);
 			}
 			else
 			{

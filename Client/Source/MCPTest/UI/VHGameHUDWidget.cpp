@@ -1081,7 +1081,7 @@ void UVHGameHUDWidget::UpdateCenter()
 		return;
 	}
 	// 반납한 돈 손실 / 들고 있던 것을 나눠 보여 준다 (서버 규칙: 반납한 돈의 10%·40%를 잃고, 들고 있던 보물은 어느 경우든 쓰러진 자리에 떨어진다.
-	// 보물 말고 환금 아이템은 플레이어에게 쓰러지면 떨어지고 경비원에게 쓰러지면 사라진다) [서버 WorldCombat Down·WorldItems DropValuables]
+	// 보물 말고 환금 아이템은 플레이어에게 쓰러지면 비싼 것부터 최대 5개 떨어지고(나머지 사라짐, 2026-11-27) 경비원에게 쓰러지면 사라진다) [서버 WorldCombat Down·WorldItems DropValuables]
 	const bool bGuard = St && St->bLastDeathByGuard;
 	const UVHGameplayConfig& G = UVHSettings::Get().GetGameplayConfig();
 	if (!St || St->LastBankedBefore <= 0)
@@ -1110,6 +1110,15 @@ void UVHGameHUDWidget::UpdateCenter()
 			: TreasureValue > 0
 			? FText::Format(LOCTEXT("DeathGuardTreasure", "들고 있던 것: 보물 {0}은 쓰러진 자리에 떨어졌습니다"), Treasure)
 			: FText::Format(LOCTEXT("DeathGuardValuables", "들고 있던 것: 환금 아이템 {0}개는 사라졌습니다"), Count);
+	}
+	else if (Count > G.DownDropMaxValuables)
+	{
+		// 2026-11-27 팀 서버 16244a7: 플레이어에게 쓰러지면 일반 환금 아이템은 비싼 것부터 최대 5개만 떨어지고 나머지는 사라짐
+		const FText Kept = FText::AsNumber(G.DownDropMaxValuables);
+		const FText Lost = FText::AsNumber(Count - G.DownDropMaxValuables);
+		Carried = TreasureValue > 0
+			? FText::Format(LOCTEXT("DeathPlayerBothCap", "들고 있던 것: 보물 {0} + 환금 아이템 {1}개 중 비싼 {2}개를 쓰러진 자리에 떨어뜨렸고, 나머지 {3}개는 사라졌습니다"), Treasure, Count, Kept, Lost)
+			: FText::Format(LOCTEXT("DeathPlayerValuablesCap", "들고 있던 것: 환금 아이템 {0}개 중 비싼 {1}개를 쓰러진 자리에 떨어뜨렸고, 나머지 {2}개는 사라졌습니다"), Count, Kept, Lost);
 	}
 	else
 	{
