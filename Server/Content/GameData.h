@@ -80,7 +80,13 @@ constexpr uint32_t RespawnByGuardMs = 10000;
 constexpr uint32_t LossPctByPlayer = 10;			// [명세 D-04] 반납 금액의 %
 constexpr uint32_t LossPctByGuard = 40;
 constexpr uint32_t RespawnInvulnMs = 5000;			// [명세 D-07]
-constexpr float DropScatterCm = 80.0f;				// 떨어뜨린 아이템이 흩어지는 반경
+// 쓰러져 떨어뜨리기 (2026-11-27): 보물은 늘, 일반 환금 아이템은 플레이어에게 쓰러지면 비싼 것부터 최대 5개(나머지 사라짐),
+// 경비원에게 쓰러지면 사라짐. 쓰러진 자리에서 0.5~1.5m에 흩어지되, 걸을 수 있고 벽·닫힌 문에 막히지 않은 곳만
+constexpr size_t DropMaxValuables = 5;
+constexpr float DropScatterMinCm = 50.0f;
+constexpr float DropScatterMaxCm = 150.0f;
+constexpr float DropSpacingCm = 40.0f;				// 떨어진 아이템끼리 이만큼은 떨어지게 (줍기 쉽게)
+constexpr int DropSpotTries = 30;					// 아이템마다 자리를 찾아보는 횟수 (못 찾으면 쓰러진 자리)
 
 // ── 판정 [가정 A-10~A-12] ──
 constexpr float BodyRadiusCm = 40.0f;				// 플레이어·경비원 히트 박스(원기둥) 반지름

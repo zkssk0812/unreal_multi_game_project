@@ -405,7 +405,7 @@ void GameWorld::Down(Entity& thief, Entity* attacker, DownCause cause)
 	thief.banked -= lost;
 
 	// 환금 아이템: 플레이어에게 → 그 자리에 모두 떨어뜨림, 경비원에게 → 사라지고 보물만 떨어뜨림 (D-02)
-	DropValuables(thief, cause == DownCause::Guard);
+	DropValuables(thief, cause == DownCause::Guard, GameData::DropMaxValuables);	// 플레이어에게: 보물 + 비싼 것부터 5개 (2026-11-27)
 	// 무기는 삼단봉 외 사라짐, 소비 아이템도 사라짐 (D-03, D-08). 리스폰 때 ResetLoadout이 삼단봉을 쥐여 준다
 	thief.weapons = {};
 	thief.consumable = ConsumableId::None;

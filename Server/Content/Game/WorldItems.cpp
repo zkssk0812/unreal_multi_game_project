@@ -134,14 +134,24 @@ void GameWorld::Deliver(Entity& thief)
 	}
 }
 
-void GameWorld::DropValuables(Entity& thief, bool treasureOnly)
+void GameWorld::DropValuables(Entity& thief, bool treasureOnly, size_t maxOthers)
 {
+	// 보물은 반납 말고는 사라지지 않으므로 늘 떨어뜨린다 (I-24). 일반 환금 아이템은 경비원에게 쓰러지면 사라지고(D-02),
+	// 플레이어에게 쓰러지면 비싼 것부터 maxOthers개만 (2026-11-27, 한 사람이 너무 많이 들고 있을 때). 나간 플레이어는 전부
+	std::vector<CarriedItem> drop;
+	std::vector<CarriedItem> others;
 	for (const CarriedItem& item : thief.carried)
+		(item.quality == ValuableQuality::Unique ? drop : others).push_back(item);
+	if (!treasureOnly)
 	{
-		if (treasureOnly && item.quality != ValuableQuality::Unique)
-			continue;		// 경비원에게 쓰러지면 보물 말고는 사라짐 (D-02)
-		Spawn(EntityKind::Valuable, Scatter(thief.pos), static_cast<uint16_t>(item.quality), item.value);
+		std::stable_sort(others.begin(), others.end(), [](const CarriedItem& l, const CarriedItem& r) { return l.value > r.value; });
+		if (others.size() > maxOthers)
+			others.resize(maxOthers);
+		drop.insert(drop.end(), others.begin(), others.end());
 	}
+	const std::vector<Vec3> spots = DropSpots(thief.pos, drop.size());
+	for (size_t i = 0; i < drop.size(); ++i)
+		Spawn(EntityKind::Valuable, spots[i], static_cast<uint16_t>(drop[i].quality), drop[i].value);
 	thief.carried.clear();
 	ClearBits(thief.state, StateBit::CarryingTreasure);
 }
@@ -362,11 +372,34 @@ std::optional<Vec3> GameWorld::RandomFreeCell()
 	return std::nullopt;
 }
 
-Vec3 GameWorld::Scatter(const Vec3& center)
+std::vector<Vec3> GameWorld::DropSpots(const Vec3& center, size_t count)
 {
-	const float a = std::uniform_real_distribution<float>(0.0f, 2.0f * Pi)(_rng);
-	const float r = std::uniform_real_distribution<float>(0.0f, GameData::DropScatterCm)(_rng);
-	return { center.x + r * std::cos(a), center.y + r * std::sin(a), center.z };
+	// 쓰러진 자리에서 0.5~1.5m 무작위. 걸을 수 있는 칸이고, 쓰러진 자리에서 가슴 높이로 벽·닫힌 문에 막히지 않고,
+	// 이미 고른 자리와 40cm 넘게 떨어진 곳. 못 찾으면 쓰러진 자리 (2026-11-27: 벽 안에 떨어져 못 줍는 일이 없게)
+	std::vector<Vec3> spots;
+	const Vec3 from{ center.x, center.y, GameData::ShotHeightCm };
+	std::uniform_real_distribution<float> angle(0.0f, 2.0f * Pi);
+	std::uniform_real_distribution<float> radius(GameData::DropScatterMinCm, GameData::DropScatterMaxCm);
+	for (size_t n = 0; n < count; ++n)
+	{
+		Vec3 pick = center;
+		for (int t = 0; t < GameData::DropSpotTries; ++t)
+		{
+			const float a = angle(_rng), r = radius(_rng);
+			const Vec3 p{ center.x + r * std::cos(a), center.y + r * std::sin(a), center.z };
+			if (_map != nullptr && !_map->nav.IsWalkable(p))
+				continue;
+			if (!SeesThrough(from, { p.x, p.y, GameData::ShotHeightCm }))
+				continue;
+			const bool crowded = std::any_of(spots.begin(), spots.end(), [&](const Vec3& s) { return Dist2D(s, p) < GameData::DropSpacingCm; });
+			if (crowded)
+				continue;
+			pick = p;
+			break;
+		}
+		spots.push_back(pick);
+	}
+	return spots;
 }
 
 uint32_t GameWorld::RandomValue(ValuableQuality quality)

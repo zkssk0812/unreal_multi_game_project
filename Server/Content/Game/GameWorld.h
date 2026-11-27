@@ -349,7 +349,7 @@ private:
 	void OnSafeOpened(Entity& safe, Entity& opener);
 	std::optional<RejectReason> PickUpItem(Entity& thief, Entity& item);
 	void Deliver(Entity& thief);
-	void DropValuables(Entity& thief, bool treasureOnly);
+	void DropValuables(Entity& thief, bool treasureOnly, size_t maxOthers = SIZE_MAX);	// 보물은 늘, 나머지는 비싼 것부터 maxOthers개
 	void PushMoneyEvent();
 	void BreakBox(Entity& box);
 	void UpdateBoxRespawns();
@@ -357,7 +357,7 @@ private:
 	void TouchFieldItems(Entity& thief);
 	bool IsFreeSpot(const Vec3& p, const Entity* ignore = nullptr) const;	// 다른 오브젝트(ignore 말고)와 1m 이상 떨어졌나
 	std::optional<Vec3> RandomFreeCell();
-	Vec3 Scatter(const Vec3& center);
+	std::vector<Vec3> DropSpots(const Vec3& center, size_t count);	// 쓰러진 자리 주변, 걸을 수 있고 벽·닫힌 문에 막히지 않은 곳
 	uint32_t RandomValue(ValuableQuality quality);
 
 	// ── 스킬·소비 아이템·상태이상 (WorldSkills.cpp) ──

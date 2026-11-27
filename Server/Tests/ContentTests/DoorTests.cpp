@@ -167,6 +167,28 @@ TEST_CASE(Door_Closed_BlocksGuardSight)
 	CHECK(world.CanSee(*world.Find(guard), *world.ThiefOf(A)));	// 열면 보임
 }
 
+TEST_CASE(Door_DroppedValuables_NeverPassClosedDoor)
+{
+	// 닫힌 문 바로 앞에서 떨어뜨려도 문 너머로 가지 않는다 (2026-11-27)
+	GameWorld world = DoorWorld();
+	const DoorSpot door = FindOpenAirDoor(world, 60.0f);
+	CHECK(!IsOpen(world, door.id));
+	Teleport(world, B, door.sideA);
+	world.ThiefOf(B)->carried.assign(8, { ValuableQuality::Common, 10 });
+	world.MarkLeft(B);
+	size_t drops = 0;
+	for (const Entity& e : world.Entities())
+	{
+		if (e.kind != EntityKind::Valuable)
+			continue;
+		++drops;
+		const float along = (e.pos.x - door.center.x) * std::cos(door.yawAtoB * 3.14159265f / 180.0f) +
+			(e.pos.y - door.center.y) * std::sin(door.yawAtoB * 3.14159265f / 180.0f);
+		CHECK(along < 0.0f);										// 모두 A 쪽 (문 너머 B 쪽에는 없음)
+	}
+	CHECK_EQ(drops, size_t{ 8 });
+}
+
 TEST_CASE(Door_GuardsOpenDoorsOnTheirWay_NeverWalkThroughClosed_LeaveOpen)
 {
 	// 경비원 3명이 60초 순찰: 문간(문짝 자리)에 선 경비원의 문은 언제나 열려 있고, 한 번 열린 문은 닫히지 않는다

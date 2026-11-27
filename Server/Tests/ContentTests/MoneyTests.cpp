@@ -1,5 +1,7 @@
 #include "ServerCore/CorePch.h"
 
+#include <set>
+
 #include "Content/Game/Sight.h"
 #include "Content/Game/WorldMath.h"
 #include "TestFramework.h"
@@ -289,6 +291,77 @@ TEST_CASE(Money_DownByPlayer_DropsAllValuables_Loses10Percent)
 	CHECK_EQ(CountKind(world, EntityKind::Valuable), size_t{ 2 });	// 그 자리에 떨어뜨림 (D-02)
 	CHECK(b->consumable == ConsumableId::None);						// 소비 아이템 소멸 (D-08)
 	CHECK(b->carried.empty());
+}
+
+TEST_CASE(Money_DownByPlayer_TreasurePlusTop5_RestVanish)
+{
+	// 플레이어에게 쓰러지면 보물 + 일반 환금 아이템은 비싼 것부터 5개만, 나머지는 사라짐 (2026-11-27)
+	GameWorld world = MakeWorld(2);
+	ClearArena(world);
+	Teleport(world, A, HallW, 0.0f);
+	Teleport(world, B, Offset(HallW, 150, 0));
+	Entity* b = world.ThiefOf(B);
+	b->carried = { { ValuableQuality::Common, 10 }, { ValuableQuality::Rare, 400 }, { ValuableQuality::Common, 20 },
+		{ ValuableQuality::Unique, 2000 }, { ValuableQuality::Advanced, 50 }, { ValuableQuality::Common, 5 },
+		{ ValuableQuality::Advanced, 90 }, { ValuableQuality::Rare, 150 }, { ValuableQuality::Common, 25 } };
+	b->hp = 5;
+	Attack(world, A, 0.0f);
+	CHECK((b->state & StateBit::Downed) != 0);
+	std::multiset<uint32_t> values;
+	for (const Entity& e : world.Entities())
+		if (e.kind == EntityKind::Valuable)
+			values.insert(e.param);
+	CHECK((values == std::multiset<uint32_t>{ 2000, 400, 150, 90, 50, 25 }));		// 보물 + 비싼 5개 (20·10·5는 사라짐)
+	CHECK(b->carried.empty());
+}
+
+TEST_CASE(Money_Drop_NeverIntoWalls_AndSpread)
+{
+	// 벽에 붙어 쓰러져도 떨어진 아이템은 걸을 수 있는 칸, 쓰러진 자리에서 벽에 막히지 않는 곳, 서로 40cm 넘게 (2026-11-27)
+	using namespace Content::WorldMath;
+	const MapData& map = DefaultMap();
+	std::vector<Vec3> nearWalls;
+	for (const MapRoom& room : map.rooms)
+		for (size_t i = 0; i < room.returnCells.size(); i += 7)
+		{
+			const Vec3& c = room.returnCells[i];
+			bool wall = false;
+			for (const float yaw : { 0.0f, 90.0f, 180.0f, 270.0f })
+				wall = wall || !map.nav.IsWalkable(Ahead(c, yaw, 60.0f));
+			if (wall)
+				nearWalls.push_back(c);
+		}
+	CHECK(nearWalls.size() >= 40);
+	size_t checked = 0, fallback = 0;
+	for (size_t k = 0; k < nearWalls.size() && checked < 60; k += std::max<size_t>(1, nearWalls.size() / 60), ++checked)
+	{
+		GameWorld world = MakeWorld(2, false, {}, static_cast<uint32_t>(k + 1));
+		ClearArena(world);
+		const Vec3 at = nearWalls[k];
+		Teleport(world, B, at);
+		world.ThiefOf(B)->carried.assign(6, { ValuableQuality::Common, 10 });
+		world.MarkLeft(B);										// 나가도 같은 방식으로 떨어뜨림
+		std::vector<Vec3> drops;
+		for (const Entity& e : world.Entities())
+			if (e.kind == EntityKind::Valuable)
+				drops.push_back(e.pos);
+		CHECK_EQ(drops.size(), size_t{ 6 });
+		for (size_t i = 0; i < drops.size(); ++i)
+		{
+			const Vec3& p = drops[i];
+			if (Dist2D(p, at) < 1.0f)
+			{
+				++fallback;											// 자리가 없어 쓰러진 자리
+				continue;
+			}
+			CHECK(map.nav.IsWalkable(p));
+			CHECK(Dist2D(p, at) <= GameData::DropScatterMaxCm + 1.0f);
+			CHECK(HasLineOfSight(map, { at.x, at.y, GameData::ShotHeightCm }, { p.x, p.y, GameData::ShotHeightCm }));
+			for (size_t j = 0; j < i; ++j)
+				CHECK(Dist2D(p, drops[j]) >= GameData::DropSpacingCm || Dist2D(drops[j], at) < 1.0f);
+		}
+	}
+	CHECK(fallback * 20 < checked * 6);								// 거의 다 흩어짐 (쓰러진 자리로 가는 건 5% 미만)
 }
 
 TEST_CASE(Money_DownByGuard_OnlyTreasureDrops_Loses40Percent)
